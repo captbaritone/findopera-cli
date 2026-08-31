@@ -195,12 +195,11 @@ fn cmd_render(args: RenderArgs) -> i32 {
     let tmpl = match template::Template::parse(&args.template) {
         Ok(t) => t,
         Err(e) => {
-            let mut f = Failure::new(e.code(), format!("invalid --template: {e}"))
-                .input(args.template.clone());
-            if let template::TemplateError::UnknownField { path } = &e {
-                f = f.suggest(format!(
-                    "`{path}` is not a template field. Run `findopera fields` to list them."
-                ));
+            let mut f = Failure::new(e.code, format!("invalid --template: {}", e.message))
+                .input(args.template.clone())
+                .details(e.underline(&args.template));
+            if let Some(help) = &e.help {
+                f = f.suggest(help.clone());
             }
             return f.emit(exit::USAGE);
         }

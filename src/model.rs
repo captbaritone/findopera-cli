@@ -161,6 +161,17 @@ impl Recording {
                 (!names.is_empty()).then(|| names.join(", "))
             }),
 
+            // Indexed access, so a template can place its own separators:
+            // `[{{singer1}}][, {{singer2}}]` joins without a join filter.
+            "singer1" | "singer2" | "singer3" => {
+                let i = path.as_bytes()[6] - b'1';
+                self.nth_singer(i as usize).and_then(|p| text(&p.full_name))
+            }
+            "singer1.lastName" | "singer2.lastName" | "singer3.lastName" => {
+                let i = path.as_bytes()[6] - b'1';
+                self.nth_singer(i as usize).and_then(|p| text(&p.last_name))
+            }
+
             _ => {
                 let (prefix, part) = path.split_once('.').ok_or_else(|| path.to_string())?;
                 let target = match prefix {
@@ -184,7 +195,7 @@ impl Recording {
     }
 
     /// Every valid template path, with the one-line description shown by
-    /// `findopera library fields`. This is the single source of truth for what
+    /// `findopera fields`. This is the single source of truth for what
     /// a template may reference.
     pub const FIELDS: &'static [FieldDoc] = &[
         FieldDoc::new(
@@ -198,11 +209,20 @@ impl Recording {
         FieldDoc::new("orchestra", "Orchestra name"),
         FieldDoc::new("chorus", "Chorus name. Often absent"),
         FieldDoc::new("upc", "First barcode listed for the release. Often absent"),
-        FieldDoc::new("singers", "Noted singers, full names, comma-joined"),
+        FieldDoc::new("singers", "All noted singers, full names, comma-joined"),
         FieldDoc::new(
             "singers.lastNames",
-            "Noted singers, surnames only, comma-joined",
+            "All noted singers, surnames only, comma-joined",
         ),
+        // Indexed access. With 0-3 noted singers, these plus optional groups
+        // replace a join filter: `[{{singer1}}][, {{singer2}}]` joins with
+        // whatever separator you write, including a different last one.
+        FieldDoc::new("singer1", "First noted singer, full name"),
+        FieldDoc::new("singer2", "Second noted singer, if any"),
+        FieldDoc::new("singer3", "Third noted singer, if any"),
+        FieldDoc::new("singer1.lastName", "First noted singer, surname only"),
+        FieldDoc::new("singer2.lastName", "Second noted singer, surname only"),
+        FieldDoc::new("singer3.lastName", "Third noted singer, surname only"),
         FieldDoc::new(
             "opera.title",
             "Title in the original language — the safest title field",
@@ -229,6 +249,10 @@ impl Recording {
         FieldDoc::new("conductor.born", "Conductor year of birth"),
         FieldDoc::new("conductor.died", "Conductor year of death"),
     ];
+
+    fn nth_singer(&self, i: usize) -> Option<&Person> {
+        self.noted_singers.as_ref()?.get(i)
+    }
 
     /// Is this a template path the renderer understands?
     pub fn is_known(path: &str) -> bool {
