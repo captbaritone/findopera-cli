@@ -15,23 +15,20 @@ pub mod exit {
     pub const GENERAL: i32 = 1;
     /// Bad arguments or an invalid template.
     pub const USAGE: i32 = 2;
-    /// A recording id in a marker is not in the FindOpera database.
+    /// A recording id is not in the FindOpera database.
     pub const NOT_FOUND: i32 = 3;
-    /// A path could not be read or written.
-    pub const PERMISSION: i32 = 4;
-    /// The destination exists but this tool did not create it.
-    pub const CONFLICT: i32 = 5;
     /// The API was unreachable or errored; worth retrying.
     pub const API: i32 = 6;
-    /// A plan was produced and is safe to `--apply`.
-    pub const DRY_RUN_OK: i32 = 10;
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, clap::ValueEnum)]
 #[clap(rename_all = "lowercase")]
 pub enum Format {
+    /// Machine-readable JSON (default when stdout is piped).
     Json,
-    Table,
+    /// One rendered value per line (default at a terminal).
+    Text,
+    /// One JSON object per line, for streaming.
     Ndjson,
 }
 
@@ -39,22 +36,11 @@ impl Format {
     /// Resolve `--format` against TTY detection.
     pub fn resolve(explicit: Option<Format>) -> Format {
         explicit.unwrap_or(if std::io::stdout().is_terminal() {
-            Format::Table
+            Format::Text
         } else {
             Format::Json
         })
     }
-}
-
-/// Whether colored output is appropriate. Honors `NO_COLOR` and `TERM=dumb`.
-pub fn use_color(no_color: bool) -> bool {
-    if no_color || std::env::var_os("NO_COLOR").is_some() {
-        return false;
-    }
-    if std::env::var("TERM").is_ok_and(|t| t == "dumb") {
-        return false;
-    }
-    std::io::stdout().is_terminal()
 }
 
 pub fn print_json<T: Serialize>(value: &T) {

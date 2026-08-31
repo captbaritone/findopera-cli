@@ -1,101 +1,59 @@
 # findopera
 
-Organize opera recordings into a canonical directory tree, using the
-[FindOpera](https://findopera.com/) database for the metadata.
+Render opera recording metadata from [FindOpera](https://findopera.com/)
+through a template.
 
-## How it works
-
-FindOpera serves a plain-text card for every recording at
-`https://findopera.com/recording/<id>.txt`:
-
-```
-                    SOSARME, RE DI MEDIA
-
-           by George Frideric Handel (1685-1759)
-
-                         -= Cast =-
-    Sosarme ......................... Rémy Brès-Feuillet
-    Elmira ............................... Sarah Charles
-    ...
-
-Conductor: Marco Angioloni
-Recorded: 2026
-Orchestra: Orchestre de l'Opéra Royal
-
-
-           https://findopera.com/recording/10655
-```
-
-Drop that file into the directory holding the recording. `findopera` walks your
-music directories, finds those markers, looks the recordings up in the FindOpera
-API, and builds a tree of symlinks named by a template you supply.
-
-Your original directories are never moved or modified.
-
-```
-~/Music/Opera/                          ~/Opera/            (the canonical tree)
-  billy_budd_britten_67/                  Britten/
-    Billy Budd.txt          ─────────▶      Billy Budd/
-    disc1.flac                                1967 - Britten -> ~/Music/Opera/billy_budd_britten_67
-  sosarme_2026/                           Handel/
-    Sosarme…-2026-Angioloni.txt ──────▶     Sosarme, Re di Media/
-    disc1.flac                                2026 - Angioloni -> ~/Music/Opera/sosarme_2026
-```
-
-A directory may hold several markers — a box set covering several operas gets a
-link per recording, all pointing at the same directory.
-
-## Usage
+Give it a recording id and a template; it prints the result. That's the whole
+tool — a naming primitive. What you do with the string is up to you.
 
 ```bash
-# What did it find?
-findopera marker list --source ~/Music/Opera
+$ findopera render 10655 -t '{{composer.lastName}}/{{opera.title}}/{{year}}'
+Handel/Sosarme, Re di Media/2026
 
-# Preview the tree (writes nothing)
-findopera library plan \
-  --source ~/Music/Opera \
-  --destination ~/Opera \
-  --template '{{composer.lastName}}/{{opera.title}}/{{year}} - {{conductor.lastName}}'
-
-# Build it
-findopera library sync \
-  --source ~/Music/Opera \
-  --destination ~/Opera \
-  --template '{{composer.lastName}}/{{opera.title}}/{{year}} - {{conductor.lastName}}' \
-  --apply
+$ findopera render 75 10655 -t '{{opera.title}} ({{year}})'
+Billy Budd (1967)
+Sosarme, Re di Media (2026)
 ```
 
-`library sync` previews by default; nothing is written until `--apply`.
+The id is the number in a findopera.com URL:
+`https://findopera.com/recording/10655` → `10655`.
 
 ## Templates
 
 A placeholder is `{{field}}`. Alternatives separated by `|` are tried left to
-right, and a quoted literal serves as a final fallback:
+right, and a quoted literal serves as a last resort:
 
 ```
-{{opera.englishTitle|opera.title}}/{{year|"n.d."}} - {{conductor.lastName|"unknown"}}
+{{opera.englishTitle|opera.title}}/{{year|"n.d."}} - {{conductor.lastName}}
 ```
 
-`/` in the template is a directory separator; a `/` *inside* a value (an opera
-title, say) is replaced so it can't create an unintended directory level.
+**A placeholder that resolves to nothing, with no fallback, is an error.**
+Absent data is never silently dropped — you get a non-zero exit and a message
+naming the placeholder, so a missing year can't quietly become `Handel//2026`.
 
-If a placeholder resolves to nothing and has no literal fallback, that recording
-is reported as a problem rather than silently producing a malformed path.
+```bash
+$ findopera render 10655 -t '{{opera.englishTitle}}'
+{{opera.englishTitle}} resolved to nothing for this recording — add a fallback,
+e.g. {{…|"Unknown"}}
+$ echo $?
+1
+```
+
+Values are sanitized so a `/` inside a title can't introduce an unintended path
+separator, and a rendered result can't be an absolute path or contain `..`.
 
 ## Finding out which fields exist
 
 ```bash
-findopera library fields                      # every field, with a description
-findopera library fields --example 10655      # what each one holds for a real recording
-findopera library fields --format json        # same, machine-readable
+findopera fields                    # every field, with a description
+findopera fields --example 10655    # what each one holds for a real recording
 ```
 
-`--example` is the useful one. Plenty of fields are empty for any given
-recording, and an unresolved placeholder is an error, so seeing real values
-tells you where you need a `|` fallback:
+`--example` is the useful one. Many fields are empty for any given recording,
+so seeing real values tells you where a fallback is needed:
 
 ```
-$ findopera library fields --example 10655
+$ findopera fields --example 10655
 id                           10655
 year                         2026
 month                        —
@@ -104,54 +62,71 @@ chorus                       —
 opera.title                  Sosarme, Re di Media
 opera.englishTitle           —
 opera.librettist             —
-opera.language               —
 composer.lastName            Handel
 conductor.lastName           Angioloni
 …                            (— means absent)
 ```
 
-`findopera schema --all` carries the same list under `templateFields`.
+Measured across all 10,744 recordings in the database: `opera.title`,
+`composer.lastName` and `conductor.lastName` are 100% populated, `year` is
+99.9%, `orchestra` 94%, `chorus` 81%, and `opera.englishTitle` only **19.7%**.
 
-## The destination is rebuilt, not merged
+## Output
 
-Every `--apply` wipes the destination and recreates it, so the tree always
-matches your markers exactly — rename a directory or delete a marker and the
-stale link disappears.
+JSON when stdout is piped, plain text at a terminal. Override with `--format
+json|text|ndjson`.
 
-To make that safe, an applied destination gets a `.findopera-library.json` stamp
-file. A destination that is non-empty and **not** stamped is refused; pass
-`--force` to override. Point `--destination` at a directory you own and keep
-nothing in it by hand.
+```bash
+$ findopera render 10655 -t '{{composer.lastName}}/{{opera.title}}' --format json
+{
+  "template": "{{composer.lastName}}/{{opera.title}}",
+  "results": [
+    {
+      "id": "10655",
+      "rendered": "Handel/Sosarme, Re di Media",
+      "segments": ["Handel", "Sosarme, Re di Media"]
+    }
+  ],
+  "problems": []
+}
+```
+
+stdout carries data, stderr carries messages — always.
 
 ## Agent-friendly
 
 Built to the [Agent CLI Design Guide](https://github.com/Johnixr/agent-cli-guide):
-
-- **Noun-verb commands** — `library sync`, `recording get`, `marker list`
-- **Long flags** on everything; short forms are extras
-- **stdout is data, stderr is messages** — always
-- **TTY-aware** — JSON when piped, a table at a terminal; `NO_COLOR` respected
-- **Dry-run by default** for anything that writes
-- **Semantic exit codes** (below)
-- **Strict validation** — unknown template fields are rejected before any I/O
-- **`findopera schema --all`** dumps the command tree as JSON
-- **Errors are JSON** on stderr with a code, a suggestion, and `retryable`
+noun-verb commands, long flags, structured output as a contract, TTY-aware
+defaults, strict input validation, JSON errors with a code / suggestion /
+`retryable`, and `findopera schema --all` to dump the command tree and template
+fields as JSON.
 
 ### Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | success |
-| 1 | general error |
+| 1 | general error — including a placeholder that resolved to nothing |
 | 2 | invalid arguments or template |
-| 3 | a marker names a recording not in the database |
-| 4 | permission denied reading or writing a path |
-| 5 | destination not managed by findopera, or a path claimed by two recordings |
-| 6 | API unreachable or errored — retryable |
-| 10 | plan produced and safe to run with `--apply` |
+| 3 | a recording id is not in the database |
+| 6 | the API was unreachable or errored — retryable |
 
 ## Install
 
 ```bash
 cargo install --path .
 ```
+
+## Tests
+
+```bash
+cargo test              # offline; no network
+cargo test -- --ignored # exercises the live findopera.com API
+```
+
+## See also
+
+The `full-linking-prototype` branch carries an earlier, larger version that
+also scanned directories for `findopera.com/recording/<id>.txt` marker files
+and built a tree of symlinks from them. It works, but it was more machinery
+than this needed to be.

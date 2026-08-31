@@ -74,10 +74,7 @@ pub fn print_schema(all: &bool, path: &[String]) -> i32 {
             "1": "general error",
             "2": "invalid arguments or template",
             "3": "recording not found in the database",
-            "4": "permission denied",
-            "5": "destination not managed by findopera, or path conflict",
             "6": "API unreachable or errored (retryable)",
-            "10": "plan produced, safe to --apply",
         });
         doc["templateFields"] = json!(Recording::FIELDS
             .iter()

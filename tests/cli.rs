@@ -1,13 +1,10 @@
 //! End-to-end tests over the built binary.
 //!
-//! These cover marker discovery, path rendering, and the destructive-write
-//! guards. They build their own fixture tree and never reach the network: the
-//! `--endpoint` flag is pointed at a file:// -style stub where a recording
-//! lookup is needed, and tests that would require the live API are marked
-//! `#[ignore]` so `cargo test` stays offline and deterministic.
+//! Everything that can be checked without the network is; tests that need the
+//! real findopera.com API are marked `#[ignore]` so `cargo test` stays offline
+//! and deterministic. Run those with `cargo test -- --ignored`.
 
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
 fn bin() -> PathBuf {
@@ -20,44 +17,20 @@ fn bin() -> PathBuf {
     p.join("findopera")
 }
 
-struct Fixture {
-    root: PathBuf,
+fn run(args: &[&str]) -> Output {
+    Command::new(bin())
+        .args(args)
+        .output()
+        .expect("run findopera")
 }
 
-impl Fixture {
-    fn new(name: &str) -> Fixture {
-        let root =
-            std::env::temp_dir().join(format!("findopera-test-{name}-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("music")).expect("create fixture");
-        Fixture { root }
-    }
-    /// A recording directory containing a marker file with the given body.
-    fn recording(&self, dir: &str, marker: &str, body: &str) -> &Fixture {
-        let d = self.root.join("music").join(dir);
-        fs::create_dir_all(&d).expect("create recording dir");
-        fs::write(d.join(marker), body).expect("write marker");
-        fs::write(d.join("disc1.flac"), b"").expect("write audio");
-        self
-    }
-    fn music(&self) -> PathBuf {
-        self.root.join("music")
-    }
-    fn dest(&self) -> PathBuf {
-        self.root.join("canonical")
-    }
-    fn run(&self, args: &[&str]) -> Output {
-        Command::new(bin())
-            .args(args)
-            .output()
-            .expect("run findopera")
-    }
-}
+/// An endpoint that refuses instantly, so tests never touch the network.
+const OFFLINE: [&str; 4] = ["--endpoint", "http://127.0.0.1:9/graphql", "--timeout", "2"];
 
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.root);
-    }
+fn offline(args: &[&str]) -> Output {
+    let mut all: Vec<&str> = args.to_vec();
+    all.extend_from_slice(&OFFLINE);
+    run(&all)
 }
 
 fn code(o: &Output) -> i32 {
@@ -72,175 +45,105 @@ fn stderr(o: &Output) -> String {
     String::from_utf8_lossy(&o.stderr).into_owned()
 }
 
-const MARKER_75: &str = "\
-                         BILLY BUDD
-
-              by Benjamin Britten (1913-1976)
-
-Conductor: Benjamin Britten
-Recorded: 1967
-
-
-             https://findopera.com/recording/75
-";
-
-// --- marker discovery (no network) ---------------------------------------
+// --- template validation (no network) ------------------------------------
 
 #[test]
-fn finds_markers_and_reports_them_as_json_when_piped() {
-    let f = Fixture::new("discover");
-    f.recording("billy_budd", "Billy Budd.txt", MARKER_75);
-    let out = f.run(&["marker", "list", "--source", f.music().to_str().unwrap()]);
-    assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
-    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("stdout is JSON");
-    assert_eq!(v["markers"][0]["recordingId"], "75");
-    assert_eq!(v["summary"]["markersFound"], 1);
-}
-
-#[test]
-fn ignores_txt_files_without_a_findopera_url() {
-    let f = Fixture::new("ignore");
-    f.recording(
-        "notes",
-        "readme.txt",
-        "Ripped from CD in 2019. See findopera.com",
-    );
-    let out = f.run(&["marker", "list", "--source", f.music().to_str().unwrap()]);
-    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).unwrap();
-    assert_eq!(v["summary"]["markersFound"], 0);
-    assert_eq!(v["summary"]["txtFilesSkipped"], 1);
-}
-
-#[test]
-fn one_directory_can_hold_markers_for_several_recordings() {
-    let f = Fixture::new("boxset");
-    let d = f.music().join("boxset");
-    fs::create_dir_all(&d).unwrap();
-    fs::write(d.join("a.txt"), "https://findopera.com/recording/75").unwrap();
-    fs::write(d.join("b.txt"), "https://findopera.com/recording/500").unwrap();
-    let out = f.run(&["marker", "list", "--source", f.music().to_str().unwrap()]);
-    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).unwrap();
-    assert_eq!(v["summary"]["markersFound"], 2);
-}
-
-// --- argument and template validation (no network) -----------------------
-
-#[test]
-fn rejects_an_unknown_template_field_before_touching_the_disk() {
-    let f = Fixture::new("badfield");
-    f.recording("billy_budd", "m.txt", MARKER_75);
-    let out = f.run(&[
-        "library",
-        "sync",
-        "--source",
-        f.music().to_str().unwrap(),
-        "--destination",
-        f.dest().to_str().unwrap(),
-        "--template",
-        "{{composer.surname}}",
-        "--apply",
-    ]);
-    assert_eq!(code(&out), 2);
+fn rejects_an_unknown_template_field_before_making_a_request() {
+    let out = offline(&["render", "10655", "-t", "{{composer.surname}}"]);
+    assert_eq!(code(&out), 2, "stderr: {}", stderr(&out));
     let v: serde_json::Value = serde_json::from_str(&stderr(&out)).expect("stderr is JSON");
     assert_eq!(v["error"], "template_unknown_field");
-    assert!(v["suggestion"].as_str().unwrap().contains("library fields"));
-    assert!(!f.dest().exists(), "must not create the destination");
+    assert!(v["suggestion"]
+        .as_str()
+        .unwrap()
+        .contains("findopera fields"));
 }
 
 #[test]
 fn rejects_malformed_template_syntax() {
-    let f = Fixture::new("badsyntax");
     for bad in ["{{opera.title", "{{}}", "{{opera.title|\"unclosed}}"] {
-        let out = f.run(&[
-            "library",
-            "plan",
-            "--source",
-            f.music().to_str().unwrap(),
-            "--destination",
-            f.dest().to_str().unwrap(),
-            "--template",
-            bad,
-        ]);
+        let out = offline(&["render", "10655", "-t", bad]);
         assert_eq!(code(&out), 2, "template {bad:?} should be a usage error");
     }
 }
 
+/// A bad template must be caught by parsing, not by a failed lookup — the
+/// offline endpoint would give exit 6 if the request were attempted first.
 #[test]
-fn rejects_a_template_that_would_escape_the_destination() {
-    // `..` can only arrive from the template itself, since interpolated
-    // values have their separators stripped.
-    let f = Fixture::new("escape");
-    let out = f.run(&[
-        "library",
-        "plan",
-        "--source",
-        f.music().to_str().unwrap(),
-        "--destination",
-        f.dest().to_str().unwrap(),
-        "--template",
-        "../../etc/{{opera.title}}",
-    ]);
-    // No markers, so this exits cleanly; the guard is unit-tested in
-    // `template.rs`. Here we only assert nothing was written.
-    assert!(!f.dest().exists());
-    assert_ne!(code(&out), 0, "an empty plan is not a successful apply");
-}
-
-#[test]
-fn missing_source_directory_is_a_usage_error() {
-    let f = Fixture::new("nosource");
-    let out = f.run(&[
-        "library",
-        "plan",
-        "--source",
-        f.root.join("nope").to_str().unwrap(),
-        "--destination",
-        f.dest().to_str().unwrap(),
-        "--template",
-        "{{opera.title}}",
-    ]);
+fn template_errors_take_priority_over_network_errors() {
+    let out = offline(&["render", "10655", "-t", "{{nope}}"]);
     assert_eq!(code(&out), 2);
-    let v: serde_json::Value = serde_json::from_str(&stderr(&out)).unwrap();
-    assert_eq!(v["error"], "source_not_found");
 }
 
 #[test]
 fn non_numeric_recording_id_is_rejected_without_a_request() {
-    let out = Command::new(bin())
-        .args(["recording", "get", "not-an-id"])
-        .output()
-        .unwrap();
+    let out = offline(&["render", "not-an-id", "-t", "{{opera.title}}"]);
     assert_eq!(code(&out), 2);
     let v: serde_json::Value = serde_json::from_str(&stderr(&out)).unwrap();
     assert_eq!(v["error"], "invalid_recording_id");
+}
+
+#[test]
+fn unreachable_api_reports_a_retryable_error() {
+    let out = offline(&["render", "10655", "-t", "{{opera.title}}"]);
+    assert_eq!(code(&out), 6);
+    let v: serde_json::Value = serde_json::from_str(&stderr(&out)).unwrap();
+    assert_eq!(v["retryable"], true);
 }
 
 // --- exit codes and help --------------------------------------------------
 
 #[test]
 fn help_succeeds_but_a_missing_subcommand_is_a_usage_error() {
-    assert_eq!(
-        code(&Command::new(bin()).arg("--help").output().unwrap()),
-        0
-    );
-    assert_eq!(code(&Command::new(bin()).output().unwrap()), 2);
-    assert_eq!(
-        code(
-            &Command::new(bin())
-                .args(["library", "frobnicate"])
-                .output()
-                .unwrap()
-        ),
-        2
-    );
+    assert_eq!(code(&run(&["--help"])), 0);
+    assert_eq!(code(&run(&[])), 2);
+    assert_eq!(code(&run(&["frobnicate"])), 2);
+}
+
+// --- discoverability ------------------------------------------------------
+
+#[test]
+fn fields_lists_every_template_field_with_a_description() {
+    let out = run(&["fields", "--format", "json"]);
+    assert_eq!(code(&out), 0);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("stdout is JSON");
+    let fields = v["fields"].as_array().unwrap();
+    assert!(fields.len() >= 20, "expected the full field surface");
+    for f in fields {
+        assert!(f["field"].is_string());
+        assert!(
+            !f["description"].as_str().unwrap_or("").is_empty(),
+            "{} needs a description",
+            f["field"]
+        );
+    }
+    assert!(v["syntax"]["fallback"].is_string());
+}
+
+/// The set `fields` advertises must be exactly what a template accepts, or the
+/// documentation lies.
+#[test]
+fn every_advertised_field_is_accepted_by_the_template_parser() {
+    let v: serde_json::Value =
+        serde_json::from_str(&stdout(&run(&["fields", "--format", "json"]))).unwrap();
+    for field in v["fields"].as_array().unwrap() {
+        let name = field["field"].as_str().unwrap();
+        let tmpl = format!("{{{{{name}}}}}");
+        let out = offline(&["render", "10655", "-t", &tmpl]);
+        // Exit 6 means it got past parsing and tried the network, which is
+        // what we want; exit 2 would mean the parser rejected a listed field.
+        assert_ne!(
+            code(&out),
+            2,
+            "`{name}` is listed by `fields` but rejected by --template: {}",
+            stderr(&out)
+        );
+    }
 }
 
 #[test]
 fn schema_dumps_the_command_tree_with_exit_codes_and_fields() {
-    let out = Command::new(bin())
-        .args(["schema", "--all"])
-        .output()
-        .unwrap();
+    let out = run(&["schema", "--all"]);
     assert_eq!(code(&out), 0);
     let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("schema is JSON");
     let names: Vec<&str> = v["subcommands"]
@@ -249,9 +152,9 @@ fn schema_dumps_the_command_tree_with_exit_codes_and_fields() {
         .iter()
         .map(|s| s["name"].as_str().unwrap())
         .collect();
-    assert!(names.contains(&"library"));
-    assert!(names.contains(&"recording"));
-    assert_eq!(v["exitCodes"]["10"], "plan produced, safe to --apply");
+    assert!(names.contains(&"render"));
+    assert!(names.contains(&"fields"));
+    assert_eq!(v["exitCodes"]["3"], "recording not found in the database");
     assert!(v["templateFields"]
         .as_array()
         .unwrap()
@@ -261,10 +164,7 @@ fn schema_dumps_the_command_tree_with_exit_codes_and_fields() {
 
 #[test]
 fn schema_for_an_unknown_command_lists_the_real_ones() {
-    let out = Command::new(bin())
-        .args(["schema", "library", "frobnicate"])
-        .output()
-        .unwrap();
+    let out = run(&["schema", "frobnicate"]);
     assert_eq!(code(&out), 2);
     let v: serde_json::Value = serde_json::from_str(&stderr(&out)).unwrap();
     assert_eq!(v["error"], "unknown_command");
@@ -274,296 +174,117 @@ fn schema_for_an_unknown_command_lists_the_real_ones() {
         .iter()
         .map(|d| d.as_str().unwrap())
         .collect();
-    assert!(details.contains(&"sync"));
-}
-
-// --- destructive-write guards --------------------------------------------
-
-/// The stamp is what makes wipe-and-rebuild safe, so verify the refusal
-/// directly rather than through a full sync.
-#[test]
-fn refuses_to_wipe_a_destination_it_did_not_create() {
-    let f = Fixture::new("precious");
-    f.recording("billy_budd", "m.txt", MARKER_75);
-    let dest = f.root.join("precious");
-    fs::create_dir_all(&dest).unwrap();
-    fs::write(dest.join("thesis.txt"), b"years of work").unwrap();
-
-    let out = f.run(&[
-        "library",
-        "sync",
-        "--source",
-        f.music().to_str().unwrap(),
-        "--destination",
-        dest.to_str().unwrap(),
-        "--template",
-        "{{opera.title}}",
-        "--apply",
-        // Point at an endpoint that will fail so the test needs no network;
-        // the destination check must still not have destroyed anything.
-        "--endpoint",
-        "http://127.0.0.1:9/graphql",
-        "--timeout",
-        "2",
-    ]);
-    assert_ne!(code(&out), 0);
-    assert!(
-        dest.join("thesis.txt").exists(),
-        "an unmanaged destination must survive"
-    );
+    assert!(details.contains(&"render"));
 }
 
 #[test]
-fn plan_never_writes_to_the_destination() {
-    let f = Fixture::new("planonly");
-    f.recording("billy_budd", "m.txt", MARKER_75);
-    let _ = f.run(&[
-        "library",
-        "plan",
-        "--source",
-        f.music().to_str().unwrap(),
-        "--destination",
-        f.dest().to_str().unwrap(),
-        "--template",
-        "{{opera.title}}",
-        "--endpoint",
-        "http://127.0.0.1:9/graphql",
-        "--timeout",
-        "2",
-    ]);
-    assert!(!f.dest().exists());
-}
-
-#[test]
-fn unreachable_api_reports_a_retryable_error() {
-    let f = Fixture::new("offline");
-    f.recording("billy_budd", "m.txt", MARKER_75);
-    let out = f.run(&[
-        "library",
-        "plan",
-        "--source",
-        f.music().to_str().unwrap(),
-        "--destination",
-        f.dest().to_str().unwrap(),
-        "--template",
-        "{{opera.title}}",
-        "--endpoint",
-        "http://127.0.0.1:9/graphql",
-        "--timeout",
-        "2",
-    ]);
-    assert_eq!(code(&out), 6);
-    let v: serde_json::Value = serde_json::from_str(&stderr(&out)).unwrap();
-    assert_eq!(v["retryable"], true);
+fn fields_example_rejects_a_non_numeric_id() {
+    assert_eq!(code(&offline(&["fields", "--example", "nope"])), 2);
 }
 
 // --- live API ------------------------------------------------------------
-// Run with `cargo test -- --ignored` to exercise the real findopera.com API.
 
 #[test]
 #[ignore = "hits the live findopera.com API"]
-fn live_sync_builds_a_tree_of_working_symlinks() {
-    let f = Fixture::new("live");
-    f.recording("billy_budd", "Billy Budd.txt", MARKER_75);
-    let out = f.run(&[
-        "library",
-        "sync",
-        "--source",
-        f.music().to_str().unwrap(),
-        "--destination",
-        f.dest().to_str().unwrap(),
-        "--template",
+fn live_render_produces_the_expected_string() {
+    let out = run(&[
+        "render",
+        "10655",
+        "-t",
         "{{composer.lastName}}/{{opera.title}}/{{year}}",
-        "--apply",
+        "--format",
+        "json",
     ]);
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
-
-    let link = f.dest().join("Britten/Billy Budd/1967");
-    assert!(link.symlink_metadata().unwrap().file_type().is_symlink());
-    assert!(
-        link.join("disc1.flac").exists(),
-        "symlink resolves to the recording"
+    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).unwrap();
+    assert_eq!(
+        v["results"][0]["rendered"],
+        "Handel/Sosarme, Re di Media/2026"
     );
-    assert!(
-        f.dest().join(".findopera-library.json").is_file(),
-        "stamp written"
-    );
-
-    // Re-running is idempotent, and dropping a marker prunes its link.
-    let before = tree(&f.dest());
-    let out = f.run(&[
-        "library",
-        "sync",
-        "--source",
-        f.music().to_str().unwrap(),
-        "--destination",
-        f.dest().to_str().unwrap(),
-        "--template",
-        "{{composer.lastName}}/{{opera.title}}/{{year}}",
-        "--apply",
-    ]);
-    assert_eq!(code(&out), 0);
-    assert_eq!(before, tree(&f.dest()), "re-apply must be idempotent");
-
-    fs::remove_dir_all(f.music().join("billy_budd")).unwrap();
-    let _ = f.run(&[
-        "library",
-        "sync",
-        "--source",
-        f.music().to_str().unwrap(),
-        "--destination",
-        f.dest().to_str().unwrap(),
-        "--template",
-        "{{composer.lastName}}/{{opera.title}}/{{year}}",
-        "--apply",
-    ]);
-    assert!(
-        !f.dest().join("Britten").exists(),
-        "stale link must be pruned"
-    );
+    assert_eq!(v["results"][0]["segments"][0], "Handel");
 }
 
 #[test]
 #[ignore = "hits the live findopera.com API"]
-fn live_clean_plan_exits_ten() {
-    let f = Fixture::new("live-plan");
-    f.recording("billy_budd", "Billy Budd.txt", MARKER_75);
-    let out = f.run(&[
-        "library",
-        "plan",
-        "--source",
-        f.music().to_str().unwrap(),
-        "--destination",
-        f.dest().to_str().unwrap(),
-        "--template",
-        "{{composer.lastName}}/{{opera.title}}/{{year}}",
+fn live_renders_several_recordings_in_the_order_given() {
+    // --format text is explicit here: captured output is not a TTY, so the
+    // default would (correctly) be JSON.
+    let out = run(&[
+        "render",
+        "75",
+        "10655",
+        "-t",
+        "{{composer.lastName}}",
+        "--format",
+        "text",
     ]);
-    assert_eq!(code(&out), 10, "a clean plan signals safe-to-apply");
+    assert_eq!(code(&out), 0);
+    assert_eq!(stdout(&out), "Britten\nHandel\n");
+}
+
+/// Recording 10655 has no `opera.englishTitle`, so the bare field must fail
+/// loudly and the fallback form must succeed.
+#[test]
+#[ignore = "hits the live findopera.com API"]
+fn live_absent_field_errors_unless_a_fallback_is_given() {
+    let out = run(&[
+        "render",
+        "10655",
+        "-t",
+        "{{opera.englishTitle}}",
+        "--format",
+        "text",
+    ]);
+    assert_eq!(code(&out), 1, "an unresolved placeholder is an error");
+    assert!(stderr(&out).contains("resolved to nothing"));
+
+    // In JSON mode the same failure is data on stdout, not prose on stderr.
+    let out = run(&[
+        "render",
+        "10655",
+        "-t",
+        "{{opera.englishTitle}}",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code(&out), 1);
+    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).unwrap();
+    assert_eq!(v["problems"][0]["error"], "template_unresolved_field");
+
+    let out = run(&[
+        "render",
+        "10655",
+        "-t",
+        "{{opera.englishTitle|opera.title}}",
+        "--format",
+        "text",
+    ]);
+    assert_eq!(code(&out), 0);
+    assert_eq!(stdout(&out), "Sosarme, Re di Media\n");
+
+    let out = run(&[
+        "render",
+        "10655",
+        "-t",
+        "{{opera.englishTitle|\"Untitled\"}}",
+        "--format",
+        "text",
+    ]);
+    assert_eq!(code(&out), 0);
+    assert_eq!(stdout(&out), "Untitled\n");
 }
 
 #[test]
 #[ignore = "hits the live findopera.com API"]
 fn live_unknown_recording_id_exits_three() {
-    let out = Command::new(bin())
-        .args(["recording", "get", "99999999"])
-        .output()
-        .unwrap();
+    let out = run(&["render", "99999999", "-t", "{{opera.title}}"]);
     assert_eq!(code(&out), 3);
-}
-
-fn tree(root: &Path) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        for e in entries.flatten() {
-            let p = e.path();
-            out.push(p.strip_prefix(root).unwrap().display().to_string());
-            if p.symlink_metadata().is_ok_and(|m| m.file_type().is_dir()) {
-                stack.push(p);
-            }
-        }
-    }
-    out.sort();
-    out
-}
-
-// --- template discoverability --------------------------------------------
-
-#[test]
-fn fields_lists_every_template_field_with_a_description() {
-    let out = Command::new(bin())
-        .args(["library", "fields", "--format", "json"])
-        .output()
-        .unwrap();
-    assert_eq!(code(&out), 0);
-    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).expect("stdout is JSON");
-    let fields = v["fields"].as_array().unwrap();
-    assert!(fields.len() >= 20, "expected the full field surface");
-    for f in fields {
-        assert!(f["field"].is_string());
-        let d = f["description"].as_str().unwrap_or("");
-        assert!(!d.is_empty(), "{} needs a description", f["field"]);
-    }
-    // The syntax summary is what teaches fallbacks.
-    assert!(v["syntax"]["fallback"].is_string());
-}
-
-/// The set `fields` advertises must be exactly what a template accepts —
-/// otherwise the documentation lies and `--template` rejects a listed field.
-#[test]
-fn every_advertised_field_is_accepted_by_the_template_parser() {
-    let out = Command::new(bin())
-        .args(["library", "fields", "--format", "json"])
-        .output()
-        .unwrap();
-    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).unwrap();
-    let f = Fixture::new("advertised");
-    for field in v["fields"].as_array().unwrap() {
-        let name = field["field"].as_str().unwrap();
-        let out = f.run(&[
-            "library",
-            "plan",
-            "--source",
-            f.music().to_str().unwrap(),
-            "--destination",
-            f.dest().to_str().unwrap(),
-            "--template",
-            &format!("{{{{{name}}}}}"),
-            "--endpoint",
-            "http://127.0.0.1:9/graphql",
-            "--timeout",
-            "2",
-        ]);
-        // No markers, so it never reaches the network; a usage error (2) would
-        // mean the parser rejected a field that `fields` advertises.
-        assert_ne!(
-            code(&out),
-            2,
-            "`{name}` is listed by `library fields` but rejected by --template: {}",
-            stderr(&out)
-        );
-    }
-}
-
-#[test]
-fn schema_carries_template_field_descriptions_too() {
-    let out = Command::new(bin())
-        .args(["schema", "--all"])
-        .output()
-        .unwrap();
-    let v: serde_json::Value = serde_json::from_str(&stdout(&out)).unwrap();
-    let fields = v["templateFields"].as_array().unwrap();
-    assert!(fields
-        .iter()
-        .any(|f| f["field"] == "composer.lastName" && f["description"].is_string()));
-}
-
-#[test]
-fn fields_example_rejects_a_non_numeric_id() {
-    let out = Command::new(bin())
-        .args(["library", "fields", "--example", "nope"])
-        .output()
-        .unwrap();
-    assert_eq!(code(&out), 2);
 }
 
 #[test]
 #[ignore = "hits the live findopera.com API"]
 fn live_fields_example_shows_which_fields_are_populated() {
-    let out = Command::new(bin())
-        .args([
-            "library",
-            "fields",
-            "--example",
-            "10655",
-            "--format",
-            "json",
-        ])
-        .output()
-        .unwrap();
+    let out = run(&["fields", "--example", "10655", "--format", "json"]);
     assert_eq!(code(&out), 0, "stderr: {}", stderr(&out));
     let v: serde_json::Value = serde_json::from_str(&stdout(&out)).unwrap();
     let by = |name: &str| -> serde_json::Value {
