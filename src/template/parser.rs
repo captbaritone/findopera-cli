@@ -205,10 +205,10 @@ impl Parser<'_> {
         let open = self.bump().span; // `{{`
         let mut alts = Vec::new();
 
-        let mut first = true;
+        let mut is_first = true;
         loop {
-            alts.push(self.parse_alt(open, first)?);
-            first = false;
+            alts.push(self.parse_alt(open, is_first)?);
+            is_first = false;
             match &self.peek().tok {
                 Tok::Pipe => {
                     self.bump();
@@ -238,15 +238,16 @@ impl Parser<'_> {
         })
     }
 
-    fn parse_alt(&mut self, open: Span, first: bool) -> Result<Alt, ParseError> {
+    /// `is_first` distinguishes `{{}}` from a dangling `{{year|}}`.
+    fn parse_alt(&mut self, open: Span, is_first: bool) -> Result<Alt, ParseError> {
         match self.peek().tok.clone() {
             Tok::Str(s) => {
                 self.bump();
                 Ok(Alt::Literal(s))
             }
-            Tok::Ident(first) => {
+            Tok::Ident(head) => {
                 let start = self.bump().span;
-                let mut path = first;
+                let mut path = head;
                 let mut end = start;
                 while matches!(self.peek().tok, Tok::Dot) {
                     self.bump();
@@ -280,7 +281,7 @@ impl Parser<'_> {
             }
             // Distinguish `{{}}` from `{{year|}}`: the second is a dangling
             // fallback, not an empty placeholder.
-            Tok::CloseExpr if first => Err(ParseError::new(
+            Tok::CloseExpr if is_first => Err(ParseError::new(
                 "template_syntax_error",
                 "empty placeholder",
                 open.to(self.peek().span),
