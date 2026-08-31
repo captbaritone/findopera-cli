@@ -1,20 +1,14 @@
-//! Tokenizer for the template language, built on `logos`.
+//! Tokenizer for the template language.
 //!
 //! Lexing is mode-switching, as it must be for a template language: outside
 //! `{{ }}` almost every byte is literal text, while inside it we want
-//! identifiers, dots, pipes and quoted strings. A single token set cannot
-//! express that, so there are two — [`TextTok`] and [`ExprTok`] — and the
-//! driver flips between them with `Lexer::morph` at the placeholder
-//! delimiters. This is logos' documented context-dependent lexing pattern.
-//!
-//! logos yields one token per match, but the parser wants literal text as a
-//! single string with escapes already resolved, so [`lex`] coalesces runs of
-//! text, escapes and lone braces as it goes.
+//! identifiers, dots, pipes and quoted strings. A single context-free token set
+//! cannot express that, so the lexer carries a [`Mode`] and flips it at the
+//! placeholder delimiters.
 //!
 //! Every token carries a byte [`Span`] so errors can point at the offending
 //! part of the template rather than describing it in prose.
 
-use logos::Logos;
 use std::fmt;
 
 /// A byte range within the template source.
@@ -34,13 +28,6 @@ impl Span {
     }
 }
 
-impl From<std::ops::Range<usize>> for Span {
-    fn from(r: std::ops::Range<usize>) -> Self {
-        Span::new(r.start, r.end)
-    }
-}
-
-/// The token kinds the parser consumes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tok {
     /// Literal text with escapes already resolved.
@@ -88,6 +75,14 @@ pub struct Token {
     pub span: Span,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// Outside a placeholder: everything is literal text.
+    Text,
+    /// Inside `{{ }}`: identifiers, dots, pipes, strings.
+    Expr,
+}
+
 #[derive(Debug)]
 pub struct LexError {
     pub message: String,
@@ -100,224 +95,237 @@ impl fmt::Display for LexError {
     }
 }
 
-/// Outside a placeholder: literal text and the structural delimiters.
-#[derive(Logos, Debug, PartialEq)]
-enum TextTok {
-    #[token("[")]
-    OpenGroup,
-    #[token("]")]
-    CloseGroup,
-    #[token("{{")]
-    OpenExpr,
-    /// A recognized escape, carrying the character it stands for.
-    #[regex(r"\\[\[\]{}\\]", |lex| lex.slice().chars().nth(1))]
-    Escape(char),
-    /// A backslash that did not form a valid escape. Longest-match means the
-    /// two-character `Escape` wins whenever it applies, so reaching this token
-    /// is always an error — it exists only to carry a precise message.
-    #[token("\\")]
-    BadEscape,
-    /// A run of ordinary text. `{` is excluded so `{{` can win by longest
-    /// match; a lone `{` is picked up by `LoneBrace` below.
-    #[regex(r"[^\[\]{\\]+", |lex| lex.slice().to_string())]
-    Text(String),
-    #[token("{")]
-    LoneBrace,
+pub fn lex(input: &str) -> Result<Vec<Token>, LexError> {
+    Lexer::new(input).run()
 }
 
-/// Inside `{{ }}`.
-#[derive(Logos, Debug, PartialEq)]
-#[logos(skip r"\s+")]
-enum ExprTok {
-    #[token("}}")]
-    CloseExpr,
-    #[token("|")]
-    Pipe,
-    #[token(".")]
-    Dot,
-    #[regex(r"[A-Za-z0-9_]+", |lex| lex.slice().to_string())]
-    Ident(String),
-    #[regex(r#""([^"\\]|\\["\\])*""#, |lex| unescape_str(lex.slice()))]
-    Str(String),
-    /// Only reachable when a previous placeholder was left unclosed.
-    #[token("{{")]
-    NestedOpen,
+struct Lexer<'a> {
+    src: &'a str,
+    /// (byte offset, char) pairs, so spans stay byte-accurate while scanning
+    /// is done per character — templates routinely contain non-ASCII.
+    chars: Vec<(usize, char)>,
+    pos: usize,
+    mode: Mode,
+    /// Byte offset of the `{{` currently open, for the unclosed-placeholder error.
+    open_expr: usize,
+    out: Vec<Token>,
 }
 
-/// Strip the surrounding quotes and resolve `\"` and `\\`.
-fn unescape_str(raw: &str) -> String {
-    let inner = &raw[1..raw.len() - 1];
-    let mut out = String::with_capacity(inner.len());
-    let mut chars = inner.chars();
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            if let Some(n) = chars.next() {
-                out.push(n);
-            }
-        } else {
-            out.push(c);
+impl<'a> Lexer<'a> {
+    fn new(src: &'a str) -> Self {
+        Lexer {
+            src,
+            chars: src.char_indices().collect(),
+            pos: 0,
+            mode: Mode::Text,
+            open_expr: 0,
+            out: Vec::new(),
         }
     }
-    out
-}
 
-pub fn lex(src: &str) -> Result<Vec<Token>, LexError> {
-    let mut out: Vec<Token> = Vec::new();
-    let mut text = TextTok::lexer(src);
-
-    // Literal text arrives as several tokens (Text / Escape / LoneBrace) but
-    // the parser wants one string, so accumulate until a delimiter.
-    let mut pending: Option<(String, Span)> = None;
-
-    macro_rules! flush {
-        () => {
-            if let Some((s, span)) = pending.take() {
-                out.push(Token {
-                    tok: Tok::Text(s),
-                    span,
-                });
-            }
-        };
-    }
-    macro_rules! push_text {
-        ($s:expr, $span:expr) => {{
-            let span: Span = $span;
-            match &mut pending {
-                Some((buf, sp)) => {
-                    buf.push_str($s);
-                    sp.end = span.end;
-                }
-                None => pending = Some(($s.to_string(), span)),
-            }
-        }};
+    fn at(&self, offset: usize) -> Option<char> {
+        self.chars.get(self.pos + offset).map(|(_, c)| *c)
     }
 
-    while let Some(next) = text.next() {
-        let span: Span = text.span().into();
-        match next {
-            Err(()) => {
-                return Err(LexError {
-                    message: format!("unexpected `{}`", &src[span.start..span.end]),
-                    span,
-                })
-            }
-            Ok(TextTok::Text(s)) => push_text!(&s, span),
-            Ok(TextTok::Escape(c)) => push_text!(c.to_string().as_str(), span),
-            Ok(TextTok::LoneBrace) => push_text!("{", span),
+    /// Byte offset of the cursor, clamped to the end of input.
+    fn byte(&self) -> usize {
+        self.chars
+            .get(self.pos)
+            .map(|(b, _)| *b)
+            .unwrap_or(self.src.len())
+    }
 
-            Ok(TextTok::BadEscape) => {
-                // Report what actually follows the backslash; logos did not
-                // consume it, because no escape rule matched.
-                let rest = &src[span.end..];
-                return Err(match rest.chars().next() {
-                    Some(c) => LexError {
-                        message: format!(
-                            "unknown escape `\\{c}` — only \\[ \\] \\{{ \\}} \\\\ are escapes"
-                        ),
-                        span: Span::new(span.start, span.end + c.len_utf8()),
-                    },
-                    None => LexError {
-                        message: "template ends with a trailing `\\`".to_string(),
-                        span,
-                    },
-                });
-            }
+    fn bump(&mut self) -> Option<char> {
+        let c = self.at(0);
+        if c.is_some() {
+            self.pos += 1;
+        }
+        c
+    }
 
-            Ok(TextTok::OpenGroup) => {
-                flush!();
-                out.push(Token {
-                    tok: Tok::OpenGroup,
-                    span,
-                });
-            }
-            Ok(TextTok::CloseGroup) => {
-                flush!();
-                out.push(Token {
-                    tok: Tok::CloseGroup,
-                    span,
-                });
-            }
+    fn push(&mut self, tok: Tok, start: usize) {
+        let span = Span::new(start, self.byte());
+        self.out.push(Token { tok, span });
+    }
 
-            Ok(TextTok::OpenExpr) => {
-                flush!();
-                out.push(Token {
-                    tok: Tok::OpenExpr,
-                    span,
-                });
-                // Switch to expression mode for the body of the placeholder.
-                let mut expr = text.morph::<ExprTok>();
-                let closed = loop {
-                    let Some(t) = expr.next() else { break false };
-                    let s: Span = expr.span().into();
-                    match t {
-                        Err(()) => {
-                            let slice = &src[s.start..s.end];
+    fn run(mut self) -> Result<Vec<Token>, LexError> {
+        while self.pos < self.chars.len() {
+            match self.mode {
+                Mode::Text => self.lex_text()?,
+                Mode::Expr => self.lex_expr()?,
+            }
+        }
+        let end = self.src.len();
+        // Reaching the end while still in Expr mode means the placeholder was
+        // never closed; the scan loop alone would not catch this.
+        if self.mode == Mode::Expr {
+            return Err(LexError {
+                message: "unclosed `{{` — every placeholder needs a matching `}}`".to_string(),
+                span: Span::new(self.open_expr, end),
+            });
+        }
+        self.out.push(Token {
+            tok: Tok::Eof,
+            span: Span::new(end, end),
+        });
+        Ok(self.out)
+    }
+
+    /// Accumulate literal text until a structural delimiter, resolving escapes.
+    fn lex_text(&mut self) -> Result<(), LexError> {
+        let start = self.byte();
+        let mut buf = String::new();
+
+        loop {
+            match self.at(0) {
+                None => break,
+                Some('{') if self.at(1) == Some('{') => break,
+                Some('[') | Some(']') => break,
+                Some('\\') => {
+                    let esc_start = self.byte();
+                    self.bump();
+                    match self.bump() {
+                        Some(c @ ('[' | ']' | '{' | '}' | '\\')) => buf.push(c),
+                        Some(other) => {
                             return Err(LexError {
-                                message: if slice.starts_with('"') {
-                                    "unterminated quoted literal".to_string()
-                                } else {
-                                    format!(
-                                        "unexpected `{}` inside a placeholder",
-                                        slice.chars().next().unwrap_or('?')
-                                    )
-                                },
-                                span: s,
-                            });
-                        }
-                        Ok(ExprTok::NestedOpen) => {
-                            return Err(LexError {
-                                message:
-                                    "`{{` inside a placeholder — the previous one is not closed"
-                                        .to_string(),
-                                span: s,
+                                message: format!(
+                                    "unknown escape `\\{other}` — only \\[ \\] \\{{ \\}} \\\\ are escapes"
+                                ),
+                                span: Span::new(esc_start, self.byte()),
                             })
                         }
-                        Ok(ExprTok::CloseExpr) => {
-                            out.push(Token {
-                                tok: Tok::CloseExpr,
-                                span: s,
-                            });
-                            break true;
+                        None => {
+                            return Err(LexError {
+                                message: "template ends with a trailing `\\`".to_string(),
+                                span: Span::new(esc_start, self.byte()),
+                            })
                         }
-                        Ok(ExprTok::Pipe) => out.push(Token {
-                            tok: Tok::Pipe,
-                            span: s,
-                        }),
-                        Ok(ExprTok::Dot) => out.push(Token {
-                            tok: Tok::Dot,
-                            span: s,
-                        }),
-                        Ok(ExprTok::Ident(i)) => out.push(Token {
-                            tok: Tok::Ident(i),
-                            span: s,
-                        }),
-                        Ok(ExprTok::Str(v)) => out.push(Token {
-                            tok: Tok::Str(v),
-                            span: s,
-                        }),
                     }
-                };
-                if !closed {
-                    // Running out of input mid-placeholder is its own branch
-                    // here, which is what makes it hard to forget.
-                    return Err(LexError {
-                        message: "unclosed `{{` — every placeholder needs a matching `}}`"
-                            .to_string(),
-                        span: Span::new(span.start, src.len()),
-                    });
                 }
-                text = expr.morph();
+                Some(c) => {
+                    self.bump();
+                    buf.push(c);
+                }
+            }
+        }
+
+        if !buf.is_empty() {
+            self.push(Tok::Text(buf), start);
+        }
+
+        // Now emit whatever delimiter stopped us.
+        let d = self.byte();
+        match self.at(0) {
+            Some('[') => {
+                self.bump();
+                self.push(Tok::OpenGroup, d);
+            }
+            Some(']') => {
+                self.bump();
+                self.push(Tok::CloseGroup, d);
+            }
+            Some('{') => {
+                self.bump();
+                self.bump();
+                self.push(Tok::OpenExpr, d);
+                self.mode = Mode::Expr;
+                self.open_expr = d;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Lex one token inside a placeholder.
+    fn lex_expr(&mut self) -> Result<(), LexError> {
+        // Whitespace inside a placeholder is insignificant.
+        while self.at(0).is_some_and(|c| c.is_whitespace()) {
+            self.bump();
+        }
+        let start = self.byte();
+        match self.at(0) {
+            None => Err(LexError {
+                message: "unclosed `{{` — every placeholder needs a matching `}}`".to_string(),
+                span: Span::new(start, start),
+            }),
+            Some('}') if self.at(1) == Some('}') => {
+                self.bump();
+                self.bump();
+                self.push(Tok::CloseExpr, start);
+                self.mode = Mode::Text;
+                Ok(())
+            }
+            Some('|') => {
+                self.bump();
+                self.push(Tok::Pipe, start);
+                Ok(())
+            }
+            Some('.') => {
+                self.bump();
+                self.push(Tok::Dot, start);
+                Ok(())
+            }
+            Some('"') => {
+                self.bump();
+                let mut buf = String::new();
+                loop {
+                    match self.bump() {
+                        None => {
+                            return Err(LexError {
+                                message: "unterminated quoted literal".to_string(),
+                                span: Span::new(start, self.byte()),
+                            })
+                        }
+                        Some('"') => break,
+                        Some('\\') => match self.bump() {
+                            Some(c @ ('"' | '\\')) => buf.push(c),
+                            Some(other) => {
+                                return Err(LexError {
+                                    message: format!(
+                                        "unknown escape `\\{other}` in a quoted literal"
+                                    ),
+                                    span: Span::new(start, self.byte()),
+                                })
+                            }
+                            None => {
+                                return Err(LexError {
+                                    message: "unterminated quoted literal".to_string(),
+                                    span: Span::new(start, self.byte()),
+                                })
+                            }
+                        },
+                        Some(c) => buf.push(c),
+                    }
+                }
+                self.push(Tok::Str(buf), start);
+                Ok(())
+            }
+            Some(c) if c.is_alphanumeric() || c == '_' => {
+                let mut buf = String::new();
+                while let Some(c) = self.at(0) {
+                    if c.is_alphanumeric() || c == '_' {
+                        buf.push(c);
+                        self.bump();
+                    } else {
+                        break;
+                    }
+                }
+                self.push(Tok::Ident(buf), start);
+                Ok(())
+            }
+            Some('{') if self.at(1) == Some('{') => Err(LexError {
+                message: "`{{` inside a placeholder — the previous one is not closed".to_string(),
+                span: Span::new(start, start + 2),
+            }),
+            Some(c) => {
+                self.bump();
+                Err(LexError {
+                    message: format!("unexpected `{c}` inside a placeholder"),
+                    span: Span::new(start, self.byte()),
+                })
             }
         }
     }
-
-    flush!();
-    let end = src.len();
-    out.push(Token {
-        tok: Tok::Eof,
-        span: Span::new(end, end),
-    });
-    Ok(out)
 }
 
 #[cfg(test)]
@@ -394,8 +402,8 @@ mod tests {
         assert_eq!(toks("{x}"), vec![Tok::Text("{x}".into()), Tok::Eof]);
     }
 
-    /// logos emits text, escapes and lone braces as separate tokens; the
-    /// parser must see a single run.
+    /// Text, escapes and lone braces must arrive as a single run, not as
+    /// separate tokens.
     #[test]
     fn coalesces_text_escapes_and_braces_into_one_token() {
         assert_eq!(
