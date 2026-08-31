@@ -1,0 +1,7 @@
+--- template
+{{opera.englishTitle|opera.librettist}}
+--- error
+error[template_unresolvable]: {{opera.englishTitle|opera.librettist}} can resolve to nothing, and is not inside a group
+{{opera.englishTitle|opera.librettist}}
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: Add a fallback like {{…|"Unknown"}}, or wrap it in a group so it can be dropped: [{{opera.englishTitle|opera.librettist}}]

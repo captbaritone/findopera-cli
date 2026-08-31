@@ -1,0 +1,8 @@
+--- template
+{{composer.lastName}}/{{opera.title}}/{{conductor.lastName}}
+--- data
+composer.lastName = Strauss
+opera.title = Salome
+conductor.lastName = Solti
+--- expect
+Strauss/Salome/Solti

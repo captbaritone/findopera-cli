@@ -1,0 +1,11 @@
+`Fields::optional` distinguishes only present from absent, so `Some("")` is a
+value and the alternatives stop there — the literal never fires. This is the
+contract an implementation honors by collapsing its own empty sentinels into
+`None`, ideally where the record is deserialized.
+
+--- template
+{{year|"n.d."}}
+--- data
+year = ""
+--- error
+error[path_empty]: rendered "", which has no path segments

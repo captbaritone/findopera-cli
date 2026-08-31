@@ -1,0 +1,6 @@
+--- template
+{{opera.englishTitle|opera.librettist|composer.lastName}}
+--- data
+composer.lastName = Strauss
+--- expect
+Strauss

@@ -1,0 +1,6 @@
+--- template
+{{opera.title}}
+--- data
+opera.title = back\slash
+--- expect
+back-slash

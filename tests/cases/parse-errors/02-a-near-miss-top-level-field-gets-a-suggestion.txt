@@ -1,0 +1,11 @@
+The suggester picks the smallest edit distance, breaking ties by position in
+the schema table. This case is deliberately unambiguous: `{{yr}}` would sit
+equidistant from `id` and `year` and pick whichever came first.
+
+--- template
+{{yaer}}
+--- error
+error[template_unknown_field]: unknown field `yaer`
+{{yaer}}
+  ^^^^
+help: Did you mean `year`?

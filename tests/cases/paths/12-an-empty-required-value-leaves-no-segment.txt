@@ -1,0 +1,10 @@
+`opera.title` is declared `non_null`, so `Fields::required` must hand back a
+`String` — and a resolver over an empty struct field hands back an empty one.
+Rendering still succeeds; there is simply no segment in the result.
+
+--- template
+{{opera.title}}
+--- data
+opera.title = ""
+--- error
+error[path_empty]: rendered "", which has no path segments

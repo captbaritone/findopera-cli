@@ -1,0 +1,7 @@
+--- template
+{{opera.title}}[ - {{conductor.fullName}}[, {{orchestra}}]]
+--- data
+opera.title = Salome
+orchestra = Wiener Philharmoniker
+--- expect
+Salome

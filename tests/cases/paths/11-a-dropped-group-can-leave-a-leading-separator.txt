@@ -1,0 +1,11 @@
+The template is not absolute; the leading group vanished and left the
+separator behind. `split_path` tests `starts_with('/')` on the rendered
+string before it collapses empty segments, so the diagnostic names a cause
+that is not the real one. Recorded as it behaves today.
+
+--- template
+[{{year}}]/{{opera.title}}
+--- data
+opera.title = Salome
+--- error
+error[path_absolute]: rendered "/Salome", which names an absolute path — something before the leading `/` resolved to nothing

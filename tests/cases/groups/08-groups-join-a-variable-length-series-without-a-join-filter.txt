@@ -1,0 +1,8 @@
+--- template
+{{opera.title}}[ - {{singer1}}][, {{singer2}}][, {{singer3}}]
+--- data
+opera.title = Salome
+singer1 = Nilsson
+singer2 = Wächter
+--- expect
+Salome - Nilsson, Wächter

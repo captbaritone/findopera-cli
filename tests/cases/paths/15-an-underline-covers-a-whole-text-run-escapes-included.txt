@@ -1,0 +1,12 @@
+The text between the placeholders is one run: escapes resolved, braces and
+brackets included. If the lexer emitted it as several tokens instead, the
+underline would cover only part of it and the segment check would not see
+`..` as an interior piece of a single run.
+
+--- template
+{{opera.title}}/\[a\]/../{{composer.lastName}}
+--- error
+error[template_bad_path_segment]: `..` is not a usable path segment
+{{opera.title}}/\[a\]/../{{composer.lastName}}
+               ^^^^^^^^^^
+help: A rendered result may not name a parent or the current directory. Remove the segment.

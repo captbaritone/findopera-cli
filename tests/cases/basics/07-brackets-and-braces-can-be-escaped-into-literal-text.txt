@@ -1,0 +1,6 @@
+--- template
+\[{{opera.title}}\] \{not a placeholder\}
+--- data
+opera.title = Salome
+--- expect
+[Salome] {not a placeholder}

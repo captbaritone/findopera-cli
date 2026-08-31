@@ -1,0 +1,6 @@
+--- template
+{{opera.title}}[ ({{year}})]
+--- data
+opera.title = Salome
+--- expect
+Salome

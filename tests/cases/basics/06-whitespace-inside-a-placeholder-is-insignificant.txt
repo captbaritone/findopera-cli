@@ -1,0 +1,6 @@
+--- template
+{{  composer . lastName  }}
+--- data
+composer.lastName = Strauss
+--- expect
+Strauss

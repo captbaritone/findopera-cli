@@ -1,0 +1,7 @@
+--- template
+{{opera.englishTitle|"Unknown"|opera.title}}
+--- error
+error[template_unreachable_alternative]: this alternative is unreachable — a quoted literal always resolves
+{{opera.englishTitle|"Unknown"|opera.title}}
+                               ^^^^^^^^^^^
+help: Remove it, or put it before the alternative that always resolves.

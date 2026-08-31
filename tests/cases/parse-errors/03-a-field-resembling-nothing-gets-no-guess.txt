@@ -1,0 +1,7 @@
+--- template
+{{nosuchthingatall}}
+--- error
+error[template_unknown_field]: unknown field `nosuchthingatall`
+{{nosuchthingatall}}
+  ^^^^^^^^^^^^^^^^
+help: No field by that name.

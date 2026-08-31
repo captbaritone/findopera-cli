@@ -1,0 +1,11 @@
+A literal `.` segment is caught at parse time, but one that only appears
+because a group dropped cannot be — which is why the check survives in
+`to_path` as well.
+
+--- template
+{{composer.lastName}}/[{{year}}]./{{opera.title}}
+--- data
+composer.lastName = Strauss
+opera.title = Salome
+--- error
+error[path_traversal]: rendered "Strauss/./Salome", which contains a `.` or `..` segment

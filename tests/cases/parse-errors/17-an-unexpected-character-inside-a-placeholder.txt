@@ -1,0 +1,6 @@
+--- template
+{{year!}}
+--- error
+error[template_syntax_error]: unexpected `!` inside a placeholder
+{{year!}}
+      ^

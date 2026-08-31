@@ -1,0 +1,10 @@
+--- template
+{{composer.lastName}}/../{{opera.title}}
+--- data
+composer.lastName = Strauss
+opera.title = Salome
+--- error
+error[template_bad_path_segment]: `..` is not a usable path segment
+{{composer.lastName}}/../{{opera.title}}
+                     ^^^^
+help: A rendered result may not name a parent or the current directory. Remove the segment.

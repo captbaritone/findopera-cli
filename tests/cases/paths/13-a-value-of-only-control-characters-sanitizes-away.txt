@@ -1,0 +1,10 @@
+Sanitizing turns control characters into spaces and then trims, so a value
+that is present, non-empty and schema-honest can still leave its segment
+with nothing in it.
+
+--- template
+{{opera.title}}
+--- data
+opera.title = "\u{7}\u{7}"
+--- error
+error[path_empty]: rendered "", which has no path segments

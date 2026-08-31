@@ -1,0 +1,10 @@
+A literal fallback reads as prudent, but `opera.title` is present for every
+record, so the literal is dead text.
+
+--- template
+{{opera.englishTitle|opera.title|"Untitled"}}
+--- error
+error[template_unreachable_alternative]: this alternative is unreachable — `opera.title` is never absent
+{{opera.englishTitle|opera.title|"Untitled"}}
+                                 ^^^^^^^^^^
+help: Remove it, or put it before the alternative that always resolves.

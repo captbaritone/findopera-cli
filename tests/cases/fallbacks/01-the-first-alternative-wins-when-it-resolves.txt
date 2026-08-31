@@ -1,0 +1,7 @@
+--- template
+{{opera.englishTitle|opera.title}}
+--- data
+opera.englishTitle = The Rake's Progress
+opera.title = The Rake's Progress
+--- expect
+The Rake's Progress

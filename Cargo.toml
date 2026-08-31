@@ -2,13 +2,13 @@
 name = "findopera"
 version = "0.1.0"
 edition = "2021"
-description = "Render FindOpera recording metadata through a template"
+description = "A small template language for rendering record metadata into path-safe names"
+
+[lib]
+name = "findopera"
+path = "src/lib.rs"
 
 [dependencies]
-clap = { version = "4", features = ["derive", "wrap_help"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-ureq = { version = "2", features = ["json", "tls"] }
 
 [profile.release]
 strip = true

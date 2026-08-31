@@ -1,0 +1,4 @@
+--- template
+{{opera.englishTitle|"the \"lost\" opera"}}
+--- expect
+the "lost" opera

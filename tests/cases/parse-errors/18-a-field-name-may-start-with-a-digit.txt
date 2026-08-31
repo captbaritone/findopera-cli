@@ -1,0 +1,12 @@
+Nothing stops a template from naming a field that could not exist, so it has
+to fail as an unknown field rather than as a lexing accident — the message a
+person reading `{{2ndSinger}}` needs is that the field is wrong, not that the
+`2` surprised the tokenizer.
+
+--- template
+{{2ndSinger}}
+--- error
+error[template_unknown_field]: unknown field `2ndSinger`
+{{2ndSinger}}
+  ^^^^^^^^^
+help: Did you mean `singer1`?

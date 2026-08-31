@@ -1,0 +1,6 @@
+--- template
+{{opera.title}}
+--- data
+opera.title = "  Aida\u{7}  "
+--- expect
+Aida

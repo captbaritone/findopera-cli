@@ -1,0 +1,9 @@
+--- template
+/{{composer.lastName}}
+--- data
+composer.lastName = Strauss
+--- error
+error[template_absolute_path]: template renders an absolute path
+/{{composer.lastName}}
+^
+help: Drop the leading `/`; a rendered result is always relative.

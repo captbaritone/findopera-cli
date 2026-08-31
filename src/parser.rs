@@ -12,25 +12,24 @@
 //! Field paths are checked against the known field set here, at parse time, so
 //! a mistyped field fails before any network request is made.
 
-use super::lexer::{lex, Span, Tok, Token};
-use crate::model::Recording;
+use crate::lexer::{lex, Span, Tok, Token};
+use crate::FieldDoc;
 
 #[derive(Debug, Clone)]
 pub enum Alt {
-    /// A field path, already validated against [`Recording::is_known`].
-    /// The span is kept for diagnostics that point inside a placeholder.
-    Field {
-        path: String,
-        #[allow(dead_code)]
-        span: Span,
-    },
+    /// A field path, already validated against the schema, with the
+    /// nullability the schema declared for it.
+    Field { path: String, nullable: bool },
     /// A quoted literal, which always resolves.
     Literal(String),
 }
 
 #[derive(Debug, Clone)]
 pub enum Node {
-    Text(String),
+    Text {
+        text: String,
+        span: Span,
+    },
     Placeholder {
         alts: Vec<Alt>,
         #[allow(dead_code)]
@@ -70,7 +69,7 @@ impl ParseError {
     }
 }
 
-pub fn parse(input: &str) -> Result<Vec<Node>, ParseError> {
+pub fn parse(input: &str, schema: &[FieldDoc]) -> Result<Vec<Node>, ParseError> {
     let tokens = lex(input).map_err(|e| ParseError {
         message: e.message,
         span: e.span,
@@ -79,16 +78,20 @@ pub fn parse(input: &str) -> Result<Vec<Node>, ParseError> {
     })?;
     let mut p = Parser {
         src: input,
+        schema,
         tokens,
         pos: 0,
     };
     let items = p.parse_items(None)?;
     p.expect_eof()?;
+    check_leading_separator(&items)?;
+    check_literal_segments(&items, true)?;
     Ok(items)
 }
 
 struct Parser<'a> {
     src: &'a str,
+    schema: &'a [FieldDoc],
     tokens: Vec<Token>,
     pos: usize,
 }
@@ -149,12 +152,15 @@ impl Parser<'_> {
                 }
                 Tok::Text(_) => {
                     let t = self.bump();
-                    if let Tok::Text(s) = t.tok {
-                        items.push(Node::Text(s));
+                    if let Tok::Text(text) = t.tok {
+                        items.push(Node::Text { text, span: t.span });
                     }
                 }
                 Tok::OpenGroup => items.push(self.parse_group()?),
-                Tok::OpenExpr => items.push(self.parse_placeholder()?),
+                Tok::OpenExpr => {
+                    let node = self.parse_placeholder(open_group.is_some())?;
+                    items.push(node);
+                }
                 other => {
                     let d = other.describe();
                     let span = self.peek().span;
@@ -185,12 +191,22 @@ impl Parser<'_> {
         };
         let span = open.to(close);
 
-        // A group with no placeholder can never be omitted, so it is always a
-        // mistake — most often a literal bracket that wanted escaping.
-        if !contains_placeholder(&items) {
+        // A group is dropped when a placeholder *at its own level* resolves to
+        // nothing: one inside a nested group drops that group instead. So the
+        // question is not whether a placeholder appears somewhere below, but
+        // whether one of this group's own can fail. If none can, the brackets
+        // do nothing, which is always a mistake.
+        let mut direct = items
+            .iter()
+            .filter_map(|n| match n {
+                Node::Placeholder { alts, .. } => Some(alts),
+                _ => None,
+            })
+            .peekable();
+        if direct.peek().is_none() {
             return Err(ParseError::new(
                 "template_empty_group",
-                "this group contains no placeholder, so it would always render",
+                "this group contains no placeholder of its own, so it would always render",
                 span,
             )
             .help(
@@ -198,22 +214,52 @@ impl Parser<'_> {
                  nothing. For a literal bracket, write `\\[` and `\\]`.",
             ));
         }
+        if !direct.any(|alts| can_fail(alts)) {
+            return Err(ParseError::new(
+                "template_dead_group",
+                "every placeholder in this group always resolves, so it would always render",
+                span,
+            )
+            .help(
+                "A group `[…]` exists to be dropped. Drop the brackets, or use a \
+                 field that can be absent.",
+            ));
+        }
         Ok(Node::Group { items, span })
     }
 
-    fn parse_placeholder(&mut self) -> Result<Node, ParseError> {
+    fn parse_placeholder(&mut self, in_group: bool) -> Result<Node, ParseError> {
         let open = self.bump().span; // `{{`
         let mut alts = Vec::new();
+        let mut spans = Vec::new();
 
         let mut is_first = true;
         loop {
-            alts.push(self.parse_alt(open, is_first)?);
+            let (alt, span) = self.parse_alt(open, is_first)?;
+            alts.push(alt);
+            spans.push(span);
             is_first = false;
             match &self.peek().tok {
                 Tok::Pipe => {
                     self.bump();
                 }
                 _ => break,
+            }
+        }
+
+        // Anything after an alternative that always resolves is dead code.
+        if let Some(i) = alts.iter().position(always_resolves) {
+            if let Some(dead) = spans.get(i + 1) {
+                let sure = match &alts[i] {
+                    Alt::Literal(_) => "a quoted literal always resolves".to_string(),
+                    Alt::Field { path, .. } => format!("`{path}` is never absent"),
+                };
+                return Err(ParseError::new(
+                    "template_unreachable_alternative",
+                    format!("this alternative is unreachable — {sure}"),
+                    *dead,
+                )
+                .help("Remove it, or put it before the alternative that always resolves."));
             }
         }
 
@@ -231,19 +277,34 @@ impl Parser<'_> {
         };
 
         let span = open.to(close);
-        Ok(Node::Placeholder {
-            alts,
-            span,
-            source: self.src[span.start..span.end].to_string(),
-        })
+        let source = self.src[span.start..span.end].to_string();
+
+        // Outside a group there is nowhere for an absent value to go, so a
+        // placeholder that might resolve to nothing is rejected here rather
+        // than on whichever record first happens to lack it.
+        if !in_group && can_fail(&alts) {
+            return Err(ParseError::new(
+                "template_unresolvable",
+                format!("{source} can resolve to nothing, and is not inside a group"),
+                span,
+            )
+            .help(format!(
+                "Add a fallback like {{{{…|\"Unknown\"}}}}, or wrap it in a group so it \
+                 can be dropped: [{source}]"
+            )));
+        }
+        Ok(Node::Placeholder { alts, span, source })
     }
 
     /// `is_first` distinguishes `{{}}` from a dangling `{{year|}}`.
-    fn parse_alt(&mut self, open: Span, is_first: bool) -> Result<Alt, ParseError> {
+    ///
+    /// Returns the alternative with its own span, so a diagnostic can point at
+    /// one alternative inside a placeholder rather than the whole thing.
+    fn parse_alt(&mut self, open: Span, is_first: bool) -> Result<(Alt, Span), ParseError> {
         match self.peek().tok.clone() {
             Tok::Str(s) => {
-                self.bump();
-                Ok(Alt::Literal(s))
+                let span = self.bump().span;
+                Ok((Alt::Literal(s), span))
             }
             Tok::Ident(head) => {
                 let start = self.bump().span;
@@ -269,15 +330,21 @@ impl Parser<'_> {
                     }
                 }
                 let span = start.to(end);
-                if !Recording::is_known(&path) {
+                let Some(doc) = self.schema.iter().find(|f| f.path == path) else {
                     return Err(ParseError::new(
                         "template_unknown_field",
                         format!("unknown field `{path}`"),
                         span,
                     )
-                    .help(suggest_field(&path)));
-                }
-                Ok(Alt::Field { path, span })
+                    .help(suggest_field(&path, self.schema)));
+                };
+                Ok((
+                    Alt::Field {
+                        path,
+                        nullable: doc.nullable,
+                    },
+                    span,
+                ))
             }
             // Distinguish `{{}}` from `{{year|}}`: the second is a dangling
             // fallback, not an empty placeholder.
@@ -304,12 +371,86 @@ impl Parser<'_> {
     }
 }
 
-fn contains_placeholder(items: &[Node]) -> bool {
-    items.iter().any(|n| match n {
-        Node::Placeholder { .. } => true,
-        Node::Group { items, .. } => contains_placeholder(items),
-        Node::Text(_) => false,
-    })
+/// Does this alternative resolve for every record?
+fn always_resolves(alt: &Alt) -> bool {
+    match alt {
+        Alt::Literal(_) => true,
+        Alt::Field { nullable, .. } => !nullable,
+    }
+}
+
+/// Can this placeholder resolve to nothing for some record?
+///
+/// This is the invariant `render` leans on: `parse` rejects a placeholder for
+/// which this holds unless it sits in a group, so rendering can treat every
+/// other placeholder as certain to produce a value.
+fn can_fail(alts: &[Alt]) -> bool {
+    !alts.iter().any(always_resolves)
+}
+
+/// A `/` at the very start of the template makes every render absolute.
+///
+/// Only a leading run of literal text can be known to do this: when a group
+/// or placeholder comes first, whether a separator ends up leading depends on
+/// what resolves, and that is left to the renderer.
+fn check_leading_separator(items: &[Node]) -> Result<(), ParseError> {
+    if let Some(Node::Text { text, span }) = items.first() {
+        if text.starts_with('/') {
+            return Err(ParseError::new(
+                "template_absolute_path",
+                "template renders an absolute path",
+                Span::new(span.start, span.start + 1),
+            )
+            .help("Drop the leading `/`; a rendered result is always relative."));
+        }
+    }
+    Ok(())
+}
+
+/// Reject a `.` or `..` written as a whole path segment.
+///
+/// A value can never produce one — [`sanitize_value`] turns a dots-only value
+/// into underscores and a `/` into `-` — so a traversal segment can only come
+/// from the template's own text, which makes this entirely a parse-time
+/// question.
+///
+/// A piece of text counts as a whole segment when a `/` bounds it on both
+/// sides. Inside a text run that is any interior piece; at the very start or
+/// end of the template the outer edge serves as the other bound. A piece that
+/// abuts a placeholder or a group is not checked, because whatever that
+/// contributes joins the same segment.
+///
+/// [`sanitize_value`]: crate::render
+fn check_literal_segments(items: &[Node], top: bool) -> Result<(), ParseError> {
+    for (i, node) in items.iter().enumerate() {
+        match node {
+            Node::Text { text, span } => {
+                let pieces: Vec<&str> = text.split('/').collect();
+                for (j, piece) in pieces.iter().enumerate() {
+                    let bounded_left = j > 0 || (top && i == 0);
+                    let bounded_right = j + 1 < pieces.len() || (top && i + 1 == items.len());
+                    if !bounded_left || !bounded_right {
+                        continue;
+                    }
+                    let seg = piece.trim();
+                    if seg == "." || seg == ".." {
+                        return Err(ParseError::new(
+                            "template_bad_path_segment",
+                            format!("`{seg}` is not a usable path segment"),
+                            *span,
+                        )
+                        .help(
+                            "A rendered result may not name a parent or the current \
+                             directory. Remove the segment.",
+                        ));
+                    }
+                }
+            }
+            Node::Group { items, .. } => check_literal_segments(items, false)?,
+            Node::Placeholder { .. } => {}
+        }
+    }
+    Ok(())
 }
 
 /// Point at the right field.
@@ -317,9 +458,9 @@ fn contains_placeholder(items: &[Node]) -> bool {
 /// When the namespace is real (`composer.` in `composer.surname`), listing its
 /// actual fields beats guessing: edit distance has no idea that "surname"
 /// means "lastName", and would offer `composer.fullName` instead.
-fn suggest_field(path: &str) -> String {
+fn suggest_field(path: &str, schema: &[FieldDoc]) -> String {
     if let Some((prefix, _)) = path.rsplit_once('.') {
-        let siblings: Vec<&str> = Recording::FIELDS
+        let siblings: Vec<&str> = schema
             .iter()
             .map(|f| f.path)
             .filter(|p| p.strip_prefix(prefix).is_some_and(|r| r.starts_with('.')))
@@ -330,14 +471,11 @@ fn suggest_field(path: &str) -> String {
                 .iter()
                 .filter_map(|p| p.strip_prefix(prefix)?.strip_prefix('.'))
                 .collect();
-            return format!(
-                "Fields on `{prefix}`: {}. Run `findopera fields` for the full list.",
-                leaves.join(", ")
-            );
+            return format!("Fields on `{prefix}`: {}.", leaves.join(", "));
         }
     }
     let mut best: Option<(usize, &str)> = None;
-    for f in Recording::FIELDS {
+    for f in schema {
         let d = edit_distance(path, f.path);
         if best.is_none_or(|(bd, _)| d < bd) {
             best = Some((d, f.path));
@@ -345,10 +483,8 @@ fn suggest_field(path: &str) -> String {
     }
     match best {
         // Only suggest when it is plausibly the same word mistyped.
-        Some((d, name)) if d <= path.len() / 2 + 1 => {
-            format!("Did you mean `{name}`? Run `findopera fields` for the full list.")
-        }
-        _ => "Run `findopera fields` for the full list.".to_string(),
+        Some((d, name)) if d <= path.len() / 2 + 1 => format!("Did you mean `{name}`?"),
+        _ => "No field by that name.".to_string(),
     }
 }
 
@@ -367,92 +503,4 @@ fn edit_distance(a: &str, b: &str) -> usize {
         std::mem::swap(&mut prev, &mut cur);
     }
     prev[b.len()]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn err(s: &str) -> ParseError {
-        parse(s).expect_err("should not parse")
-    }
-
-    #[test]
-    fn parses_text_placeholders_and_groups() {
-        let nodes = parse("a{{opera.title}}[ - {{year}}]").expect("parses");
-        assert_eq!(nodes.len(), 3);
-        assert!(matches!(nodes[0], Node::Text(_)));
-        assert!(matches!(nodes[1], Node::Placeholder { .. }));
-        assert!(matches!(nodes[2], Node::Group { .. }));
-    }
-
-    #[test]
-    fn parses_nested_groups() {
-        let nodes = parse("[{{year}}[ - {{conductor.lastName}}]]").expect("parses");
-        let Node::Group { items, .. } = &nodes[0] else {
-            panic!("expected a group")
-        };
-        assert!(items.iter().any(|n| matches!(n, Node::Group { .. })));
-    }
-
-    #[test]
-    fn parses_fallback_chains() {
-        let nodes = parse("{{opera.englishTitle|opera.title|\"Untitled\"}}").expect("parses");
-        let Node::Placeholder { alts, .. } = &nodes[0] else {
-            panic!("expected a placeholder")
-        };
-        assert_eq!(alts.len(), 3);
-        assert!(matches!(alts[2], Alt::Literal(_)));
-    }
-
-    #[test]
-    fn rejects_unknown_fields_with_a_suggestion() {
-        let e = err("{{composer.surname}}");
-        assert_eq!(e.code, "template_unknown_field");
-        let help = e.help.unwrap();
-        assert!(help.contains("lastName"), "got: {help}");
-        assert!(help.contains("born"), "should list the namespace");
-        assert!(help.contains("findopera fields"));
-    }
-
-    #[test]
-    fn rejects_unbalanced_brackets() {
-        assert!(err("[{{year}}").message.contains("unclosed `[`"));
-        assert!(err("{{year}}]").message.contains("unmatched `]`"));
-    }
-
-    #[test]
-    fn rejects_a_group_that_could_never_be_omitted() {
-        let e = err("[ - ]");
-        assert_eq!(e.code, "template_empty_group");
-        assert!(e.help.unwrap().contains("\\["));
-    }
-
-    #[test]
-    fn a_nested_placeholder_satisfies_the_group_check() {
-        assert!(parse("[ - [{{year}}]]").is_ok());
-    }
-
-    #[test]
-    fn rejects_malformed_placeholders() {
-        assert!(err("{{}}").message.contains("empty placeholder"));
-        assert!(err("{{opera.}}").message.contains("after `.`"));
-        assert!(err("{{year|}}").message.contains("after `|`"));
-        assert!(err("{{nosuchthing}}").message.contains("unknown field"));
-    }
-
-    #[test]
-    fn spans_point_at_the_offending_text() {
-        let e = err("{{composer.surname}}");
-        assert_eq!(
-            &"{{composer.surname}}"[e.span.start..e.span.end],
-            "composer.surname"
-        );
-    }
-
-    #[test]
-    fn escaped_brackets_are_text_not_groups() {
-        let nodes = parse(r"\[{{year}}\]").expect("parses");
-        assert!(!nodes.iter().any(|n| matches!(n, Node::Group { .. })));
-    }
 }

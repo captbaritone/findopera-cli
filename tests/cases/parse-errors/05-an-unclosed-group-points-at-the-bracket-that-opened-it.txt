@@ -1,0 +1,7 @@
+--- template
+{{composer.lastName}}[/{{year}}
+--- error
+error[template_syntax_error]: unclosed `[` — every group needs a matching `]`
+{{composer.lastName}}[/{{year}}
+                     ^
+help: Write `\[` for a literal bracket.

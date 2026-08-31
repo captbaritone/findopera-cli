@@ -1,0 +1,6 @@
+--- template
+{{opera.title}}
+--- data
+opera.title = Les Troyens à Carthage
+--- expect
+Les Troyens à Carthage

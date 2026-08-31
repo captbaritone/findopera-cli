@@ -1,0 +1,11 @@
+Spans are byte offsets and underlines are counted in characters, so a caret
+run under a text node has to survive multi-byte content ahead of and inside
+it.
+
+--- template
+{{opera.title}}/é/../{{composer.lastName}}
+--- error
+error[template_bad_path_segment]: `..` is not a usable path segment
+{{opera.title}}/é/../{{composer.lastName}}
+               ^^^^^^
+help: A rendered result may not name a parent or the current directory. Remove the segment.

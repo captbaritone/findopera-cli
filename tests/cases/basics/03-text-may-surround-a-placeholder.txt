@@ -1,0 +1,6 @@
+--- template
+Opera - {{opera.title}} (remastered)
+--- data
+opera.title = Salome
+--- expect
+Opera - Salome (remastered)

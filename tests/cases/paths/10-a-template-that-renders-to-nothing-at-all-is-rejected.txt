@@ -1,0 +1,4 @@
+--- template
+[{{year}}]
+--- error
+error[path_empty]: rendered "", which has no path segments

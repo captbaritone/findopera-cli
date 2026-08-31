@@ -1,0 +1,7 @@
+--- template
+{{opera.subtitle|"Untitled"}}
+--- error
+error[template_unknown_field]: unknown field `opera.subtitle`
+{{opera.subtitle|"Untitled"}}
+  ^^^^^^^^^^^^^^
+help: Fields on `opera`: title, englishTitle, librettist, language.

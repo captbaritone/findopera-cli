@@ -1,0 +1,7 @@
+--- template
+{{composer.lastName}}/{{opera.title}}[/{{year}}]
+--- data
+composer.lastName = Britten
+opera.title = Billy Budd
+--- expect
+Britten/Billy Budd

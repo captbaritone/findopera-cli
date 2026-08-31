@@ -1,0 +1,11 @@
+A group is dropped when a placeholder at its own level resolves to nothing.
+One inside a nested group drops that group instead, so it cannot keep the
+outer one alive — the outer brackets here would always render.
+
+--- template
+[ - [{{year}}]]
+--- error
+error[template_empty_group]: this group contains no placeholder of its own, so it would always render
+[ - [{{year}}]]
+^^^^^^^^^^^^^^^
+help: A group `[…]` is dropped when a placeholder inside it resolves to nothing. For a literal bracket, write `\[` and `\]`.

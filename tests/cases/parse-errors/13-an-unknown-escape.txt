@@ -1,0 +1,6 @@
+--- template
+{{opera.title}}\q
+--- error
+error[template_syntax_error]: unknown escape `\q` — only \[ \] \{ \} \\ are escapes
+{{opera.title}}\q
+               ^^
