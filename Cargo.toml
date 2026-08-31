@@ -1,0 +1,15 @@
+[package]
+name = "findopera"
+version = "0.1.0"
+edition = "2021"
+description = "Organize opera recordings into a canonical directory tree using the FindOpera database"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "wrap_help"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "2", features = ["json", "tls"] }
+walkdir = "2"
+
+[profile.release]
+strip = true
