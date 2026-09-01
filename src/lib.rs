@@ -11,7 +11,11 @@
 //! through: a schema of [`FieldDoc`]s saying which paths exist and which are
 //! always present, and a [`Fields`] resolver supplying values. Everything
 //! public is re-exported here, so a caller never names the module.
+//!
+//! [`model`] supplies both for FindOpera recordings, generated from the
+//! GraphQL schema by `codegen/generate.mjs`.
 
+pub mod model;
 mod template;
 
 pub use template::{to_path, FieldDoc, Fields, PathError, Span, Template, TemplateError};

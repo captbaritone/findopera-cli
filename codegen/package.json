@@ -1,0 +1,13 @@
+{
+  "name": "findopera-codegen",
+  "private": true,
+  "type": "module",
+  "description": "Derives the Rust recording model from the GraphQL schema and query",
+  "scripts": {
+    "generate": "node generate.mjs && cargo fmt",
+    "fetch-schema": "curl -sS https://findopera.com/schema.graphql -o ../schema/schema.graphql"
+  },
+  "dependencies": {
+    "graphql": "^16.9.0"
+  }
+}

@@ -1,0 +1,47 @@
+# The query the CLI issues at runtime, and the source of truth for which
+# fields the generated model carries. Every scalar selected here becomes a
+# template field; see fields.toml for the paths a query cannot express.
+
+query Recordings($ids: [String!]!) {
+  getRecordingByIds(ids: $ids) {
+    id
+    url
+    year
+    month
+    day
+    orchestra
+    chorus
+    conductor {
+      fullName
+      firstName
+      lastName
+      born
+      died
+    }
+    notedSingers {
+      fullName
+      firstName
+      lastName
+    }
+    opera {
+      title
+      englishTitle
+      librettist
+      url
+      language {
+        name
+        abbreviation
+      }
+      composer {
+        fullName
+        firstName
+        lastName
+        born
+        died
+      }
+    }
+    upcs {
+      upc
+    }
+  }
+}

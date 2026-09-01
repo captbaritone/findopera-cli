@@ -140,6 +140,7 @@ pub trait Fields {
     fn optional(&self, path: &str) -> Option<String>;
 }
 
+#[derive(Debug)]
 pub struct Template {
     nodes: Vec<parser::Node>,
 }

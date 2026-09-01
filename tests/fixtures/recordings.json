@@ -1,0 +1,119 @@
+[
+  {
+    "year": 2026,
+    "month": 0,
+    "day": 0,
+    "orchestra": "Orchestre de l'Opéra Royal",
+    "chorus": null,
+    "id": 10655,
+    "conductor": {
+      "born": null,
+      "died": null,
+      "fullName": "Marco Angioloni",
+      "firstName": "Marco",
+      "lastName": "Angioloni"
+    },
+    "upcs": [
+      {
+        "upc": "3760385430720"
+      }
+    ],
+    "url": "https://findopera.com/recording/10655/sosarme-re-di-media-2026-angioloni",
+    "opera": {
+      "englishTitle": null,
+      "librettist": "",
+      "language": null,
+      "title": "Sosarme, Re di Media",
+      "url": "https://findopera.com/opera/1254/sosarme-re-di-media",
+      "composer": {
+        "born": 1685,
+        "died": 1759,
+        "fullName": "George Frideric Handel",
+        "firstName": "George Frideric",
+        "lastName": "Handel"
+      }
+    },
+    "notedSingers": [
+      {
+        "fullName": "Rémy Brès-Feuillet",
+        "firstName": "Rémy",
+        "lastName": "Brès-Feuillet"
+      },
+      {
+        "fullName": "Sarah Charles",
+        "firstName": "Sarah",
+        "lastName": "Charles"
+      },
+      {
+        "fullName": "Éléonore Pancrazi",
+        "firstName": "Éléonore",
+        "lastName": "Pancrazi"
+      }
+    ]
+  },
+  {
+    "year": 1967,
+    "month": null,
+    "day": null,
+    "orchestra": "London Symphony",
+    "chorus": "Ambrosian Opera Chorus",
+    "id": 75,
+    "conductor": {
+      "born": null,
+      "died": null,
+      "fullName": "Benjamin Britten",
+      "firstName": "Benjamin",
+      "lastName": "Britten"
+    },
+    "upcs": [
+      {
+        "upc": "00028941742827"
+      },
+      {
+        "upc": "028941742827"
+      },
+      {
+        "upc": "028947560203"
+      },
+      {
+        "upc": "028947853640"
+      }
+    ],
+    "url": "https://findopera.com/recording/75/billy-budd-1967-britten",
+    "opera": {
+      "englishTitle": null,
+      "librettist": "",
+      "title": "Billy Budd",
+      "url": "https://findopera.com/opera/93/billy-budd",
+      "language": {
+        "name": "English",
+        "abbreviation": "en"
+      },
+      "composer": {
+        "born": 1913,
+        "died": 1976,
+        "fullName": "Benjamin Britten",
+        "firstName": "Benjamin",
+        "lastName": "Britten"
+      }
+    },
+    "notedSingers": [
+      {
+        "fullName": "Peter Pears",
+        "firstName": "Peter",
+        "lastName": "Pears"
+      },
+      {
+        "fullName": "John Shirley-Quirk",
+        "firstName": "John",
+        "lastName": "Shirley-Quirk"
+      },
+      {
+        "fullName": "Robert Tear",
+        "firstName": "Robert",
+        "lastName": "Tear"
+      }
+    ]
+  },
+  null
+]

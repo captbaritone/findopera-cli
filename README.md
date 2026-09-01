@@ -165,6 +165,44 @@ through `Template::parse` and `render`, so the fixtures are the only
 specification — checked by mutating the lexer and confirming the suite
 notices.
 
+## The FindOpera model
+
+`src/model/` supplies both halves of the seam for real recordings, and almost
+all of it is generated from the GraphQL schema plus the query the CLI sends at
+runtime:
+
+```bash
+cd codegen
+npm install
+npm run fetch-schema   # refresh the vendored schema
+npm run generate       # rewrite src/model/generated.rs
+```
+
+Nullability is why this is generated rather than written. Every check above
+depends on knowing which fields are always present, and deriving that from the
+schema means it cannot be wrong — where asserting it by hand can be, in the
+direction that turns a parse-time error back into a per-record failure.
+
+FindOpera's schema declares nothing with `!`, so that knowledge comes from
+`@semanticNonNull`, which marks a position as only ever null when the response
+carries a matching error. It matches what the database holds: `opera.title`,
+`composer.lastName` and `conductor.lastName` are annotated and measured 100%
+populated, while `opera.englishTitle` is annotated on neither count and sits at
+19.7%.
+
+The output is checked in, so drift arrives as a reviewable diff. A field losing
+its annotation upstream shows up as `FieldDoc::non_null` becoming
+`FieldDoc::new` and `String` becoming `Option<String>` — which is exactly the
+change that makes every bare `{{that.field}}` stop parsing. See
+`codegen/README.md`.
+
+```
+schema/       schema.graphql, the query, and fields.mjs
+src/template/ the language: lexer, parser, renderer, and the seam
+src/model/    the recording model, mostly generated
+codegen/      derives the model from the schema and the query
+```
+
 ## History
 
 This was a CLI that fetched recordings from [FindOpera](https://findopera.com/)
