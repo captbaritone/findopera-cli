@@ -35,36 +35,28 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Render every recording found under a directory.
+    /// Work out what each folder should be called, and optionally build it.
     #[command(
         long_about = "\
-Walk directories for FindOpera marker files and render each recording they
-name, printing the directory beside the result.
+Walk a library for marker files, work out what each recording's folder should
+be called, and — with --write — build a tree of those names at the destination
+in the settings file.
 
-A marker is any .txt file whose text contains a findopera.com/recording/<id>
-URL — exactly what https://findopera.com/recording/<id>.txt serves. What it
-identifies is the folder holding it, so the workflow is to save the .txt into
-each recording's directory.",
+Nothing is written without --write. Nothing is ever deleted or overwritten.
+
+With no destination set the naming is still worked out and shown, which is
+what you want while you are still settling on a template.",
         after_help = "\
 Examples:
-  findopera scan '{{composer.lastName}}/{{opera.title}}' ~/Music
-  findopera scan '{{opera.title}}[ ({{year}})]' . --null | xargs -0 …"
+  findopera organize ~/Music
+  findopera organize ~/Music --write
+  findopera organize ~/Music -t '{{opera.title}}[ ({{year}})]'
+  findopera organize ~/Music --config ~/Music/by-conductor.toml"
     )]
-    Scan(ScanArgs),
+    Organize(OrganizeArgs),
 
-    /// List every field a template may use.
+    /// List every field a template may use, and the syntax.
     Fields,
-
-    /// Build the named tree from the settings file.
-    #[command(long_about = "\
-Build the tree of names `scan` describes, at the destination in the settings
-file, by the means it names — a symlink to each folder, a hard link to every
-file in it, or a copy.
-
-Nothing is ever deleted or overwritten. Anything already in place is left as
-it is, so running this again after adding one recording does one thing, and
-meeting something unexpected stops it rather than deciding for you.")]
-    Apply(ApplyArgs),
 
     /// Write a starter findopera.toml, explaining every setting.
     #[command(long_about = "\
@@ -76,36 +68,11 @@ It refuses to overwrite one that is already there.")]
 }
 
 #[derive(Args)]
-struct ApplyArgs {
+struct OrganizeArgs {
     /// Directory to walk.
     #[arg(value_name = "DIR", default_value = ".")]
     root: PathBuf,
     /// Settings file. Defaults to findopera.toml beside DIR.
-    #[arg(long, value_name = "FILE")]
-    config: Option<PathBuf>,
-    /// Actually build it.
-    ///
-    /// Without this, nothing is written: the command says what it would do and
-    /// stops. The destination lives in the settings file rather than on the
-    /// command line, so this is the only thing that says out loud that a run
-    /// is going to touch the disk.
-    #[arg(long)]
-    write: bool,
-}
-
-#[derive(Args)]
-struct InitArgs {
-    /// Directory to write findopera.toml into.
-    #[arg(value_name = "DIR", default_value = ".")]
-    dir: PathBuf,
-}
-
-#[derive(Args)]
-struct ScanArgs {
-    /// Directory to walk.
-    #[arg(value_name = "DIR", default_value = ".")]
-    root: PathBuf,
-    /// Settings file. Defaults to findopera.toml beside the first DIR.
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
     /// Template, overriding the one in the settings file.
@@ -115,14 +82,28 @@ struct ScanArgs {
     /// turns out to be absent.
     #[arg(long, short = 't', value_name = "TEMPLATE")]
     template: Option<String>,
+    /// Actually build it.
+    ///
+    /// Without this, nothing is written: the command says what it would do and
+    /// stops. The destination lives in the settings file rather than on the
+    /// command line, so this is the only thing that says out loud that a run
+    /// is going to touch the disk.
+    #[arg(long)]
+    write: bool,
+    /// Say so explicitly: make no changes.
+    ///
+    /// This is what happens anyway. It exists so that a run can state its
+    /// intention rather than rely on the absence of a flag, and so that
+    /// saying both things at once is an error rather than a silent winner.
+    #[arg(long, conflicts_with = "write")]
+    dry_run: bool,
     /// Follow symlinks while walking.
     #[arg(long)]
     follow_links: bool,
-    /// Separate the directory from the result with a tab instead of padding,
-    /// for feeding another program.
+    /// Separate the columns with a tab instead of padding, for piping.
     #[arg(long)]
     tabs: bool,
-    /// Fail if any directory had to be numbered.
+    /// Fail if any folder had to be numbered.
     ///
     /// Two rips of one recording get a number each unless a marker says which
     /// is which, and a number taken from walk order shifts as the library
@@ -132,6 +113,13 @@ struct ScanArgs {
     /// GraphQL endpoint.
     #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
     endpoint: String,
+}
+
+#[derive(Args)]
+struct InitArgs {
+    /// Directory to write findopera.toml into.
+    #[arg(value_name = "DIR", default_value = ".")]
+    dir: PathBuf,
 }
 
 fn main() {
@@ -149,63 +137,58 @@ fn emit(out: &mut impl Write, line: std::fmt::Arguments) -> bool {
 
 fn run() -> i32 {
     match Cli::parse().command {
-        Command::Scan(args) => cmd_scan(args),
+        Command::Organize(args) => cmd_organize(args),
         Command::Fields => cmd_fields(),
-        Command::Apply(args) => cmd_apply(args),
         Command::Init(args) => cmd_init(args),
     }
 }
 
-fn cmd_apply(args: ApplyArgs) -> i32 {
+fn cmd_organize(args: OrganizeArgs) -> i32 {
     let p = match prepare(
         &args.root,
         args.config.as_ref(),
-        None,
-        false,
-        false,
-        api::DEFAULT_ENDPOINT,
+        args.template.as_ref(),
+        args.follow_links,
+        args.require_variants,
+        &args.endpoint,
     ) {
         Ok(p) => p,
         Err(code) => return code,
     };
-    let Some(settings) = p.settings.as_ref() else {
-        eprintln!("findopera: apply needs a settings file, for the destination if nothing else");
-        return 2;
-    };
-    let Some(destination) = settings.destination.as_ref() else {
-        eprintln!(
-            "findopera: no destination set — add one to the settings file:\n\
-             \x20   destination = \"/path/to/named\""
-        );
-        return 2;
-    };
-
     let plan = plan::plan(&p.report.markers, &p.recordings, &p.template);
-    for line in plan.report(p.require_variants) {
-        if line.starts_with(' ') {
-            eprintln!("{line}");
-        } else {
-            eprintln!("findopera: {line}");
-        }
-    }
+    let listing = plan.listing(args.tabs);
 
-    // Everything knowable before writing is settled here, because half a tree
-    // is worse than none.
-    if let Err(why) = apply::preflight(
-        &plan,
-        &args.root,
-        destination,
-        settings.link,
-        p.require_variants,
-    ) {
+    let destination = p.settings.as_ref().and_then(|c| c.destination.clone());
+    let link = p.settings.as_ref().map(|c| c.link).unwrap_or_default();
+    let dry_run = !args.write;
+
+    // Without somewhere to build, the naming is still worth having — it is
+    // what you are looking at while you settle on a template, before there is
+    // any question of a destination.
+    let Some(destination) = destination else {
+        let mut out = std::io::stdout().lock();
+        for line in &listing {
+            if !emit(&mut out, format_args!("{line}")) {
+                return 0;
+            }
+        }
+        report(&plan, p.require_variants);
+        eprintln!(
+            "findopera: no destination set, so this is the naming only. Add one to \
+             build it:\n\x20   destination = \"/path/to/named\""
+        );
+        return i32::from(plan.blocked(p.require_variants));
+    };
+
+    if let Err(why) = apply::preflight(&plan, &args.root, &destination, link, p.require_variants) {
+        report(&plan, p.require_variants);
         eprintln!("findopera: {why}");
         return 2;
     }
 
     // Say where, before doing it. Nothing on the command line names the
     // destination, so this is the only place it is stated.
-    let dry_run = !args.write;
-    let what = match settings.link {
+    let what = match link {
         config::Link::Symlink => "a link to each folder",
         config::Link::Hardlink => "a hard link to every file",
         config::Link::Copy => "a copy of every file",
@@ -217,28 +200,26 @@ fn cmd_apply(args: ApplyArgs) -> i32 {
         destination.display()
     );
 
-    let done = apply::apply(&plan, destination, settings.link, dry_run);
+    let done = apply::apply(&plan, &destination, link, dry_run);
     let mut out = std::io::stdout().lock();
-    for entry in &done.entries {
+    for (line, entry) in listing.iter().zip(&done.entries) {
         let mark = match &entry.outcome {
-            apply::Outcome::Created => "+",
-            apply::Outcome::Skipped => " ",
-            apply::Outcome::Conflict(_) | apply::Outcome::Failed(_) => "!",
+            apply::Outcome::Created => '+',
+            apply::Outcome::Skipped => ' ',
+            apply::Outcome::Conflict(_) | apply::Outcome::Failed(_) => '!',
         };
-        if !emit(
-            &mut out,
-            format_args!("{mark} {}", entry.destination.display()),
-        ) {
+        if !emit(&mut out, format_args!("{mark} {line}")) {
             return 0;
         }
-        match &entry.outcome {
-            apply::Outcome::Conflict(why) | apply::Outcome::Failed(why) => {
-                eprintln!("    {why}");
-                eprintln!("    (for {})", entry.source.display());
-            }
-            _ => {}
+    }
+    for entry in &done.entries {
+        if let apply::Outcome::Conflict(why) | apply::Outcome::Failed(why) = &entry.outcome {
+            eprintln!("findopera: {}", entry.destination.display());
+            eprintln!("    {why}");
         }
     }
+    report(&plan, p.require_variants);
+
     let (made, skipped, trouble) = done.counts();
     eprintln!(
         "findopera: {made} {}, {skipped} already there, {trouble} left alone",
@@ -250,14 +231,30 @@ fn cmd_apply(args: ApplyArgs) -> i32 {
         eprintln!("findopera: nothing was written. To build it, run:");
         eprintln!("    {}", rerun_with_write(&args));
     }
-    i32::from(done.troubled())
+    i32::from(done.troubled() || plan.blocked(p.require_variants))
+}
+
+/// Whatever the plan has to say, on stderr, with its indented lines kept.
+fn report(plan: &plan::Plan, strict: bool) {
+    let lines = plan.report(strict);
+    if lines.is_empty() {
+        return;
+    }
+    eprintln!();
+    for line in lines {
+        if line.starts_with(' ') {
+            eprintln!("{line}");
+        } else {
+            eprintln!("findopera: {line}");
+        }
+    }
 }
 
 /// The same command again, with `--write` on the end.
 ///
 /// Spelled out rather than described, because the arguments that matter may
 /// not be the ones the reader typed most recently.
-fn rerun_with_write(args: &ApplyArgs) -> String {
+fn rerun_with_write(args: &OrganizeArgs) -> String {
     let quote = |p: &Path| {
         let s = p.display().to_string();
         if s.contains(' ') {
@@ -268,7 +265,7 @@ fn rerun_with_write(args: &ApplyArgs) -> String {
     };
     let mut parts = vec![
         "findopera".to_string(),
-        "apply".to_string(),
+        "organize".to_string(),
         quote(&args.root),
     ];
     if let Some(config) = &args.config {
@@ -288,7 +285,7 @@ fn cmd_init(args: InitArgs) -> i32 {
     match std::fs::write(&path, config::starter()) {
         Ok(()) => {
             println!("{}", path.display());
-            eprintln!("findopera: edit the template in there, then run `findopera scan`");
+            eprintln!("findopera: edit the template in there, then run `findopera organize`");
             0
         }
         Err(e) => {
@@ -298,7 +295,7 @@ fn cmd_init(args: InitArgs) -> i32 {
     }
 }
 
-/// Everything `scan` and `apply` both need before they can differ.
+/// Everything needed before the naming can be worked out.
 struct Prepared {
     settings: Option<Config>,
     template: Template,
@@ -390,43 +387,6 @@ fn prepare(
         recordings,
         require_variants,
     })
-}
-
-fn cmd_scan(args: ScanArgs) -> i32 {
-    let p = match prepare(
-        &args.root,
-        args.config.as_ref(),
-        args.template.as_ref(),
-        args.follow_links,
-        args.require_variants,
-        &args.endpoint,
-    ) {
-        Ok(p) => p,
-        Err(code) => return code,
-    };
-    let require_variants = p.require_variants;
-    let plan = plan::plan(&p.report.markers, &p.recordings, &p.template);
-
-    let mut out = std::io::stdout().lock();
-    for line in plan.listing(args.tabs) {
-        if !emit(&mut out, format_args!("{line}")) {
-            return 0;
-        }
-    }
-    let report_lines = plan.report(require_variants);
-    if !report_lines.is_empty() {
-        eprintln!();
-        for line in report_lines {
-            // The continuation lines are indented and belong to the line
-            // above; prefixing each of them would break the shape.
-            if line.starts_with(' ') {
-                eprintln!("{line}");
-            } else {
-                eprintln!("findopera: {line}");
-            }
-        }
-    }
-    i32::from(plan.blocked(require_variants))
 }
 
 fn cmd_fields() -> i32 {

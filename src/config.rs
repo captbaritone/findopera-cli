@@ -24,7 +24,7 @@
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-/// The file `scan` looks for beside what it is scanning.
+/// The file `organize` looks for beside the library it is reading.
 pub const FILE_NAME: &str = "findopera.toml";
 
 /// How a recording's folder gets to the destination.
@@ -50,7 +50,7 @@ pub enum Link {
 pub struct Config {
     /// The name each recording's folder should have.
     pub template: String,
-    /// Where `apply` builds the named tree.
+    /// Where `organize --write` builds the named tree.
     #[serde(default)]
     pub destination: Option<PathBuf>,
     /// How each folder gets there.
@@ -144,7 +144,7 @@ pub fn starter() -> String {
         .join("\n");
     let head = r#"# How this library is named.
 #
-# Run `findopera scan` in this folder to see what each recording's folder
+# Run `findopera organize` in this folder to see what each recording's folder
 # would be called. Nothing is renamed or moved; it only ever prints.
 
 # The name to give each folder.
@@ -154,7 +154,7 @@ pub fn starter() -> String {
 #
 # For every field you can use here, run `findopera fields`. The ones it marks
 # `always` need no fallback; the rest want one, or a [ … ] around them, and
-# `findopera scan` will say so if they have neither.
+# `findopera organize` will say so if they have neither.
 template = '''
 {{composer.lastName}}/{{opera.title}}/[{{year}} ]{{conductor.lastName}} \[{{id}}\][ - {{variant}}]
 '''
@@ -178,8 +178,8 @@ template = '''
 # instead of numbered.
 require-variants = false
 
-# Where `findopera apply` builds the named tree. Until this is set, `apply`
-# has nowhere to write and will say so; `findopera scan` never needs it.
+# Where `findopera organize --write` builds the named tree. Until this is set
+# it has nowhere to build, and shows the naming on its own.
 #
 # destination = "/path/to/named"
 
@@ -192,7 +192,7 @@ require-variants = false
 #   copy       every file copied. Takes the space twice over
 #
 # Nothing is ever deleted or overwritten, and nothing is written at all
-# unless `findopera apply` is given --write.
+# unless `findopera organize` is given --write.
 link = "symlink"
 
 # Follow symlinks while walking. Off by default: a library built out of

@@ -6,7 +6,7 @@ Name a music library from FindOpera metadata, through a template.
 
 ```bash
 findopera init ~/Music     # write a findopera.toml, every setting explained
-findopera scan ~/Music     # see what each folder would be called
+findopera organize ~/Music # see what each folder would be called
 ```
 
 `findopera.toml` sits beside the library and holds the settings that should not
@@ -28,22 +28,22 @@ write is exactly what you would type at the prompt: a plain `'…'` string canno
 hold the apostrophe in `{{opera.title|"L'…"}}`, and a `"…"` string needs every
 `\[` written `\\[`.
 
-Nothing searches up the tree. `scan` reads the file beside what you scanned, or
+Nothing searches up the tree. `organize` reads the file beside what you scanned, or
 the one you name with `--config` — so one library can carry several, one per
 way of naming it, and which one ran is never a guess:
 
 ```bash
-findopera scan ~/Music --config ~/Music/by-conductor.toml
-findopera scan ~/Music -t '{{opera.title}}'      # or just override the template
+findopera organize ~/Music --config ~/Music/by-conductor.toml
+findopera organize ~/Music -t '{{opera.title}}'  # or just override the template
 ```
 
 ## Scanning
 
-`findopera scan` walks a directory for marker files and shows what each folder
-would be called:
+`findopera organize` walks a directory for marker files and shows what each
+folder would be called:
 
 ```bash
-$ findopera scan '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' ~/Music
+$ findopera organize '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' ~/Music
 ./Box Sets/Donizetti box      Donizetti/L'elisir d'amore (1969)
 ./Box Sets/Donizetti box      Respighi/Maria Egiziaca (1980)
 ./Britten/Billy Budd (Decca)  Britten/Billy Budd (1967)
@@ -78,24 +78,24 @@ Results go to stdout, one line per recording; everything else to stderr.
 
 ## Building the tree
 
-`scan` only ever prints. `findopera apply` builds what it describes, at the
-destination in the settings file:
+`organize` only prints unless you say `--write`. With a destination set it
+builds what it describes:
 
 ```toml
 destination = "/Volumes/Opera/named"
 link = "symlink"        # or "hardlink" or "copy"
 ```
 
-**Nothing is written unless you say `--write`.** On its own, `apply` says what
-it would do and stops:
+**Nothing is written unless you say `--write`.** On its own, `organize` says
+what it would do and stops:
 
 ```bash
-$ findopera apply ~/Music
+$ findopera organize ~/Music
 findopera: would build a link to each folder in /Volumes/Opera/named
 + /Volumes/Opera/named/Britten/Billy Budd [75]
 findopera: 1 to build, 0 already there, 0 left alone
 findopera: nothing was written. To build it, run:
-    findopera apply ~/Music --write
+    findopera organize ~/Music --write
 ```
 
 The destination lives in the settings file rather than on the command line, so
@@ -145,13 +145,13 @@ which a template picks up as `{{variant}}`. It is nullable, so it wants a
 group, and that group vanishes for every recording you only have once:
 
 ```bash
-$ findopera scan '{{opera.title}} \[{{id}}\][ ({{variant}})]' ~/Music
+$ findopera organize '{{opera.title}} \[{{id}}\][ ({{variant}})]' ~/Music
 ./rips/flac  Don Giovanni [332] (flac)
 ./rips/mp3   Don Giovanni [332] (mp3)
 ./billy      Billy Budd [75]
 ```
 
-Where no variant was given and two directories still want one name, `scan`
+Where no variant was given and two directories still want one name, `organize`
 numbers them by walk order. That is the designed fallback, so the plan is
 complete and can be acted on — but the numbers are not names: add a third rip
 that sorts first and the two already there are renumbered. So it says so, in
@@ -179,7 +179,7 @@ A bad template never costs a network round trip — it is checked against the
 schema first:
 
 ```bash
-$ findopera scan '{{composer.lastName}}/{{year}}' ~/Music
+$ findopera organize '{{composer.lastName}}/{{year}}' ~/Music
 findopera: {{year}} may be absent, and is not inside a group
   {{composer.lastName}}/{{year}}
                         ^^^^^^^^
