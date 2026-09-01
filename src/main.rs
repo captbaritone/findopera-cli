@@ -155,6 +155,25 @@ Examples:
     )]
     Schema(SchemaArgs),
 
+    /// Send a note to whoever maintains findopera.com.
+    #[command(long_about = "\
+Say something to whoever maintains findopera.com — a recording that is wrong,
+a field this cannot express, something that went badly.
+
+The message may be an argument or standard input, so a session that just went
+wrong can be sent as it stands:
+
+  findopera feedback \"the template docs do not mention escaping\"
+  findopera organize ~/Music 2>&1 | findopera feedback --kind bug
+
+Add --email if you want an answer; nothing is sent to it otherwise, and it is
+not published. The version of this program goes along with the message, since
+the first thing anyone reading it will want to know is which one you have.
+
+This works without a token, on the reasoning that being unable to get one is
+exactly the sort of thing worth reporting.")]
+    Feedback(FeedbackArgs),
+
     /// Store a token, so that requests say who is making them.
     #[command(long_about = "\
 Read a token from standard input and keep it, so that later runs are made as
@@ -279,6 +298,29 @@ struct GraphqlArgs {
 }
 
 #[derive(Args)]
+struct FeedbackArgs {
+    /// What you want to say. Omit to read it from standard input.
+    #[arg(value_name = "MESSAGE")]
+    message: Option<String>,
+    /// What this is about.
+    #[arg(long, value_name = "KIND", default_value = "general",
+          value_parser = ["bug", "suggestion", "error", "recording", "album", "general"])]
+    kind: String,
+    /// Where to reach you, if you want an answer.
+    #[arg(long, value_name = "ADDRESS")]
+    email: Option<String>,
+    /// What you were doing, or a link to what you were looking at.
+    #[arg(long, value_name = "TEXT")]
+    about: Option<String>,
+    /// GraphQL endpoint.
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    /// Token to identify as.
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+#[derive(Args)]
 struct LoginArgs {
     /// Ask findopera.com for a new token instead of reading one.
     #[arg(long)]
@@ -341,6 +383,7 @@ fn run() -> i32 {
         Command::Fields => cmd_fields(),
         Command::Graphql(args) => cmd_graphql(args),
         Command::Schema(args) => cmd_schema(args),
+        Command::Feedback(args) => cmd_feedback(args),
         Command::Login(args) => cmd_login(args),
         Command::Logout => cmd_logout(),
         Command::Init(args) => cmd_init(args),
@@ -356,6 +399,63 @@ fn client(endpoint: &str, token: Option<&String>) -> Result<api::Client, i32> {
             Err(2)
         }
     }
+}
+
+fn cmd_feedback(args: FeedbackArgs) -> i32 {
+    let message = match &args.message {
+        Some(m) => m.clone(),
+        None => match std::io::read_to_string(std::io::stdin()) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("findopera: cannot read the message from standard input: {e}");
+                return 2;
+            }
+        },
+    };
+    if message.trim().is_empty() {
+        eprintln!("findopera: nothing to send");
+        eprintln!("  help: findopera feedback \"what went wrong\"");
+        return 2;
+    }
+
+    // Which version this came from is the first thing anyone reading it will
+    // want, and the last thing anyone thinks to include.
+    let about = match &args.about {
+        Some(text) => format!("{} — {text}", api::USER_AGENT),
+        None => api::USER_AGENT.to_string(),
+    };
+
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let payload = match api.post(
+        "mutation Say($kind: FeedbackKind!, $message: String!, $email: String, $url: String) {\n\
+         \x20 submitFeedback(kind: $kind, message: $message, email: $email, url: $url)\n\
+         }",
+        Some(serde_json::json!({
+            "kind": args.kind,
+            "message": message,
+            "email": args.email,
+            "url": about,
+        })),
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("findopera: {e}");
+            return 3;
+        }
+    };
+    if let Some(said) = api::refusal(&payload) {
+        eprintln!("findopera: {said}");
+        return 3;
+    }
+
+    eprintln!("findopera: sent — thank you");
+    if args.email.is_none() {
+        eprintln!("findopera: no reply is possible; pass --email if you want one");
+    }
+    0
 }
 
 /// Ask the server for a token, and say who it made you.

@@ -2,12 +2,25 @@
 
 use crate::model::{Recording, QUERY};
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 pub const DEFAULT_ENDPOINT: &str = "https://findopera.com/api/graphql";
 
 /// Ids per request. A scan of a real library turns up thousands, and asking
 /// for them all in one query is a good way to be told no.
 const BATCH: usize = 100;
+
+/// How many times a request that was told "later" is sent again.
+///
+/// Small on purpose. A caller who has said who they are has a budget far
+/// larger than this program will use, so meeting the limit at all means
+/// something unusual, and the useful response to that is to wait a little and
+/// then say so — not to keep asking until the server gives in.
+const RETRIES: u32 = 4;
+
+/// The longest this will sit waiting across one call, however long it is asked
+/// to wait. Past this it is better to stop and let someone decide.
+const PATIENCE: std::time::Duration = std::time::Duration::from_secs(180);
 
 /// What this program calls itself when it asks findopera.com for something.
 ///
@@ -37,6 +50,25 @@ pub fn schema_url(endpoint: &str) -> String {
         None => endpoint.trim_end_matches('/'),
     };
     format!("{host}/schema.graphql")
+}
+
+/// How long the server asked us to wait, if it said.
+///
+/// `Retry-After` may also carry a date, which this does not read: the servers
+/// this talks to send seconds, and guessing at a date badly would be worse
+/// than falling back to a delay of our own.
+fn retry_after(response: &ureq::http::Response<ureq::Body>) -> Option<Duration> {
+    let value = response.headers().get("retry-after")?.to_str().ok()?;
+    let seconds: u64 = value.trim().parse().ok()?;
+    Some(Duration::from_secs(seconds))
+}
+
+/// How long to wait when the server did not say.
+///
+/// Doubling, from a second. Without a `Retry-After` there is nothing to go on,
+/// and easing off is the only way to stop adding to whatever is wrong.
+fn backoff(attempt: u32) -> Duration {
+    Duration::from_secs(1u64 << attempt.min(6))
 }
 
 /// What the server said was wrong with the request, if it said anything.
@@ -121,6 +153,11 @@ impl Client {
     /// it disliked with an ordinary 200 and an `errors` array, and deciding
     /// what that means is the caller's business — see [`refusal`]. This
     /// returns `Err` only when there is no response to judge.
+    ///
+    /// A request the server asked us to retry is retried here rather than
+    /// reported, because the caller almost never has a better answer than
+    /// waiting: `organize` is thirty requests in a row, and failing the
+    /// twenty-ninth would throw away the twenty-eight before it.
     pub fn post(
         &self,
         query: &str,
@@ -130,33 +167,86 @@ impl Client {
         if let Some(variables) = variables {
             body["variables"] = variables;
         }
-
-        // A failing status is not an error, because a GraphQL server puts its
-        // reason in the body — including the one reason this client most needs
-        // to hear, that its version is no longer welcome. Letting ureq turn a
-        // 400 into `StatusCode` would throw that away and report a number.
-        let request = ureq::post(&self.endpoint)
-            .config()
-            .http_status_as_error(false)
-            .build();
-        let mut response = self
-            .identify(request)
-            .send_json(&body)
-            .map_err(|e| ApiError(format!("cannot reach {}: {e}", self.endpoint)))?;
-
-        let status = response.status();
-        response.body_mut().read_json().map_err(|e| {
-            // A body that is not JSON is usually a proxy or an error page
-            // rather than the API, and the status is the only clue as to which.
-            if status.is_success() {
-                ApiError(format!("the API returned something unreadable: {e}"))
-            } else {
-                ApiError(format!(
-                    "{} answered {status}, and not with JSON",
-                    self.endpoint
-                ))
-            }
+        self.with_retries(&self.endpoint.clone(), |client| {
+            // A failing status is not an error, because a GraphQL server puts
+            // its reason in the body — including the one reason this client
+            // most needs to hear, that its version is no longer welcome.
+            // Letting ureq turn a 400 into `StatusCode` would throw that away
+            // and report a number.
+            let request = ureq::post(&client.endpoint)
+                .config()
+                .http_status_as_error(false)
+                .build();
+            client.identify(request).send_json(&body)
         })
+        .and_then(|(status, mut response)| {
+            response.body_mut().read_json().map_err(|e| {
+                // A body that is not JSON is usually a proxy or an error page
+                // rather than the API, and the status is the only clue as to
+                // which.
+                if status.is_success() {
+                    ApiError(format!("the API returned something unreadable: {e}"))
+                } else {
+                    ApiError(format!(
+                        "{} answered {status}, and not with JSON",
+                        self.endpoint
+                    ))
+                }
+            })
+        })
+    }
+
+    /// Send something, waiting out any request to come back later.
+    ///
+    /// Waiting is announced. A run that has gone quiet for a minute looks
+    /// exactly like one that has hung, and someone watching it has no way to
+    /// tell the difference unless they are told.
+    fn with_retries(
+        &self,
+        what: &str,
+        send: impl Fn(&Self) -> Result<ureq::http::Response<ureq::Body>, ureq::Error>,
+    ) -> Result<(ureq::http::StatusCode, ureq::http::Response<ureq::Body>), ApiError> {
+        let mut spent = Duration::ZERO;
+
+        for attempt in 0..=RETRIES {
+            let response = send(self).map_err(|e| ApiError(format!("cannot reach {what}: {e}")))?;
+            let status = response.status();
+
+            if status.as_u16() != 429 {
+                return Ok((status, response));
+            }
+            if attempt == RETRIES {
+                return Err(ApiError(format!(
+                    "{what} is still refusing after {} attempts. It is asking for less \
+                     traffic, so the thing to do is wait rather than try again now.{}",
+                    RETRIES + 1,
+                    if self.is_identified() {
+                        ""
+                    } else {
+                        "\n    These requests are anonymous, and anonymous callers share a \
+                         much smaller budget.\n    `findopera login --new` gets a token."
+                    }
+                )));
+            }
+
+            let wait = retry_after(&response).unwrap_or_else(|| backoff(attempt));
+            if spent + wait > PATIENCE {
+                return Err(ApiError(format!(
+                    "{what} asked to be left alone for another {}s, which is longer than this \
+                     will wait. Try again later.",
+                    wait.as_secs()
+                )));
+            }
+            eprintln!(
+                "findopera: {what} is asking for less traffic — waiting {}s ({} of {})",
+                wait.as_secs(),
+                attempt + 1,
+                RETRIES
+            );
+            std::thread::sleep(wait);
+            spent += wait;
+        }
+        unreachable!("the loop returns on its last pass")
     }
 
     /// Fetch the schema, as SDL.
@@ -166,13 +256,11 @@ impl Client {
     /// than one that takes a moment to arrive.
     pub fn schema(&self) -> Result<String, ApiError> {
         let url = schema_url(&self.endpoint);
-        let request = ureq::get(&url).config().http_status_as_error(false).build();
-        let mut response = self
-            .identify(request)
-            .call()
-            .map_err(|e| ApiError(format!("cannot reach {url}: {e}")))?;
+        let (status, mut response) = self.with_retries(&url, |client| {
+            let request = ureq::get(&url).config().http_status_as_error(false).build();
+            client.identify(request).call()
+        })?;
 
-        let status = response.status();
         if !status.is_success() {
             return Err(ApiError(format!("{url} answered {status}")));
         }
