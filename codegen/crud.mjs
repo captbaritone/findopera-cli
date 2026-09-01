@@ -17,8 +17,12 @@ export function kebab(name) {
 
 /** What a field looks like once it is JSON rather than GraphQL. */
 function jsonType(type) {
+  // Nullability comes off first. Checking for a list before unwrapping it
+  // misses `[T!]!`, which is a non-null list rather than a list, and reports
+  // whatever T happens to be — so a cast of twelve roles was described as a
+  // string.
+  if (isNonNullType(type)) return jsonType(type.ofType);
   if (isListType(type)) return "array";
-  if (isNonNullType(type) || isListType(type)) return jsonType(getNamedType(type));
   switch (getNamedType(type).name) {
     case "Int":
       return "integer";
@@ -50,6 +54,44 @@ function fields(inputType) {
       if (a.required !== b.required) return a.required ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
+}
+
+/**
+ * A create that does several things at once.
+ *
+ * Found rather than declared: a mutation called `add<Type>With<Something>` is
+ * taken to be the composite create for that type. The server has one today —
+ * addRecordingWithPortrayals — and if it grows another this picks it up
+ * without anyone remembering to say so.
+ *
+ * Its arguments beyond `input` and `justification` become extra keys on the
+ * input, named exactly as the mutation names them, so the JSON a caller writes
+ * maps one-to-one onto what is sent and no table has to be kept in step.
+ */
+function composite(schema, mutations, graphql) {
+  const name = Object.keys(mutations).find((m) =>
+    new RegExp(`^add${graphql}With[A-Z]`).test(m),
+  );
+  if (!name) return null;
+
+  const extras = mutations[name].args
+    .filter((a) => a.name !== "input" && a.name !== "justification")
+    .map((a) => ({
+      name: a.name,
+      json: jsonType(a.type),
+      // As GraphQL writes it — `[RecordingPortrayalsInput!]!` — so the variable
+      // declaration can be built from the schema rather than guessed at. A
+      // second composite would otherwise need this spelled out by hand in Rust.
+      gql: a.type.toString(),
+      required: isNonNullType(a.type),
+      about: a.description ?? null,
+    }))
+    .sort((a, b) => {
+      if (a.required !== b.required) return a.required ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+  return { mutation: name, extras };
 }
 
 export function crud(schema, getOperations) {
@@ -92,6 +134,7 @@ export function crud(schema, getOperations) {
       editInput: getNamedType(updateArg.type).name,
       create: fields(inputArg && getNamedType(inputArg.type)),
       edit: fields(updateArg && getNamedType(updateArg.type)),
+      composite: composite(schema, mutations, graphql),
     });
   }
   types.sort((a, b) => a.name.localeCompare(b.name));
@@ -128,6 +171,26 @@ export function crud(schema, getOperations) {
   L.push("    pub edit_input: &'static str,");
   L.push("    pub create: &'static [InputField],");
   L.push("    pub edit: &'static [InputField],");
+  L.push("    /// A create that does more than one thing, in one transaction.");
+  L.push("    pub composite: Option<Composite>,");
+  L.push("}");
+  L.push("");
+  L.push("/// A mutation that builds a record and everything hanging off it at once.");
+  L.push("pub struct Composite {");
+  L.push("    /// Called instead of `add`.");
+  L.push("    pub mutation: &'static str,");
+  L.push("    /// Arguments beside `input`, which the caller supplies as extra keys.");
+  L.push("    pub extras: &'static [Extra],");
+  L.push("}");
+  L.push("");
+  L.push("/// One argument of a composite create.");
+  L.push("pub struct Extra {");
+  L.push("    pub name: &'static str,");
+  L.push("    /// The GraphQL type, as the schema writes it, for the variable.");
+  L.push("    pub gql: &'static str,");
+  L.push("    pub json: &'static str,");
+  L.push("    pub required: bool,");
+  L.push("    pub about: &'static str,");
   L.push("}");
   L.push("");
   L.push(`/// Every type with a complete set of operations. ${types.length} of them.`);
@@ -156,6 +219,21 @@ export function crud(schema, getOperations) {
         );
       }
       L.push("        ],");
+    }
+    if (t.composite) {
+      L.push("        composite: Some(Composite {");
+      L.push(`            mutation: ${rustStr(t.composite.mutation)},`);
+      L.push("            extras: &[");
+      for (const f of t.composite.extras) {
+        L.push(
+          `                Extra { name: ${rustStr(f.name)}, gql: ${rustStr(f.gql)}, ` +
+            `json: ${rustStr(f.json)}, required: ${f.required}, about: ${rustStr(f.about)} },`,
+        );
+      }
+      L.push("            ],");
+      L.push("        }),");
+    } else {
+      L.push("        composite: None,");
     }
     L.push("    },");
   }

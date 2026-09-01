@@ -973,20 +973,68 @@ impl Client {
     pub fn create(
         &self,
         kind: &Type,
-        input: serde_json::Value,
+        mut input: serde_json::Value,
         justification: &str,
     ) -> Result<String, ApiError> {
+        // A type with a composite create always uses it, even when none of its
+        // extra keys were given. The composite is a superset — with an empty
+        // cast it does exactly what the plain mutation does — so there is one
+        // path rather than a mode to be in, and no way to reach for the wrong
+        // one by accident.
+        let Some(composite) = &kind.composite else {
+            let document = format!(
+                "mutation Add($input: {}!, $justification: String!) {{\n  \
+                 {}(input: $input, justification: $justification) {{ id }}\n}}",
+                kind.create_input, kind.add
+            );
+            let payload = self.query_named(
+                &document,
+                "Add",
+                serde_json::json!({ "input": input, "justification": justification }),
+            )?;
+            return identifier(&payload["data"][kind.add], kind);
+        };
+
+        // The extras are arguments of their own rather than part of `input`,
+        // so they are lifted back out of the object the caller wrote.
+        let mut variables = serde_json::Map::new();
+        if let Some(object) = input.as_object_mut() {
+            for extra in composite.extras {
+                if let Some(value) = object.remove(extra.name) {
+                    variables.insert(extra.name.to_string(), value);
+                }
+            }
+        }
+        // Required by the schema, and an empty one is what "no cast" means.
+        variables
+            .entry("portrayalInputs".to_string())
+            .or_insert_with(|| serde_json::json!([]));
+        variables.insert("input".into(), input);
+        variables.insert("justification".into(), justification.into());
+
+        let arguments: Vec<String> = composite
+            .extras
+            .iter()
+            .filter(|e| variables.contains_key(e.name))
+            .map(|e| format!("{}: ${}", e.name, e.name))
+            .collect();
+        let declarations: Vec<String> = composite
+            .extras
+            .iter()
+            .filter(|e| variables.contains_key(e.name))
+            .map(|e| format!("${}: {}", e.name, e.gql))
+            .collect();
+
         let document = format!(
-            "mutation Add($input: {}!, $justification: String!) {{\n  \
-             {}(input: $input, justification: $justification) {{ id }}\n}}",
-            kind.create_input, kind.add
+            "mutation Add($input: {}!, $justification: String!, {}) {{\n  \
+             {}(input: $input, justification: $justification, {}) {{ id }}\n}}",
+            kind.create_input,
+            declarations.join(", "),
+            composite.mutation,
+            arguments.join(", "),
         );
-        let payload = self.query_named(
-            &document,
-            "Add",
-            serde_json::json!({ "input": input, "justification": justification }),
-        )?;
-        identifier(&payload["data"][kind.add], kind)
+        let payload = self.query_named(&document, "Add", serde_json::Value::Object(variables))?;
+        identifier(&payload["data"][composite.mutation], kind)
     }
 
     /// Change a record.

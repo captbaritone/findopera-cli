@@ -889,7 +889,11 @@ fn cmd_create(args: CreateArgs) -> i32 {
         Ok(v) => v,
         Err(why) => return refused(&why, "BAD_INPUT", args.json, 2),
     };
-    if let Err(why) = check_input(&input, kind.create, kind.name) {
+    let extras = kind.composite.as_ref().map_or(&[][..], |c| c.extras);
+    if let Err(why) = check_input(&input, kind.create, extras, kind.name) {
+        return refused(&why, "BAD_INPUT", args.json, 2);
+    }
+    if let Err(why) = check_cast(&input) {
         return refused(&why, "BAD_INPUT", args.json, 2);
     }
 
@@ -937,7 +941,7 @@ fn cmd_edit(args: EditArgs) -> i32 {
     if input.as_object().is_some_and(|o| o.is_empty()) {
         return refused("nothing to change", "BAD_INPUT", args.json, 2);
     }
-    if let Err(why) = check_input(&input, kind.edit, kind.name) {
+    if let Err(why) = check_input(&input, kind.edit, &[], kind.name) {
         return refused(&why, "BAD_INPUT", args.json, 2);
     }
 
@@ -1103,7 +1107,14 @@ fn cmd_describe(args: DescribeArgs) -> i32 {
     }
 
     eprintln!("{} — the fields a create takes\n", kind.name);
-    let width = kind.create.iter().map(|f| f.name.len()).max().unwrap_or(0);
+    let extras = kind.composite.as_ref().map_or(&[][..], |c| c.extras);
+    let width = kind
+        .create
+        .iter()
+        .map(|f| f.name.len())
+        .chain(extras.iter().map(|e| e.name.len()))
+        .max()
+        .unwrap_or(0);
     for f in kind.create {
         let required = if f.required { "required" } else { "        " };
         let about = if f.about.is_empty() {
@@ -1118,12 +1129,68 @@ fn cmd_describe(args: DescribeArgs) -> i32 {
             break;
         }
     }
+    for e in extras {
+        let about = if e.about.is_empty() {
+            String::new()
+        } else {
+            format!("  {}", e.about)
+        };
+        if !emit(
+            &mut out,
+            format_args!("{:<width$}  {:<7}          {about}", e.name, e.json),
+        ) {
+            break;
+        }
+    }
+    if !extras.is_empty() {
+        eprintln!(
+            "\nThe last of those are built in the same transaction as the {}, so a \
+             failure leaves nothing half-made.",
+            kind.name
+        );
+    }
     eprintln!(
-        "\nAn edit takes the same fields, none of them required. \
-         `findopera describe {} --json` gives this as a JSON Schema.",
+        "\nAn edit takes the same fields, none of them required, and none of the \
+         extras. `findopera describe {} --json` gives this as a JSON Schema.",
         kind.name
     );
     0
+}
+
+/// How many of a cast may be top-billed.
+///
+/// The server refuses a create whose cast does not have exactly this many
+/// noted, or all of them if there are fewer. Twelve roles is a large thing to
+/// send and have refused, so the same count is checked here first.
+const NOTED: usize = 3;
+
+/// Check the cast before a large payload is sent for nothing.
+///
+/// Only a create is checked. The rule belongs to this one mutation rather than
+/// to the data — a portrayal added on its own is not counted, and a recording
+/// can drift past it — so it is not enforced anywhere else and is not
+/// presented as a fact about recordings.
+fn check_cast(input: &serde_json::Value) -> Result<(), String> {
+    let Some(cast) = input.get("portrayalInputs").and_then(|c| c.as_array()) else {
+        return Ok(());
+    };
+    if cast.is_empty() {
+        return Ok(());
+    }
+    let noted = cast
+        .iter()
+        .filter(|p| p["noted"].as_bool().unwrap_or(false))
+        .count();
+    let wanted = NOTED.min(cast.len());
+    if noted == wanted {
+        return Ok(());
+    }
+    Err(format!(
+        "{} of the {} roles are marked `noted`, and this call wants {wanted}. \
+         Top billing goes to {NOTED}, or to all of them when there are fewer.",
+        noted,
+        cast.len()
+    ))
 }
 
 /// A JSON Schema for what a create takes.
@@ -1133,6 +1200,14 @@ fn cmd_describe(args: DescribeArgs) -> i32 {
 /// be taught a vocabulary that exists only here.
 fn json_schema(kind: &crud::Type) -> serde_json::Value {
     let mut properties = serde_json::Map::new();
+    for e in kind.composite.as_ref().map_or(&[][..], |c| c.extras) {
+        let mut prop = serde_json::Map::new();
+        prop.insert("type".into(), serde_json::json!([e.json, "null"]));
+        if !e.about.is_empty() {
+            prop.insert("description".into(), e.about.into());
+        }
+        properties.insert(e.name.to_string(), serde_json::Value::Object(prop));
+    }
     for f in kind.create {
         let mut prop = serde_json::Map::new();
         // Every field but the required ones may be sent as null to mean absent.
@@ -2179,6 +2254,7 @@ fn read_input(from: Option<&PathBuf>) -> Result<serde_json::Value, String> {
 fn check_input(
     value: &serde_json::Value,
     accepted: &[crud::InputField],
+    extras: &[crud::Extra],
     what: &str,
 ) -> Result<(), String> {
     let serde_json::Value::Object(map) = value else {
@@ -2187,13 +2263,15 @@ fn check_input(
         ));
     };
     for key in map.keys() {
-        if accepted.iter().any(|f| f.name == key) {
+        if accepted.iter().any(|f| f.name == key) || extras.iter().any(|e| e.name == key) {
             continue;
         }
         let near = accepted
             .iter()
-            .find(|f| f.name.eq_ignore_ascii_case(key))
-            .map(|f| format!(" — did you mean `{}`?", f.name));
+            .map(|f| f.name)
+            .chain(extras.iter().map(|e| e.name))
+            .find(|name| name.eq_ignore_ascii_case(key))
+            .map(|name| format!(" — did you mean `{name}`?"));
         return Err(format!(
             "`{key}` is not a field of a {what}{}",
             near.unwrap_or_default()
@@ -2231,12 +2309,65 @@ mod tests {
         let why = super::check_input(
             &serde_json::json!({ "firstname": "Maria" }),
             fields,
+            &[],
             "singer",
         )
         .expect_err("a typo is refused");
         // Case is the likeliest slip, and the server would answer it with a
         // GraphQL error naming an input type the caller never mentioned.
         assert!(why.contains("firstName"), "got: {why}");
+    }
+
+    #[test]
+    fn a_cast_needs_exactly_three_top_billed() {
+        let cast = |noted: usize, total: usize| {
+            serde_json::json!({ "portrayalInputs":
+                (0..total).map(|i| serde_json::json!({ "noted": i < noted })).collect::<Vec<_>>() })
+        };
+        // Refused here rather than after twelve roles have crossed the wire.
+        assert!(super::check_cast(&cast(4, 4)).is_err());
+        assert!(super::check_cast(&cast(0, 12)).is_err());
+        assert!(super::check_cast(&cast(3, 12)).is_ok());
+    }
+
+    #[test]
+    fn a_cast_smaller_than_three_may_have_all_of_it_billed() {
+        let cast = |noted: usize, total: usize| {
+            serde_json::json!({ "portrayalInputs":
+                (0..total).map(|i| serde_json::json!({ "noted": i < noted })).collect::<Vec<_>>() })
+        };
+        assert!(super::check_cast(&cast(2, 2)).is_ok());
+        assert!(super::check_cast(&cast(1, 1)).is_ok());
+        // But not fewer than it has.
+        assert!(super::check_cast(&cast(1, 2)).is_err());
+    }
+
+    #[test]
+    fn no_cast_at_all_is_not_a_cast_problem() {
+        // A plain create goes through the same mutation with nothing in it, so
+        // the rule must not fire on a recording that names no roles.
+        assert!(super::check_cast(&serde_json::json!({ "operaId": "88" })).is_ok());
+        assert!(super::check_cast(&serde_json::json!({ "portrayalInputs": [] })).is_ok());
+    }
+
+    #[test]
+    fn a_composite_type_accepts_its_extra_keys() {
+        // The extras are arguments of the mutation rather than fields of the
+        // input object, so they would otherwise read as unknown fields.
+        let recording = crud::TYPES.iter().find(|t| t.name == "recording").unwrap();
+        let extras = recording
+            .composite
+            .as_ref()
+            .expect("recording has one")
+            .extras;
+        assert!(extras.iter().any(|e| e.name == "portrayalInputs"));
+        super::check_input(
+            &serde_json::json!({ "operaId": "88", "conductorId": "106", "upc": "012" }),
+            recording.create,
+            extras,
+            "recording",
+        )
+        .expect("upc is one of the extras");
     }
 
     #[test]
@@ -2247,7 +2378,7 @@ mod tests {
             required: true,
             about: "",
         }];
-        let why = super::check_input(&serde_json::json!({}), fields, "singer")
+        let why = super::check_input(&serde_json::json!({}), fields, &[], "singer")
             .expect_err("required fields are checked");
         assert!(why.contains("firstName"), "got: {why}");
     }
@@ -2271,6 +2402,7 @@ mod tests {
         super::check_input(
             &serde_json::json!({ "firstName": "Maria" }),
             fields,
+            &[],
             "singer",
         )
         .expect("the optional one is optional");
@@ -2278,7 +2410,7 @@ mod tests {
 
     #[test]
     fn something_that_is_not_an_object_is_refused() {
-        let why = super::check_input(&serde_json::json!([1, 2]), &[], "singer")
+        let why = super::check_input(&serde_json::json!([1, 2]), &[], &[], "singer")
             .expect_err("a list is not an input");
         assert!(why.contains("JSON object"), "got: {why}");
     }

@@ -106,6 +106,33 @@ type and validated against the schema by codegen. The table of types and their
 input fields is generated from the schema, so twenty types cost the same to
 keep current as one.
 
+### Creating a recording whole
+
+A recording, its cast, its source and its barcode go in one request, so a
+failure leaves nothing half-made:
+
+```bash
+$ findopera create recording -m 'https://example.com/liner-notes' <<'JSON'
+{ "operaId": "88", "conductorId": "106", "year": 1953,
+  "sourceUrl": "https://example.com/liner-notes",
+  "upc": "0012345678998",
+  "portrayalInputs": [
+    {"singerId": "133", "characterId": "908", "noted": true},
+    {"singerId": "142", "characterId": "909", "noted": true},
+    {"singerId": "151", "characterId": "910", "noted": true},
+    {"singerId": "160", "characterId": "911", "noted": false}
+  ] }
+JSON
+```
+
+`describe recording` lists those keys alongside the ordinary fields. Leave them
+all out and it is an ordinary create — the same mutation with nothing extra in
+it, so there is no mode to be in.
+
+Exactly three roles take top billing, or all of them when a cast is smaller
+than three. That is a rule of this one call rather than a fact about
+recordings, and it is checked before a twelve-role payload is sent.
+
 ### Attaching a barcode
 
 A recording and a UPC are joined rather than owned, so they have their own
