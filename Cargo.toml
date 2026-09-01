@@ -1,6 +1,6 @@
 [package]
 name = "findopera"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Organize a library of opera recordings using metadata from findopera.com"
 license = "MIT"
