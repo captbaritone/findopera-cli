@@ -319,9 +319,15 @@ input RecordingFilterInput {
   """
   singerIds: [String!]
   """
-  Filter by recordings with conductor's whose name matches the given search string (case-insensitive)
+  Filter by singers whose names match the given search strings - returns recordings that include ALL of them
   """
   singerNameSearches: [String!]
+  """
+  Filter by barcode. Matches however the code is written: spaces and dashes
+  are ignored, and a UPC-A, EAN-13 or GTIN-14 form of the same product all
+  find each other.
+  """
+  upc: String
 }
 
 input RecordingPortrayalsInput {

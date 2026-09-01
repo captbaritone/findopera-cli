@@ -137,7 +137,18 @@ The kinds are `recording`, `opera`, `singer`, `conductor`, `composer` and
 finds `La Bohème`.
 
 A recording can be narrowed by more than its title — `--singer` may be
-repeated, and `--year` matches within two years either side. The id is the
+repeated, `--year` matches within two years either side, and `--upc` takes the
+barcode off the box:
+
+```bash
+$ findopera search recording --upc 028941742827
+75  Billy Budd  1967  Britten  Pears, Shirley-Quirk, Tear
+```
+
+The barcode is matched however it is written. Spaces and dashes are ignored,
+and the same product is stored here as 12, 13 or 14 digits depending on where
+the code came from — all three forms find each other, so whichever is printed
+on the box works. The id is the
 first column, so a result can be handed straight to the next command:
 
 ```bash

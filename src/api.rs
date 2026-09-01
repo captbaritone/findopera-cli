@@ -756,6 +756,8 @@ pub struct Criteria {
     pub singers: Vec<String>,
     pub conductor: Option<String>,
     pub year: Option<i64>,
+    /// A barcode off the box, however it is written.
+    pub upc: Option<String>,
     pub first: u32,
 }
 
@@ -831,6 +833,9 @@ impl Client {
             }
             if let Some(year) = criteria.year {
                 filter.insert("approximateYear".into(), year.into());
+            }
+            if let Some(upc) = &criteria.upc {
+                filter.insert("upc".into(), upc.clone().into());
             }
             serde_json::json!({ "filter": filter, "first": first })
         } else {

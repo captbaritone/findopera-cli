@@ -182,7 +182,8 @@ command:
   findopera search recording tosca --tabs | head -1 | cut -f1 | xargs findopera annotate
 
 A recording can be narrowed by more than its title — --singer may be repeated,
-and --year matches within two years either side. The other kinds take a name
+--year matches within two years either side, and --upc takes the barcode off
+the box, in whatever form it is printed. The other kinds take a name
 and nothing else; searching is case and accent insensitive, and matches part
 of a name, so `boheme` finds `La Bohème`.
 
@@ -542,6 +543,12 @@ struct SearchArgs {
     /// Recorded within two years of this.
     #[arg(long, value_name = "YEAR")]
     year: Option<i64>,
+    /// The barcode off the box.
+    ///
+    /// However it is written: spaces and dashes are ignored, and the 12, 13
+    /// and 14 digit forms of the same code all find each other.
+    #[arg(long, value_name = "CODE")]
+    upc: Option<String>,
     /// How many results.
     #[arg(long, default_value_t = 10, value_name = "N")]
     first: u32,
@@ -1016,7 +1023,10 @@ fn cmd_search(args: SearchArgs) -> i32 {
     };
 
     let text = args.query.join(" ");
-    let narrowed = !args.singer.is_empty() || args.conductor.is_some() || args.year.is_some();
+    let narrowed = !args.singer.is_empty()
+        || args.conductor.is_some()
+        || args.year.is_some()
+        || args.upc.is_some();
     if text.trim().is_empty() && !narrowed {
         eprintln!("findopera: nothing to search for");
         eprintln!("  help: findopera search {} <name>", args.kind);
@@ -1026,8 +1036,8 @@ fn cmd_search(args: SearchArgs) -> i32 {
     // results would look like an answer to a question that was not asked.
     if kind != api::Kind::Recording && narrowed {
         eprintln!(
-            "findopera: --singer, --conductor and --year narrow a recording, and this is \
-             searching for a {}",
+            "findopera: --singer, --conductor, --year and --upc narrow a recording, and this \
+             is searching for a {}",
             args.kind
         );
         return 2;
@@ -1042,6 +1052,7 @@ fn cmd_search(args: SearchArgs) -> i32 {
         singers: args.singer,
         conductor: args.conductor,
         year: args.year,
+        upc: args.upc,
         first: args.first,
     };
     let found = match api.search(kind, &criteria) {
