@@ -206,6 +206,11 @@ fn cmd_scan(args: ScanArgs) -> i32 {
             if let Some(help) = &e.help {
                 eprintln!("  help: {help}");
             }
+            // The engine has no business knowing what this program is called,
+            // so the pointer to it is added here. `fields` lists the syntax as
+            // well as the fields, which makes it the right answer whether the
+            // template named something that is not there or was malformed.
+            eprintln!("  see `findopera fields` for every field and the syntax");
             return 2;
         }
     };
@@ -244,13 +249,22 @@ fn cmd_scan(args: ScanArgs) -> i32 {
 }
 
 fn cmd_fields() -> i32 {
+    // The list is the result and goes to stdout, so `findopera fields | grep
+    // singer` stays useful. Everything explaining it goes to stderr.
+    eprintln!("{}", findopera::SYNTAX);
+    eprintln!(
+        "\nA field marked `always` has a value for every recording and needs no\n\
+         fallback. The rest want one — {{{{field|\"Unknown\"}}}} — or a [ … ] around\n\
+         them, and findopera will say so if they have neither.\n"
+    );
+
     let mut out = std::io::stdout().lock();
     let width = FIELDS.iter().map(|f| f.path.len()).max().unwrap_or(0);
     for f in FIELDS {
-        let always = if f.nullable { "" } else { "  (always present)" };
+        let always = if f.nullable { "      " } else { "always" };
         if !emit(
             &mut out,
-            format_args!("{:<width$}  {}{always}", f.path, f.description),
+            format_args!("{:<width$}  {always}  {}", f.path, f.description),
         ) {
             break;
         }

@@ -118,7 +118,7 @@ same variant, or the template never mentions `{{variant}}` — and the report
 says which, since those send you to different files.
 
 ```bash
-$ findopera fields    # every path a template may use, and which are always present
+$ findopera fields    # the syntax, and every field with whether it is always there
 ```
 
 A bad template never costs a network round trip — it is checked against the

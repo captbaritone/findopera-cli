@@ -22,4 +22,4 @@ pub mod plan;
 pub mod scan;
 mod template;
 
-pub use template::{to_path, FieldDoc, Fields, PathError, Span, Template, TemplateError};
+pub use template::{to_path, FieldDoc, Fields, PathError, Span, Template, TemplateError, SYNTAX};

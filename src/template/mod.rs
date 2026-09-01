@@ -78,6 +78,16 @@ mod render;
 pub use lexer::Span;
 pub use render::{to_path, PathError};
 
+/// The whole syntax, briefly, for `findopera fields` and the starter config.
+///
+/// Kept here rather than written out in each place that shows it, so the two
+/// cannot come to disagree about what the language is.
+pub const SYNTAX: &str = r#"{{field}}            a field's value
+{{a|b|"Unknown"}}    try a, then b, then fall back to the text
+[ … ]                left out when something inside it is absent
+\[ \] \{ \}          a literal bracket or brace
+/                    separates folder levels"#;
+
 /// One field a template may reference, and what it means.
 ///
 /// The set of these is the single source of truth for which paths are valid;

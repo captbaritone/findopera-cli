@@ -111,21 +111,26 @@ fn explain(message: &str) -> String {
 /// Every setting is present and explained, so nobody has to start from an
 /// empty file wondering what the keys are.
 pub fn starter() -> String {
-    r#"# How this library is named.
+    // The syntax is described once, in the template module, and quoted here.
+    // Two copies of it would eventually say different things.
+    let syntax = crate::SYNTAX
+        .lines()
+        .map(|l| format!("#   {l}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let head = r#"# How this library is named.
 #
 # Run `findopera scan` in this folder to see what each recording's folder
 # would be called. Nothing is renamed or moved; it only ever prints.
 
-# The name to give each folder. `/` separates folder levels.
+# The name to give each folder.
 #
-#   {{field}}            a value from the recording
-#   {{a|b|"Unknown"}}    try a, then b, then fall back to the text
-#   [ … ]                a part to leave out when what is inside it is missing
-#   \[ \] \{ \}          a literal bracket or brace
+"#;
+    let rest = r#"
 #
-# For every field you can use here, run `findopera fields`. Fields marked
-# "always present" need no fallback; the rest want one, or a [ … ] around
-# them, and `findopera scan` will say so if they have neither.
+# For every field you can use here, run `findopera fields`. The ones it marks
+# `always` need no fallback; the rest want one, or a [ … ] around them, and
+# `findopera scan` will say so if they have neither.
 template = '''
 {{composer.lastName}}/{{opera.title}}/[{{year}} ]{{conductor.lastName}} \[{{id}}\][ - {{variant}}]
 '''
@@ -152,6 +157,6 @@ require-variants = false
 # Follow symlinks while walking. Off by default: a library built out of
 # symlinks would otherwise report every recording twice.
 follow-links = false
-"#
-    .to_string()
+"#;
+    format!("{head}{syntax}{rest}")
 }
