@@ -1037,3 +1037,45 @@ fn identifier(value: &serde_json::Value, kind: &Type) -> Result<String, ApiError
         ))),
     }
 }
+
+impl Client {
+    /// Attach a UPC to a recording, or take it off again.
+    ///
+    /// Hand-written rather than generated: these are the only mutations that
+    /// join two records rather than acting on one, so the table of types has
+    /// nothing to hang them from. There is exactly one such relationship, and
+    /// a second would want its own verb here rather than a general mechanism
+    /// built for a population of one.
+    pub fn link_upc(
+        &self,
+        recording: &str,
+        upc: &str,
+        justification: &str,
+        on: bool,
+    ) -> Result<(), ApiError> {
+        let (document, operation, variables) = if on {
+            (
+                "mutation Link($input: LinkRecordingUpcInput!, $justification: String!) {\n  \
+                 linkRecordingToUpc(input: $input, justification: $justification)\n}",
+                "Link",
+                serde_json::json!({
+                    "input": { "recordingId": recording, "upc": upc },
+                    "justification": justification,
+                }),
+            )
+        } else {
+            (
+                "mutation Unlink($recordingId: String!, $upc: String!, $justification: String!) {\n  \
+                 unlinkRecordingUpc(recordingId: $recordingId, upc: $upc, justification: $justification)\n}",
+                "Unlink",
+                serde_json::json!({
+                    "recordingId": recording,
+                    "upc": upc,
+                    "justification": justification,
+                }),
+            )
+        };
+        self.query_named(document, operation, variables)?;
+        Ok(())
+    }
+}

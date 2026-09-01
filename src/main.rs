@@ -142,6 +142,27 @@ file. Only the fields present are touched.
 Every change needs -m, as `create` does.")]
     Edit(EditArgs),
 
+    /// Attach a UPC to a recording.
+    #[command(long_about = "\
+Attach a barcode to a recording, so that the release and the performance know
+about each other.
+
+  findopera link recording 264 --upc 0013491103020 -m 'back of the box'
+
+The UPC has to exist already — `findopera create upc` makes one — because a
+barcode conjured out of a typo is worse than a missing link. Barcodes are
+matched exactly here, unlike `search --upc`: this says which record to attach,
+and guessing at that is not the same as finding it.")]
+    Link(LinkArgs),
+
+    /// Take a UPC off a recording.
+    #[command(long_about = "\
+Detach a barcode from a recording. The UPC record itself stays; only the
+connection between the two goes.
+
+  findopera unlink recording 264 --upc 0013491103020 -m 'wrong release'")]
+    Unlink(LinkArgs),
+
     /// Remove a record.
     #[command(long_about = "\
 Remove a record.
@@ -534,6 +555,43 @@ struct DeleteArgs {
     token: Option<String>,
 }
 
+/// What a relationship command joins.
+///
+/// A subcommand rather than a value, as `search` is, so that each side can
+/// document what it may be joined to. Recording and UPC is the only pair the
+/// database has; another would be another subcommand here.
+#[derive(Subcommand)]
+enum Joining {
+    /// A recording, to a UPC.
+    Recording(LinkRecordingArgs),
+}
+
+#[derive(Args)]
+struct LinkRecordingArgs {
+    /// The recording's id.
+    #[arg(value_name = "ID")]
+    id: String,
+    /// The barcode, which must already be a UPC record.
+    #[arg(long, value_name = "CODE")]
+    upc: String,
+    /// Source and context for this change, for the record's history.
+    #[arg(long, short = 'm', value_name = "TEXT")]
+    message: String,
+    /// Print the result as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+#[derive(Args)]
+struct LinkArgs {
+    #[command(subcommand)]
+    what: Joining,
+}
+
 #[derive(Args)]
 struct DescribeArgs {
     /// The type. Omit to list them all.
@@ -724,6 +782,8 @@ fn run() -> i32 {
         Command::Get(args) => cmd_get(args),
         Command::Create(args) => cmd_create(args),
         Command::Edit(args) => cmd_edit(args),
+        Command::Link(args) => cmd_link(args, true),
+        Command::Unlink(args) => cmd_link(args, false),
         Command::Delete(args) => cmd_delete(args),
         Command::Describe(args) => cmd_describe(args),
         Command::Search(args) => cmd_search(args),
@@ -945,6 +1005,56 @@ fn cmd_delete(args: DeleteArgs) -> i32 {
             0
         }
         Err(e) => failed(&e, args.json),
+    }
+}
+
+fn cmd_link(args: LinkArgs, on: bool) -> i32 {
+    let Joining::Recording(a) = args.what;
+    if a.message.trim().is_empty() {
+        return refused(
+            "-m needs a source and some context; it goes into the record's history",
+            "NO_JUSTIFICATION",
+            a.json,
+            2,
+        );
+    }
+    // Punctuation is dropped because a barcode copied off a box carries
+    // whatever was printed with it. Nothing is padded, though: this names a
+    // record to attach rather than searching for one, and 12 and 13 digit
+    // forms are different ids even when they mean the same product.
+    let upc: String = a.upc.chars().filter(char::is_ascii_digit).collect();
+    if upc.is_empty() {
+        return refused(
+            &format!("`{}` has no digits in it", a.upc),
+            "BAD_INPUT",
+            a.json,
+            2,
+        );
+    }
+
+    let api = match client(&a.endpoint, a.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match api.link_upc(&a.id, &upc, &a.message, on) {
+        Ok(()) => {
+            if a.json {
+                let mut out = std::io::stdout().lock();
+                emit(
+                    &mut out,
+                    format_args!(
+                        "{}",
+                        serde_json::json!({ "recording": a.id, "upc": upc, "linked": on })
+                    ),
+                );
+            } else if on {
+                eprintln!("findopera: recording {} now carries {upc}", a.id);
+            } else {
+                eprintln!("findopera: recording {} no longer carries {upc}", a.id);
+            }
+            0
+        }
+        Err(e) => failed(&e, a.json),
     }
 }
 

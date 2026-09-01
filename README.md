@@ -106,6 +106,21 @@ type and validated against the schema by codegen. The table of types and their
 input fields is generated from the schema, so twenty types cost the same to
 keep current as one.
 
+### Attaching a barcode
+
+A recording and a UPC are joined rather than owned, so they have their own
+verbs:
+
+```bash
+$ findopera create upc <<< '{"upc":"0013491103020"}' -m 'back of the box'
+$ findopera link recording 264 --upc '0013-491 103020' -m 'Decca reissue'
+$ findopera unlink recording 264 --upc 0013491103020 -m 'wrong release'
+```
+
+The UPC has to exist first — nothing conjures one from a typo. Punctuation in
+the code is dropped, but unlike `search --upc` the digits are not padded: this
+names a record to attach, and guessing at which is not the same as finding one.
+
 ### Errors
 
 One convention everywhere. A person gets the server's words on stderr:
