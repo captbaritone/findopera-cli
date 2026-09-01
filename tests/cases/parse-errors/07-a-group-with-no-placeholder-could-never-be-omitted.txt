@@ -4,4 +4,4 @@
 error[template_empty_group]: this group contains no placeholder of its own, so it would always render
 {{opera.title}}[ - ]
                ^^^^^
-help: A group `[…]` is dropped when a placeholder inside it resolves to nothing. For a literal bracket, write `\[` and `\]`.
+help: A group `[…]` is dropped when a placeholder inside it turns out to be absent. For a literal bracket, write `\[` and `\]`.

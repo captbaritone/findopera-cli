@@ -210,14 +210,14 @@ impl Parser<'_> {
                 span,
             )
             .help(
-                "A group `[…]` is dropped when a placeholder inside it resolves to \
-                 nothing. For a literal bracket, write `\\[` and `\\]`.",
+                "A group `[…]` is dropped when a placeholder inside it turns out to be \
+                 absent. For a literal bracket, write `\\[` and `\\]`.",
             ));
         }
         if !direct.any(|alts| can_fail(alts)) {
             return Err(ParseError::new(
                 "template_dead_group",
-                "every placeholder in this group always resolves, so it would always render",
+                "every placeholder in this group is always present, so it would always render",
                 span,
             )
             .help(
@@ -251,7 +251,7 @@ impl Parser<'_> {
         if let Some(i) = alts.iter().position(always_resolves) {
             if let Some(dead) = spans.get(i + 1) {
                 let sure = match &alts[i] {
-                    Alt::Literal(_) => "a quoted literal always resolves".to_string(),
+                    Alt::Literal(_) => "a quoted literal is always there".to_string(),
                     Alt::Field { path, .. } => format!("`{path}` is never absent"),
                 };
                 return Err(ParseError::new(
@@ -259,7 +259,7 @@ impl Parser<'_> {
                     format!("this alternative is unreachable — {sure}"),
                     *dead,
                 )
-                .help("Remove it, or put it before the alternative that always resolves."));
+                .help("Remove it, or put it before the alternative that is always there."));
             }
         }
 
@@ -285,7 +285,7 @@ impl Parser<'_> {
         if !in_group && can_fail(&alts) {
             return Err(ParseError::new(
                 "template_unresolvable",
-                format!("{source} can resolve to nothing, and is not inside a group"),
+                format!("{source} may be absent, and is not inside a group"),
                 span,
             )
             .help(format!(

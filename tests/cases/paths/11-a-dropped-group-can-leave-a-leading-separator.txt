@@ -8,4 +8,4 @@ that is not the real one. Recorded as it behaves today.
 --- data
 opera.title = Salome
 --- expect
-error[path_absolute]: rendered "/Salome", which names an absolute path — something before the leading `/` resolved to nothing
+error[path_absolute]: rendered "/Salome", which names an absolute path — something before the leading `/` turned out to be absent

@@ -35,7 +35,7 @@ impl std::fmt::Display for PathError {
             Self::Absolute { rendered } => write!(
                 f,
                 "rendered {rendered:?}, which names an absolute path — something \
-                 before the leading `/` resolved to nothing"
+                 before the leading `/` turned out to be absent"
             ),
             Self::Traversal { rendered } => write!(
                 f,
@@ -91,9 +91,7 @@ fn render_seq(items: &[Node], data: &dyn Fields, out: &mut String, in_group: boo
                 // `parse` rejects a placeholder that can resolve to nothing
                 // unless it is inside a group, so this cannot be reached
                 // through the public API.
-                None => unreachable!(
-                    "{source} resolved to nothing outside a group, which parsing rejects"
-                ),
+                None => unreachable!("{source} was absent outside a group, which parsing rejects"),
             },
 
             Node::Group { items, .. } => {

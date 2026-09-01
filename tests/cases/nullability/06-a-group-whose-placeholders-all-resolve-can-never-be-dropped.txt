@@ -3,7 +3,7 @@
 --- data
 opera.title = Salome
 --- expect
-error[template_dead_group]: every placeholder in this group always resolves, so it would always render
+error[template_dead_group]: every placeholder in this group is always present, so it would always render
 {{opera.title}}[ ({{year|"n.d."}})]
                ^^^^^^^^^^^^^^^^^^^^
 help: A group `[…]` exists to be dropped. Drop the brackets, or use a field that can be absent.

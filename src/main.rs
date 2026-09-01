@@ -58,7 +58,7 @@ Examples:
 struct ScanArgs {
     /// Template. `{{field}}` placeholders, `|`-separated fallbacks with a
     /// quoted literal last, and `[optional groups]` dropped when a placeholder
-    /// inside them resolves to nothing.
+    /// inside them turns out to be absent.
     #[arg(value_name = "TEMPLATE")]
     template: String,
     /// Directories to walk.

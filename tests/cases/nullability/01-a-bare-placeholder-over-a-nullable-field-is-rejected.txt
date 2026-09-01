@@ -3,7 +3,7 @@
 --- data
 composer.lastName = Strauss
 --- expect
-error[template_unresolvable]: {{year}} can resolve to nothing, and is not inside a group
+error[template_unresolvable]: {{year}} may be absent, and is not inside a group
 {{composer.lastName}}/{{year}}
                       ^^^^^^^^
 help: Add a fallback like {{…|"Unknown"}}, or wrap it in a group so it can be dropped: [{{year}}]

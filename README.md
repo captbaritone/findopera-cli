@@ -86,7 +86,7 @@ schema first:
 
 ```bash
 $ findopera scan '{{composer.lastName}}/{{year}}' ~/Music
-findopera: {{year}} can resolve to nothing, and is not inside a group
+findopera: {{year}} may be absent, and is not inside a group
   {{composer.lastName}}/{{year}}
                         ^^^^^^^^
   help: Add a fallback like {{…|"Unknown"}}, or wrap it in a group so it can be dropped: [{{year}}]
@@ -122,8 +122,8 @@ right, and a quoted literal serves as a last resort:
 {{opera.englishTitle|opera.title}}/{{year|"n.d."}} - {{conductor.lastName}}
 ```
 
-A `[…]` group is dropped whole when a placeholder inside it resolves to
-nothing, which is how a separator vanishes along with the value it was
+A `[…]` group is dropped whole when a placeholder inside it turns out to be
+absent, which is how a separator vanishes along with the value it was
 separating — `[ - {{year}}]` contributes nothing at all rather than leaving a
 dangling ` - `.
 
@@ -158,7 +158,7 @@ since claiming a field is always there just moves its failure back to render
 time.
 
 That is what leaves `render` with nothing to fail at. A placeholder outside a
-group is only accepted when some alternative always resolves, so there is no
+group is only accepted when some alternative is always present, so there is no
 case where rendering has nothing to write.
 
 ## What's left per record
@@ -221,7 +221,7 @@ One file is one case — a template, some data, and the result — grouped into 
 directory per topic, so `ls` reads as the spec's table of contents:
 
 ```
-tests/cases/groups/01-a-group-renders-when-its-placeholder-resolves.txt
+tests/cases/groups/01-a-group-renders-when-its-placeholder-is-present.txt
 tests/cases/groups/02-a-group-is-dropped-whole-taking-its-separator-with-it.txt
 tests/cases/nullability/04-a-non-null-field-needs-no-fallback.txt
 tests/cases/nullability/05-an-alternative-after-a-quoted-literal-is-unreachable.txt

@@ -7,4 +7,4 @@ record, so the literal is dead text.
 error[template_unreachable_alternative]: this alternative is unreachable — `opera.title` is never absent
 {{opera.englishTitle|opera.title|"Untitled"}}
                                  ^^^^^^^^^^
-help: Remove it, or put it before the alternative that always resolves.
+help: Remove it, or put it before the alternative that is always there.
