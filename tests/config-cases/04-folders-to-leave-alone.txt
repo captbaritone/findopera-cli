@@ -1,9 +1,10 @@
 --- toml
 template = '''{{opera.title}}'''
+ignore = ["@eaDir", "Incomplete", "**/Artwork/**"]
 --- result
 template = "{{opera.title}}"
 destination = None
 link = Symlink
 require-variants = false
 follow-links = false
-ignore = []
+ignore = ["@eaDir", "Incomplete", "**/Artwork/**"]

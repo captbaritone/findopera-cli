@@ -265,12 +265,16 @@ fn one_symlink(source: &Path, at: &Path, dry_run: bool) -> Outcome {
 fn mirror(source: &Path, at: &Path, link: Link, dry_run: bool) -> Outcome {
     let mut made = 0usize;
     let mut skipped = 0usize;
-    for entry in walkdir::WalkDir::new(source).sort_by_file_name() {
+    for entry in ignore::WalkBuilder::new(source)
+        .standard_filters(false)
+        .sort_by_file_name(|a, b| a.cmp(b))
+        .build()
+    {
         let entry = match entry {
             Ok(e) => e,
             Err(e) => return Outcome::Failed(format!("cannot read: {e}")),
         };
-        if !entry.file_type().is_file() {
+        if !entry.file_type().is_some_and(|t| t.is_file()) {
             continue;
         }
         let relative = match entry.path().strip_prefix(source) {

@@ -62,6 +62,9 @@ pub struct Config {
     /// Follow symlinks while walking.
     #[serde(default)]
     pub follow_links: bool,
+    /// Folders to leave alone.
+    #[serde(default)]
+    pub ignore: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -104,10 +107,18 @@ impl Config {
                 })
             }
         };
-        toml::from_str(&text).map_err(|e| ConfigError::Invalid {
+        let config: Config = toml::from_str(&text).map_err(|e| ConfigError::Invalid {
             path: path.to_path_buf(),
             why: explain(&e.to_string()),
-        })
+        })?;
+        // A pattern that cannot be compiled is a mistake in this file, so it
+        // is reported against this file — not later, halfway through a walk,
+        // with nothing to say which line it came from.
+        crate::scan::Ignore::new(&config.ignore).map_err(|why| ConfigError::Invalid {
+            path: path.to_path_buf(),
+            why,
+        })?;
+        Ok(config)
     }
 }
 
@@ -194,6 +205,21 @@ require-variants = false
 # Nothing is ever deleted or overwritten, and nothing is written at all
 # unless `findopera organize` is given --write.
 link = "symlink"
+
+# Folders to skip. A folder that matches is not looked inside at all, which
+# on a network drive is worth more than it sounds — every folder looked at
+# costs a round trip.
+#
+# A pattern is matched against a folder's own name and against its path from
+# here, so "@eaDir" skips one wherever it turns up while "Unsorted/**" skips
+# only that one.
+#
+# ignore = [
+#   "@eaDir",          # Synology leaves these beside its media
+#   "Artwork",
+#   "Incomplete",      # half-finished downloads are not worth organising
+#   "**/.grab/**",
+# ]
 
 # Follow symlinks while walking. Off by default: a library built out of
 # symlinks would otherwise report every recording twice.

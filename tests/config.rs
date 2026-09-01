@@ -41,12 +41,13 @@ fn cases() {
             let result = match Config::load(&path) {
                 Ok(c) => format!(
                     "template = {:?}\ndestination = {:?}\nlink = {:?}\n\
-                     require-variants = {}\nfollow-links = {}",
+                     require-variants = {}\nfollow-links = {}\nignore = {:?}",
                     c.template.trim_end_matches('\n'),
                     c.destination,
                     c.link,
                     c.require_variants,
-                    c.follow_links
+                    c.follow_links,
+                    c.ignore
                 ),
                 // The temporary directory is different every run; the message
                 // is the thing under test, not where the file happened to be.

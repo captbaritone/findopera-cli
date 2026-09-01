@@ -377,7 +377,18 @@ fn prepare(
     let require_variants =
         require_variants_arg || settings.as_ref().is_some_and(|c| c.require_variants);
 
-    let report = scan::scan(root, follow_links);
+    let patterns = settings
+        .as_ref()
+        .map(|c| c.ignore.clone())
+        .unwrap_or_default();
+    let ignore = match scan::Ignore::new(&patterns) {
+        Ok(i) => i,
+        Err(why) => {
+            eprintln!("findopera: {why}");
+            return Err(2);
+        }
+    };
+    let report = scan::scan(root, follow_links, &ignore);
     for (path, why) in &report.unreadable {
         eprintln!("findopera: {}: {why}", path.display());
     }

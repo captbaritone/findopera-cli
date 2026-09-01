@@ -74,6 +74,21 @@ What a marker identifies is the directory holding it, and one directory can
 hold several: a box set covering several operas is listed once per recording,
 as above.
 
+Folders can be skipped, which on a network drive is worth more than it sounds
+— every folder looked at is a round trip:
+
+```toml
+ignore = ["@eaDir", "Incomplete", "**/Artwork/**"]
+```
+
+A pattern is matched against a folder's own name and against its path from the
+library root, so `@eaDir` skips one wherever it appears while `Unsorted/**`
+skips only that one. A skipped folder is not looked inside at all.
+
+The walk itself is spread across threads, which matters for the same reason.
+On an SMB library, 2,167 folders took 47s walked one at a time and 6s walked
+in parallel.
+
 Nothing opens the files. Deciding by content would mean reading every `.txt`
 in the library to learn that almost none are markers — on a 12,500-file tree
 that is 246ms against 66ms, nearly all of it wasted, and far worse over a

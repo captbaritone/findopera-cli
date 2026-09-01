@@ -8,3 +8,4 @@ destination = Some("/Volumes/Opera/named")
 link = Hardlink
 require-variants = false
 follow-links = false
+ignore = []

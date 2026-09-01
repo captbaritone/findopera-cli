@@ -28,7 +28,7 @@ impl Tree {
     }
     /// Every (directory, id) pair found, with paths relative to the tree root.
     fn scan(&self) -> Vec<(String, String)> {
-        scan::scan(&self.0, false)
+        scan::scan(&self.0, false, &scan::Ignore::default())
             .markers
             .iter()
             .map(|m| {
@@ -155,7 +155,7 @@ fn a_marker_may_be_empty() {
 
 /// Every (directory, id, variant) found.
 fn scan_variants(t: &Tree) -> Vec<(String, String, Option<String>)> {
-    scan::scan(&t.0, false)
+    scan::scan(&t.0, false, &scan::Ignore::default())
         .markers
         .iter()
         .map(|m| {
@@ -215,4 +215,83 @@ fn the_same_marker_twice_is_still_reported_once() {
     t.touch("a/findopera-332 flac.txt");
     t.touch("a/Don Giovanni [findopera-332] flac.txt");
     assert_eq!(scan_variants(&t).len(), 1);
+}
+
+// ---- folders left alone ---------------------------------------------------
+
+fn scan_ignoring(t: &Tree, patterns: &[&str]) -> Vec<(String, String)> {
+    let owned: Vec<String> = patterns.iter().map(|s| (*s).to_string()).collect();
+    let ignore = scan::Ignore::new(&owned).expect("patterns compile");
+    scan::scan(&t.0, false, &ignore)
+        .markers
+        .iter()
+        .map(|m| {
+            let dir = m.directory.strip_prefix(&t.0).unwrap_or(&m.directory);
+            (fixture::slashes(&dir.display().to_string()), m.id.clone())
+        })
+        .collect()
+}
+
+#[test]
+fn a_named_folder_is_skipped_wherever_it_turns_up() {
+    // What a Synology leaves beside its media, at any depth.
+    let t = Tree::new("eadir");
+    t.touch("a/findopera-75.txt");
+    t.touch("a/@eaDir/findopera-10655.txt");
+    t.touch("@eaDir/findopera-1721.txt");
+    assert_eq!(
+        scan_ignoring(&t, &["@eaDir"]),
+        vec![("a".into(), "75".into())]
+    );
+}
+
+#[test]
+fn a_path_pattern_skips_only_that_one() {
+    let t = Tree::new("anchored");
+    t.touch("Incomplete/findopera-75.txt");
+    t.touch("Boxes/Incomplete/findopera-10655.txt");
+    let found = scan_ignoring(&t, &["Incomplete/**"]);
+    assert_eq!(
+        found,
+        vec![("Boxes/Incomplete".into(), "10655".into())],
+        "the one at the top is skipped, the one further down is not"
+    );
+}
+
+#[test]
+fn a_skipped_folder_is_never_looked_inside() {
+    // The point is pruning, not filtering: a folder that is skipped must cost
+    // nothing, because on a network mount looking inside it is a round trip.
+    // A directory with no permission to enter would raise an error if it were
+    // descended into, and none if it is left alone.
+    let t = Tree::new("pruned");
+    t.touch("keep/findopera-75.txt");
+    t.touch("skip/inner/findopera-10655.txt");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(t.0.join("skip"), fs::Permissions::from_mode(0o000))
+            .expect("make it unreadable");
+    }
+    let ignore = scan::Ignore::new(&["skip".to_string()]).expect("compiles");
+    let report = scan::scan(&t.0, false, &ignore);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(t.0.join("skip"), fs::Permissions::from_mode(0o755)).expect("restore");
+    }
+
+    assert_eq!(report.markers.len(), 1, "only the one that was kept");
+    assert!(
+        report.unreadable.is_empty(),
+        "and nothing tried to read inside: {:?}",
+        report.unreadable
+    );
+}
+
+#[test]
+fn no_patterns_leaves_everything_alone() {
+    let t = Tree::new("nopatterns");
+    t.touch("a/@eaDir/findopera-75.txt");
+    assert_eq!(scan_ignoring(&t, &[]).len(), 1);
 }

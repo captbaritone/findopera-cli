@@ -57,7 +57,11 @@ impl Fixture {
         let mut schema: Vec<FieldDoc> = FIELDS.to_vec();
         schema.push(scan::VARIANT);
         let tmpl = Template::parse(template, &schema).expect("template parses");
-        (scan::scan(&self.source, false), recordings(), tmpl)
+        (
+            scan::scan(&self.source, false, &scan::Ignore::default()),
+            recordings(),
+            tmpl,
+        )
     }
 }
 

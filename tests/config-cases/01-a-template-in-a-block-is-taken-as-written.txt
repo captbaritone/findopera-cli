@@ -11,3 +11,4 @@ destination = None
 link = Symlink
 require-variants = false
 follow-links = false
+ignore = []
