@@ -133,8 +133,9 @@ $ findopera search singer callas
 ```
 
 The kinds are `recording`, `opera`, `singer`, `conductor`, `composer` and
-`character`. Matching is partial and ignores case and accents, so `boheme`
-finds `La Bohème`.
+`character`, and each is its own subcommand, so `findopera search singer
+--help` offers only what applies to a singer. Matching is partial and ignores
+case and accents, so `boheme` finds `La Bohème`.
 
 A recording can be narrowed by more than its title — `--singer` may be
 repeated, `--year` matches within two years either side, and `--upc` takes the
@@ -154,6 +155,19 @@ first column, so a result can be handed straight to the next command:
 ```bash
 findopera search recording tosca --tabs | head -1 | cut -f1 | xargs findopera annotate
 ```
+
+A search shows the first `--first` matches, 10 by default, and says so when
+there are more:
+
+```
+findopera: these are the first 3, and there are more. Narrow the search, or raise --first.
+```
+
+There is no way to page through them, on purpose — narrowing is a better
+answer than paging, and a result you had to walk to is one you could have asked
+for. What matters is that a full page is never mistaken for the whole answer:
+something that matched perfectly well would look like it does not exist.
+`--json` carries the same fact as `truncated`, beside `results`.
 
 The other kinds exist because a recording is made of them: describing a new one
 through the API means naming its opera, its conductor, and a singer and
@@ -334,7 +348,7 @@ same variant, or the template never mentions `{{variant}}` — and the report
 says which, since those send you to different files.
 
 ```bash
-$ findopera fields    # the syntax, and every field with whether it is always there
+$ findopera template  # the syntax, and every field with whether it is always there
 ```
 
 A bad template never costs a network round trip — it is checked against the

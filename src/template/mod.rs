@@ -78,7 +78,7 @@ mod render;
 pub use lexer::Span;
 pub use render::{to_path, PathError};
 
-/// The whole syntax, briefly, for `findopera fields` and the starter config.
+/// The whole syntax, briefly, for `findopera template` and the starter config.
 ///
 /// Kept here rather than written out in each place that shows it, so the two
 /// cannot come to disagree about what the language is.

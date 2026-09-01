@@ -163,7 +163,7 @@ pub fn starter() -> String {
 "#;
     let rest = r#"
 #
-# For every field you can use here, run `findopera fields`. The ones it marks
+# For every field you can use here, run `findopera template`. The ones it marks
 # `always` need no fallback; the rest want one, or a [ … ] around them, and
 # `findopera organize` will say so if they have neither.
 template = '''

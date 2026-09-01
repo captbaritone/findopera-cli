@@ -181,11 +181,18 @@ command:
 
   findopera search recording tosca --tabs | head -1 | cut -f1 | xargs findopera annotate
 
-A recording can be narrowed by more than its title — --singer may be repeated,
---year matches within two years either side, and --upc takes the barcode off
-the box, in whatever form it is printed. The other kinds take a name
-and nothing else; searching is case and accent insensitive, and matches part
-of a name, so `boheme` finds `La Bohème`.
+Each kind takes what applies to it. A recording can be narrowed by more than
+its title — --singer may be repeated, --year matches within two years either
+side, and --upc takes the barcode off the box in whatever form it is printed.
+The rest take a name and nothing else, so `findopera search singer --help` is
+short.
+
+Searching is case and accent insensitive and matches part of a name, so
+`boheme` finds `La Bohème`.
+
+Only the first --first matches are shown, 10 by default. When there are more,
+it says so — there is no way to page through them, because narrowing is the
+better answer, but a full page should never be mistaken for the whole of it.
 
 Composers, singers, conductors and characters are what a recording is made of,
 and their ids are what it takes to describe a new one.",
@@ -229,8 +236,19 @@ Examples:
     )]
     Annotate(AnnotateArgs),
 
-    /// List every field a template may use, and the syntax.
-    Fields,
+    /// The template language: its syntax, and every field.
+    #[command(long_about = "\
+Print the template language — the syntax, and every field a template may use.
+
+A template says what a folder should be called. `schema` does the same job for
+the API: both print the reference for a language this program understands.
+
+  findopera template
+  findopera template | grep singer
+
+The list goes to stdout and the syntax to stderr, so grepping for a field
+works without the preamble getting in the way.")]
+    Template,
 
     /// Send a GraphQL query to findopera.com and print the response.
     #[command(
@@ -526,29 +544,12 @@ struct DescribeArgs {
     json: bool,
 }
 
+/// What every search shares, whatever it is looking for.
 #[derive(Args)]
-struct SearchArgs {
-    /// What to look for.
-    #[arg(value_name = "KIND", value_parser = ["recording", "opera", "singer", "conductor", "composer", "character"])]
-    kind: String,
+struct Looking {
     /// The name, or part of one.
     #[arg(value_name = "QUERY", default_value = "")]
     query: Vec<String>,
-    /// A singer on the recording. May be repeated; all must appear.
-    #[arg(long, value_name = "NAME")]
-    singer: Vec<String>,
-    /// The conductor of the recording.
-    #[arg(long, value_name = "NAME")]
-    conductor: Option<String>,
-    /// Recorded within two years of this.
-    #[arg(long, value_name = "YEAR")]
-    year: Option<i64>,
-    /// The barcode off the box.
-    ///
-    /// However it is written: spaces and dashes are ignored, and the 12, 13
-    /// and 14 digit forms of the same code all find each other.
-    #[arg(long, value_name = "CODE")]
-    upc: Option<String>,
     /// How many results.
     #[arg(long, default_value_t = 10, value_name = "N")]
     first: u32,
@@ -564,6 +565,55 @@ struct SearchArgs {
     /// Token to identify as.
     #[arg(long, value_name = "TOKEN")]
     token: Option<String>,
+}
+
+#[derive(Args)]
+struct SearchRecordingArgs {
+    #[command(flatten)]
+    looking: Looking,
+    /// A singer on the recording. May be repeated; all must appear.
+    #[arg(long, value_name = "NAME")]
+    singer: Vec<String>,
+    /// The conductor of the recording.
+    #[arg(long, value_name = "NAME")]
+    conductor: Option<String>,
+    /// Recorded within two years of this.
+    #[arg(long, value_name = "YEAR")]
+    year: Option<i64>,
+    /// The barcode off the box.
+    ///
+    /// However it is written: spaces and dashes are ignored, and the 12, 13
+    /// and 14 digit forms of the same code all find each other.
+    #[arg(long, value_name = "CODE")]
+    upc: Option<String>,
+}
+
+/// The kinds, as subcommands rather than a value.
+///
+/// A recording is narrowed by things no other kind has, and as one flat
+/// command `--help` offered `--singer` and `--upc` to someone looking for an
+/// opera. Each kind now documents only what applies to it, and passing the
+/// wrong flag stops being a mistake this has to catch and explain.
+#[derive(Subcommand)]
+enum Searching {
+    /// A recording, by its opera, cast, conductor, year or barcode.
+    Recording(SearchRecordingArgs),
+    /// An opera, by title.
+    Opera(Looking),
+    /// A singer, by name.
+    Singer(Looking),
+    /// A conductor, by name.
+    Conductor(Looking),
+    /// A composer, by name.
+    Composer(Looking),
+    /// A character, by name.
+    Character(Looking),
+}
+
+#[derive(Args)]
+struct SearchArgs {
+    #[command(subcommand)]
+    what: Searching,
 }
 
 #[derive(Args)]
@@ -678,7 +728,7 @@ fn run() -> i32 {
         Command::Describe(args) => cmd_describe(args),
         Command::Search(args) => cmd_search(args),
         Command::Annotate(args) => cmd_annotate(args),
-        Command::Fields => cmd_fields(),
+        Command::Template => cmd_template(),
         Command::Graphql(args) => cmd_graphql(args),
         Command::Schema(args) => cmd_schema(args),
         Command::Feedback(args) => cmd_feedback(args),
@@ -1009,67 +1059,66 @@ fn json_schema(kind: &crud::Type) -> serde_json::Value {
 }
 
 fn cmd_search(args: SearchArgs) -> i32 {
-    let kind = match args.kind.as_str() {
-        "recording" => api::Kind::Recording,
-        "opera" => api::Kind::Opera,
-        "singer" => api::Kind::Singer,
-        "conductor" => api::Kind::Conductor,
-        "composer" => api::Kind::Composer,
-        "character" => api::Kind::Character,
-        other => {
-            eprintln!("findopera: there is nothing called `{other}` to search");
-            return 2;
+    // Each kind carries only the ways it can be narrowed, so the shape of the
+    // request is settled by the time this runs.
+    let (kind, looking, criteria) = match args.what {
+        Searching::Recording(a) => {
+            let text = a.looking.query.join(" ");
+            let first = a.looking.first;
+            (
+                api::Kind::Recording,
+                a.looking,
+                api::Criteria {
+                    text,
+                    singers: a.singer,
+                    conductor: a.conductor,
+                    year: a.year,
+                    upc: a.upc,
+                    first,
+                },
+            )
         }
+        Searching::Opera(l) => plain(api::Kind::Opera, l),
+        Searching::Singer(l) => plain(api::Kind::Singer, l),
+        Searching::Conductor(l) => plain(api::Kind::Conductor, l),
+        Searching::Composer(l) => plain(api::Kind::Composer, l),
+        Searching::Character(l) => plain(api::Kind::Character, l),
     };
 
-    let text = args.query.join(" ");
-    let narrowed = !args.singer.is_empty()
-        || args.conductor.is_some()
-        || args.year.is_some()
-        || args.upc.is_some();
-    if text.trim().is_empty() && !narrowed {
+    let narrowed = !criteria.singers.is_empty()
+        || criteria.conductor.is_some()
+        || criteria.year.is_some()
+        || criteria.upc.is_some();
+    if criteria.text.trim().is_empty() && !narrowed {
         eprintln!("findopera: nothing to search for");
-        eprintln!("  help: findopera search {} <name>", args.kind);
-        return 2;
-    }
-    // Saying nothing and quietly ignoring them is worse than refusing: the
-    // results would look like an answer to a question that was not asked.
-    if kind != api::Kind::Recording && narrowed {
-        eprintln!(
-            "findopera: --singer, --conductor, --year and --upc narrow a recording, and this \
-             is searching for a {}",
-            args.kind
-        );
+        eprintln!("  help: findopera search {} <name>", kind_word(kind));
         return 2;
     }
 
-    let api = match client(&args.endpoint, args.token.as_ref()) {
+    let api = match client(&looking.endpoint, looking.token.as_ref()) {
         Ok(c) => c,
         Err(code) => return code,
     };
-    let criteria = api::Criteria {
-        text,
-        singers: args.singer,
-        conductor: args.conductor,
-        year: args.year,
-        upc: args.upc,
-        first: args.first,
+    let results = match api.search(kind, &criteria) {
+        Ok(r) => r,
+        Err(e) => return failed(&e, looking.json),
     };
-    let found = match api.search(kind, &criteria) {
-        Ok(f) => f,
-        Err(e) => return failed(&e, args.json),
-    };
-    if args.json {
+    let found = &results.found;
+    if looking.json {
         let rows: Vec<serde_json::Value> = found
             .iter()
             .map(|f| serde_json::json!({ "id": f.id, "name": f.name, "about": f.about }))
             .collect();
+        // An object rather than a bare list, because `truncated` has to travel
+        // with the results. A caller reading the list and not the flag is the
+        // exact mistake this exists to prevent, and a list cannot carry it.
+        let body = serde_json::json!({ "results": rows, "truncated": results.more });
         let mut out = std::io::stdout().lock();
         emit(
             &mut out,
             format_args!(
                 "{}",
-                serde_json::to_string_pretty(&rows).unwrap_or_default()
+                serde_json::to_string_pretty(&body).unwrap_or_default()
             ),
         );
         // Nothing found is not an error in JSON: an empty list is a perfectly
@@ -1091,8 +1140,8 @@ fn cmd_search(args: SearchArgs) -> i32 {
         .map(|f| f.name.chars().count())
         .max()
         .unwrap_or(0);
-    for f in &found {
-        let line = if args.tabs {
+    for f in found {
+        let line = if looking.tabs {
             format!("{}\t{}\t{}", f.id, f.name, f.about)
         } else {
             let pad = name_width.saturating_sub(f.name.chars().count());
@@ -1102,7 +1151,40 @@ fn cmd_search(args: SearchArgs) -> i32 {
             return 0;
         }
     }
+    // Said after the results, and on stderr, so it cannot be mistaken for one
+    // of them. Without it a full page reads as the whole answer, and something
+    // that matched perfectly well looks like it does not exist.
+    if results.more {
+        drop(out);
+        eprintln!(
+            "findopera: these are the first {}, and there are more. Narrow the search, or \
+             raise --first.",
+            found.len()
+        );
+    }
     0
+}
+
+/// A kind that is looked up by name and nothing else.
+fn plain(kind: api::Kind, looking: Looking) -> (api::Kind, Looking, api::Criteria) {
+    let criteria = api::Criteria {
+        text: looking.query.join(" "),
+        first: looking.first,
+        ..Default::default()
+    };
+    (kind, looking, criteria)
+}
+
+/// What to call a kind when telling someone how to ask again.
+fn kind_word(kind: api::Kind) -> &'static str {
+    match kind {
+        api::Kind::Recording => "recording",
+        api::Kind::Opera => "opera",
+        api::Kind::Singer => "singer",
+        api::Kind::Conductor => "conductor",
+        api::Kind::Composer => "composer",
+        api::Kind::Character => "character",
+    }
 }
 
 fn cmd_annotate(args: AnnotateArgs) -> i32 {
@@ -1788,10 +1870,10 @@ fn prepare(
                 eprintln!("  help: {help}");
             }
             // The engine has no business knowing what this program is called,
-            // so the pointer to it is added here. `fields` lists the syntax as
+            // so the pointer to it is added here. `template` lists the syntax as
             // well as the fields, which makes it the right answer whether the
             // template named something that is not there or was malformed.
-            eprintln!("  see `findopera fields` for every field and the syntax");
+            eprintln!("  see `findopera template` for every field and the syntax");
             return Err(2);
         }
     };
@@ -1813,8 +1895,8 @@ fn prepare(
     })
 }
 
-fn cmd_fields() -> i32 {
-    // The list is the result and goes to stdout, so `findopera fields | grep
+fn cmd_template() -> i32 {
+    // The list is the result and goes to stdout, so `findopera template | grep
     // singer` stays useful. Everything explaining it goes to stderr.
     eprintln!("{}", findopera::SYNTAX);
     eprintln!(

@@ -785,6 +785,17 @@ impl Kind {
     }
 }
 
+/// What a search found, and whether that was all of it.
+pub struct Results {
+    pub found: Vec<Found>,
+    /// There were more matches than were asked for.
+    ///
+    /// Known by asking for one more than will be shown: if it arrives, there
+    /// is at least one more. That says "there are others" without a count, and
+    /// a count would cost the server a second pass over the whole match.
+    pub more: bool,
+}
+
 /// One result, already reduced to what a line of output needs.
 ///
 /// Flattened here rather than in the caller because the shape differs per
@@ -816,9 +827,12 @@ fn lifespan(value: &serde_json::Value) -> String {
 
 impl Client {
     /// Look something up by name.
-    pub fn search(&self, kind: Kind, criteria: &Criteria) -> Result<Vec<Found>, ApiError> {
+    pub fn search(&self, kind: Kind, criteria: &Criteria) -> Result<Results, ApiError> {
         let (operation, field) = kind.operation();
-        let first = criteria.first.max(1);
+        let wanted = criteria.first.max(1);
+        // One more than will be shown, so that a full page can be told from a
+        // page that happens to end there.
+        let first = wanted.saturating_add(1);
 
         let variables = if kind == Kind::Recording {
             let mut filter = serde_json::Map::new();
@@ -847,7 +861,10 @@ impl Client {
             .as_array()
             .ok_or_else(|| ApiError::Unreachable(format!("the API returned no {field}")))?;
 
-        Ok(list.iter().map(|v| found(kind, v)).collect())
+        let mut all: Vec<Found> = list.iter().map(|v| found(kind, v)).collect();
+        let more = all.len() > wanted as usize;
+        all.truncate(wanted as usize);
+        Ok(Results { found: all, more })
     }
 }
 
