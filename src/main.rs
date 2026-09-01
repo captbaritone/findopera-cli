@@ -176,7 +176,13 @@ For anything unattended, set FINDOPERA_TOKEN instead and store nothing.
 With --new there is nothing to paste: findopera.com issues one on the spot.
 It asks for no account and no proof of who you are — the token exists so that
 your requests can be told apart from everyone else's, not so that you can be
-identified. Edits made with it are recorded under a name it gives you.")]
+identified. Edits made with it are recorded under a name it gives you.
+
+  findopera login --new
+  findopera login --new --label laptop --email you@example.com
+
+--email is optional and never verified. It is somewhere to reach you if
+something you are doing turns out to be blocked, and is not published.")]
     Login(LoginArgs),
 
     /// Forget the stored token.
@@ -280,6 +286,13 @@ struct LoginArgs {
     /// What to call the new token, so it can be told from your others.
     #[arg(long, value_name = "TEXT", requires = "new")]
     label: Option<String>,
+    /// Optional address to reach you on, if something you do gets blocked.
+    ///
+    /// Never verified, never published, and not a login. It exists so that
+    /// someone stuck against a limit or a bug at the other end can be told
+    /// about it. Leave it out and everything still works.
+    #[arg(long, value_name = "ADDRESS", requires = "new")]
+    email: Option<String>,
     /// GraphQL endpoint.
     #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
     endpoint: String,
@@ -351,8 +364,10 @@ fn request_token(args: &LoginArgs) -> Result<(String, String), i32> {
     // needing a token to ask for one would be a closed loop.
     let api = api::Client::new(&args.endpoint, None);
     let payload = match api.post(
-        "mutation NewToken($label: String) { createAccessToken(label: $label) { token username } }",
-        Some(serde_json::json!({ "label": args.label })),
+        "mutation NewToken($label: String, $email: String) {\n\
+         \x20 createAccessToken(label: $label, email: $email) { token username }\n\
+         }",
+        Some(serde_json::json!({ "label": args.label, "email": args.email })),
     ) {
         Ok(p) => p,
         Err(e) => {
@@ -384,6 +399,12 @@ fn cmd_login(args: LoginArgs) -> i32 {
             Ok(path) => {
                 println!("{}", path.display());
                 eprintln!("findopera: your edits will be recorded as {username}");
+                if args.email.is_none() {
+                    eprintln!(
+                        "findopera: nothing to reach you on. `--email` is optional, and only used \
+                     if\n\x20           something you are doing turns out to be blocked."
+                    );
+                }
                 // Only the server can show the token, and only once. Saying so
                 // here is cheaper than someone discovering it later.
                 eprintln!(

@@ -239,6 +239,7 @@ yours:
 
 ```bash
 findopera login --new           # findopera.com issues one on the spot
+findopera login --new --email you@example.com
 findopera login < token.txt     # or paste one you already have
 export FINDOPERA_TOKEN=...      # or this, for anything unattended
 findopera logout
@@ -249,6 +250,12 @@ to identify you; it is there so your requests can be told apart from everyone
 else's — which is what lets an edit be attributed, a bad run be found together
 and undone, and your reads be given a limit of their own. Edits made with it
 are recorded under a name the server gives you.
+
+`--email` is optional and never verified. It is somewhere to reach you if
+something you are doing turns out to be blocked — a limit, or a bug at the
+other end — which is otherwise impossible for an account nobody proved anything
+to get. It is not a login, it is not published, and nothing in the schema can
+read it back.
 
 findopera.com keeps only a hash of the token, so it is shown once and cannot be
 looked up again. A lost one is replaced, not recovered.
