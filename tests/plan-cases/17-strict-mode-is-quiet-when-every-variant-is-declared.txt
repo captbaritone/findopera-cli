@@ -1,0 +1,14 @@
+Nothing was numbered, so strict mode has nothing to say.
+
+--- template
+{{opera.title}} \[{{id}}\][ ({{variant}})]
+--- tree
+rips/flac/332 flac.txt
+rips/mp3/332 mp3.txt
+--- strict
+yes
+--- listing
+rips/flac	Don Giovanni [332] (flac)
+rips/mp3	Don Giovanni [332] (mp3)
+--- report
+(empty)

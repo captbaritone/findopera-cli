@@ -1,0 +1,16 @@
+The markers say the same thing, so the template is not at fault and the
+message must not send the reader to it.
+
+--- template
+{{opera.title}} \[{{id}}\][ ({{variant}})]
+--- tree
+rips/a/332 flac.txt
+rips/b/332 flac.txt
+--- listing
+rips/a	Don Giovanni [332] (flac)
+rips/b	Don Giovanni [332] (flac)
+--- report
+2 directories want the name "Don Giovanni [332] (flac)":
+    rips/a/332 flac.txt
+    rips/b/332 flac.txt
+    ^ these markers declare the same variant; give one a different word

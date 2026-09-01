@@ -1,0 +1,12 @@
+--- template
+{{opera.title}} \[{{id}}\][ ({{variant}})]
+--- tree
+rips/a/332.txt
+rips/b/332.txt
+elsewhere/75.txt
+--- listing
+elsewhere	Billy Budd [75]
+rips/a	Don Giovanni [332] (1)
+rips/b	Don Giovanni [332] (2)
+--- report
+2 directories were numbered by walk order because no variant was declared; those numbers shift as the library changes. Write a word into each marker to fix them — mv 'rips/a/332.txt' 'rips/a/332 <word>.txt' — or pass --require-variants to make this an error.

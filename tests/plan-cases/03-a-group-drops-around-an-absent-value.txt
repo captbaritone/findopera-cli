@@ -1,0 +1,10 @@
+--- template
+{{opera.title}}[ ({{year}})][ - {{chorus}}]
+--- tree
+sosarme/10655.txt
+billy/75.txt
+--- listing
+billy	Billy Budd (1967) - Ambrosian Opera Chorus
+sosarme	Sosarme, Re di Media (2026)
+--- report
+(empty)

@@ -36,10 +36,46 @@ also keeps the contents from being load bearing: a marker may be empty, so
 Results go to stdout, one line per recording; everything else to stderr.
 `--tabs` separates the columns with a tab instead of padding, for piping.
 
-Two directories can legitimately name one recording — a FLAC rip and an MP3
-rip of the same performance. No template can separate them, because nothing in
-the recording does, so `scan` reports the clash and exits non-zero rather than
-proposing one destination for two sources.
+## Two rips of one recording
+
+A FLAC rip and an MP3 rip of the same performance are the same *recording*, so
+no template separates them from the metadata alone. Only the person who has
+both knows what makes them different — and the marker's filename is where they
+say so. Anything after the id is a **variant**:
+
+```
+332 flac.txt        332 mp3.txt        Don Giovanni [findopera-332] SACD.txt
+```
+
+which a template picks up as `{{variant}}`. It is nullable, so it wants a
+group, and that group vanishes for every recording you only have once:
+
+```bash
+$ findopera scan '{{opera.title}} \[{{id}}\][ ({{variant}})]' ~/Music
+./rips/flac  Don Giovanni [332] (flac)
+./rips/mp3   Don Giovanni [332] (mp3)
+./billy      Billy Budd [75]
+```
+
+Where no variant was given and two directories still want one name, `scan`
+numbers them by walk order. That is the designed fallback, so the plan is
+complete and can be acted on — but the numbers are not names: add a third rip
+that sorts first and the two already there are renumbered. So it says so, in
+one line, and carries on:
+
+```
+findopera: 2 directories were numbered by walk order because no variant was
+declared; those numbers shift as the library changes. Write a word into each
+marker to fix them — mv 'rips/a/332.txt' 'rips/a/332 <word>.txt' — or pass
+--require-variants to make this an error.
+```
+
+`--require-variants` turns that into a failure and spells out every marker,
+for a script that means to leave nothing unnamed.
+
+A clash that numbering cannot fix always fails: either the markers declare the
+same variant, or the template never mentions `{{variant}}` — and the report
+says which, since those send you to different files.
 
 ```bash
 $ findopera fields    # every path a template may use, and which are always present

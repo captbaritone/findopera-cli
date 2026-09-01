@@ -1,0 +1,17 @@
+`a` declares the variant `2`, so it is not in the clash — it renders
+differently. But numbering its neighbours 1 and 2 would walk straight into it,
+so the numbering counts every name not being renumbered as taken and skips to
+3.
+
+--- template
+{{opera.title}} \[{{id}}\][ ({{variant}})]
+--- tree
+a/332 2.txt
+b/332.txt
+c/332.txt
+--- listing
+a	Don Giovanni [332] (2)
+b	Don Giovanni [332] (1)
+c	Don Giovanni [332] (3)
+--- report
+2 directories were numbered by walk order because no variant was declared; those numbers shift as the library changes. Write a word into each marker to fix them — mv 'b/332.txt' 'b/332 <word>.txt' — or pass --require-variants to make this an error.

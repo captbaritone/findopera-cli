@@ -82,6 +82,7 @@ pub use render::{to_path, PathError};
 ///
 /// The set of these is the single source of truth for which paths are valid;
 /// [`Template::parse`] rejects anything not named here.
+#[derive(Clone, Copy)]
 pub struct FieldDoc {
     pub path: &'static str,
     pub description: &'static str,

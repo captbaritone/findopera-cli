@@ -1,11 +1,11 @@
 //! `findopera` — name a music library from FindOpera metadata.
 
 use clap::{Args, Parser, Subcommand};
-use findopera::model::{Recording, FIELDS};
-use findopera::{api, scan, to_path, Template};
-use std::collections::BTreeMap;
+use findopera::model::FIELDS;
+use findopera::FieldDoc;
+use findopera::{api, plan, scan, Template};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const AFTER_HELP: &str = "\
 Exit codes:
@@ -71,6 +71,13 @@ struct ScanArgs {
     /// for feeding another program.
     #[arg(long)]
     tabs: bool,
+    /// Fail if any directory had to be numbered.
+    ///
+    /// Two rips of one recording get a number each unless a marker says which
+    /// is which, and a number taken from walk order shifts as the library
+    /// changes. This insists every one of them be named.
+    #[arg(long)]
+    require_variants: bool,
     /// GraphQL endpoint.
     #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
     endpoint: String,
@@ -113,9 +120,14 @@ fn cmd_scan(args: ScanArgs) -> i32 {
         return 1;
     }
 
+    // The schema a scan template is checked against is the model's, plus the
+    // one field that comes from the marker rather than the recording.
+    let mut schema: Vec<FieldDoc> = FIELDS.to_vec();
+    schema.push(scan::VARIANT);
+
     // Parse before fetching: a bad template is the caller's mistake, and
     // should not cost a network round trip to discover.
-    let tmpl = match Template::parse(&args.template, FIELDS) {
+    let tmpl = match Template::parse(&args.template, &schema) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("findopera: {e}");
@@ -138,86 +150,28 @@ fn cmd_scan(args: ScanArgs) -> i32 {
         }
     };
 
-    // Pad the directory column so the two line up, unless the caller wants
-    // this piped somewhere.
-    let width = if args.tabs {
-        0
-    } else {
-        report
-            .markers
-            .iter()
-            .map(|m| m.directory.display().to_string().chars().count())
-            .max()
-            .unwrap_or(0)
-    };
+    let plan = plan::plan(&report.markers, &recordings, &tmpl);
 
     let mut out = std::io::stdout().lock();
-    let mut failed = false;
-    // Two directories can legitimately name one recording — a FLAC rip and an
-    // MP3 rip of the same performance. The template cannot tell them apart,
-    // because nothing in the recording does: they *are* the same recording.
-    // What matters is that this is said out loud, since acting on a proposal
-    // where two sources share one destination loses a directory.
-    let mut proposed: BTreeMap<String, Vec<&Path>> = BTreeMap::new();
-    for marker in &report.markers {
-        let Some(path) = render_one(&tmpl, &recordings, &marker.id) else {
-            eprintln!("  (from {})", marker.marker_path.display());
-            failed = true;
-            continue;
-        };
-        proposed
-            .entry(path.clone())
-            .or_default()
-            .push(&marker.directory);
-        let dir = marker.directory.display().to_string();
-        let ok = if args.tabs {
-            emit(&mut out, format_args!("{dir}\t{path}"))
-        } else {
-            emit(&mut out, format_args!("{dir:<width$}  {path}"))
-        };
-        if !ok {
+    for line in plan.listing(args.tabs) {
+        if !emit(&mut out, format_args!("{line}")) {
             return 0;
         }
     }
-
-    let clashes: Vec<_> = proposed.iter().filter(|(_, v)| v.len() > 1).collect();
-    if !clashes.is_empty() {
-        let dirs: usize = clashes.iter().map(|(_, v)| v.len()).sum();
-        eprintln!(
-            "\nfindopera: {dirs} directories want {} name(s) — the recording is the \
-             same, so no template can separate them:",
-            clashes.len()
-        );
-        for (path, sources) in &clashes {
-            eprintln!("  {path}");
-            for s in sources.iter() {
-                eprintln!("      {}", s.display());
+    let report_lines = plan.report(args.require_variants);
+    if !report_lines.is_empty() {
+        eprintln!();
+        for line in report_lines {
+            // The continuation lines are indented and belong to the line
+            // above; prefixing each of them would break the shape.
+            if line.starts_with(' ') {
+                eprintln!("{line}");
+            } else {
+                eprintln!("findopera: {line}");
             }
         }
-        failed = true;
     }
-    i32::from(failed)
-}
-
-/// Render one id, reporting to stderr and yielding `None` if it cannot be.
-fn render_one(
-    tmpl: &Template,
-    recordings: &BTreeMap<String, Recording>,
-    id: &str,
-) -> Option<String> {
-    let Some(rec) = recordings.get(id) else {
-        eprintln!("findopera: recording {id} is not in the FindOpera database");
-        return None;
-    };
-    // Rendering cannot fail; only judging the result as a path can.
-    let rendered = tmpl.render(rec);
-    match to_path(&rendered) {
-        Ok(segments) => Some(segments.join("/")),
-        Err(e) => {
-            eprintln!("findopera: recording {id} {e}");
-            None
-        }
-    }
+    i32::from(plan.blocked(args.require_variants))
 }
 
 fn cmd_fields() -> i32 {

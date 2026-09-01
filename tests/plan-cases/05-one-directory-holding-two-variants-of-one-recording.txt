@@ -1,0 +1,20 @@
+The same two markers, but each says which rip it is. They are different
+statements, so both are kept and the directory is offered under both names.
+
+This is almost certainly a mistake: a directory holds one rip, so it cannot be
+both the FLAC and the MP3 of one recording. It is not the same as a box set,
+which is one directory holding markers for *different* recordings — that is
+legitimate, and case 02 covers it. Recorded here as it behaves today; the
+combination is precisely detectable (one directory, one id, two variants) if
+it should become an error.
+
+--- template
+{{opera.title}} \[{{id}}\][ ({{variant}})]
+--- tree
+rips/only/332 flac.txt
+rips/only/332 mp3.txt
+--- listing
+rips/only	Don Giovanni [332] (flac)
+rips/only	Don Giovanni [332] (mp3)
+--- report
+(empty)

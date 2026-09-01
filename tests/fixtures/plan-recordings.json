@@ -1,0 +1,381 @@
+[
+  {
+    "year": 1978,
+    "month": null,
+    "day": null,
+    "orchestra": "Opéra de Paris",
+    "chorus": "Opéra de Paris",
+    "id": 332,
+    "conductor": {
+      "born": null,
+      "died": null,
+      "fullName": "Lorin Maazel",
+      "firstName": "Lorin",
+      "lastName": "Maazel"
+    },
+    "upcs": [
+      {
+        "upc": "828768775820"
+      },
+      {
+        "upc": "884977778021"
+      }
+    ],
+    "url": "https://findopera.com/recording/332/don-giovanni-1978-maazel",
+    "opera": {
+      "englishTitle": null,
+      "librettist": "",
+      "title": "Don Giovanni",
+      "url": "https://findopera.com/opera/115/don-giovanni",
+      "language": {
+        "name": "Italian",
+        "abbreviation": "it"
+      },
+      "composer": {
+        "born": 1756,
+        "died": 1791,
+        "fullName": "Wolfgang Amadeus Mozart",
+        "firstName": "Wolfgang Amadeus",
+        "lastName": "Mozart"
+      }
+    },
+    "notedSingers": [
+      {
+        "fullName": "Ruggero Raimondi",
+        "firstName": "Ruggero",
+        "lastName": "Raimondi"
+      },
+      {
+        "fullName": "Kiri Te Kanawa",
+        "firstName": "Kiri",
+        "lastName": "Te Kanawa"
+      },
+      {
+        "fullName": "José van Dam",
+        "firstName": "José",
+        "lastName": "van Dam"
+      }
+    ]
+  },
+  {
+    "year": 1978,
+    "month": null,
+    "day": null,
+    "orchestra": "Opéra de Paris",
+    "chorus": "Opéra de Paris",
+    "id": 5876,
+    "upcs": [],
+    "conductor": {
+      "born": null,
+      "died": null,
+      "fullName": "Lorin Maazel",
+      "firstName": "Lorin",
+      "lastName": "Maazel"
+    },
+    "url": "https://findopera.com/recording/5876/don-giovanni-1978-maazel",
+    "opera": {
+      "englishTitle": null,
+      "librettist": "",
+      "title": "Don Giovanni",
+      "url": "https://findopera.com/opera/115/don-giovanni",
+      "language": {
+        "name": "Italian",
+        "abbreviation": "it"
+      },
+      "composer": {
+        "born": 1756,
+        "died": 1791,
+        "fullName": "Wolfgang Amadeus Mozart",
+        "firstName": "Wolfgang Amadeus",
+        "lastName": "Mozart"
+      }
+    },
+    "notedSingers": [
+      {
+        "fullName": "Ruggero Raimondi",
+        "firstName": "Ruggero",
+        "lastName": "Raimondi"
+      },
+      {
+        "fullName": "Kiri Te Kanawa",
+        "firstName": "Kiri",
+        "lastName": "Te Kanawa"
+      },
+      {
+        "fullName": "José van Dam",
+        "firstName": "José",
+        "lastName": "van Dam"
+      }
+    ]
+  },
+  {
+    "year": 1967,
+    "month": null,
+    "day": null,
+    "orchestra": "London Symphony",
+    "chorus": "Ambrosian Opera Chorus",
+    "id": 75,
+    "conductor": {
+      "born": null,
+      "died": null,
+      "fullName": "Benjamin Britten",
+      "firstName": "Benjamin",
+      "lastName": "Britten"
+    },
+    "upcs": [
+      {
+        "upc": "00028941742827"
+      },
+      {
+        "upc": "028941742827"
+      },
+      {
+        "upc": "028947560203"
+      },
+      {
+        "upc": "028947853640"
+      }
+    ],
+    "url": "https://findopera.com/recording/75/billy-budd-1967-britten",
+    "opera": {
+      "englishTitle": null,
+      "librettist": "",
+      "title": "Billy Budd",
+      "url": "https://findopera.com/opera/93/billy-budd",
+      "language": {
+        "name": "English",
+        "abbreviation": "en"
+      },
+      "composer": {
+        "born": 1913,
+        "died": 1976,
+        "fullName": "Benjamin Britten",
+        "firstName": "Benjamin",
+        "lastName": "Britten"
+      }
+    },
+    "notedSingers": [
+      {
+        "fullName": "Peter Pears",
+        "firstName": "Peter",
+        "lastName": "Pears"
+      },
+      {
+        "fullName": "John Shirley-Quirk",
+        "firstName": "John",
+        "lastName": "Shirley-Quirk"
+      },
+      {
+        "fullName": "Robert Tear",
+        "firstName": "Robert",
+        "lastName": "Tear"
+      }
+    ]
+  },
+  {
+    "year": 2026,
+    "month": 0,
+    "day": 0,
+    "orchestra": "Orchestre de l'Opéra Royal",
+    "chorus": null,
+    "id": 10655,
+    "conductor": {
+      "born": null,
+      "died": null,
+      "fullName": "Marco Angioloni",
+      "firstName": "Marco",
+      "lastName": "Angioloni"
+    },
+    "upcs": [
+      {
+        "upc": "3760385430720"
+      }
+    ],
+    "url": "https://findopera.com/recording/10655/sosarme-re-di-media-2026-angioloni",
+    "opera": {
+      "englishTitle": null,
+      "librettist": "",
+      "language": null,
+      "title": "Sosarme, Re di Media",
+      "url": "https://findopera.com/opera/1254/sosarme-re-di-media",
+      "composer": {
+        "born": 1685,
+        "died": 1759,
+        "fullName": "George Frideric Handel",
+        "firstName": "George Frideric",
+        "lastName": "Handel"
+      }
+    },
+    "notedSingers": [
+      {
+        "fullName": "Rémy Brès-Feuillet",
+        "firstName": "Rémy",
+        "lastName": "Brès-Feuillet"
+      },
+      {
+        "fullName": "Sarah Charles",
+        "firstName": "Sarah",
+        "lastName": "Charles"
+      },
+      {
+        "fullName": "Éléonore Pancrazi",
+        "firstName": "Éléonore",
+        "lastName": "Pancrazi"
+      }
+    ]
+  },
+  {
+    "year": 1969,
+    "month": null,
+    "day": null,
+    "orchestra": "English Chamber Orchestra",
+    "chorus": "Ambrosian Opera Chorus",
+    "id": 1721,
+    "conductor": {
+      "born": 1930,
+      "died": null,
+      "fullName": "Richard Bonynge",
+      "firstName": "Richard",
+      "lastName": "Bonynge"
+    },
+    "upcs": [
+      {
+        "upc": "00028941446121"
+      }
+    ],
+    "url": "https://findopera.com/recording/1721/l-elisir-d-amore-1969-bonynge",
+    "opera": {
+      "englishTitle": "The Elixir of Love",
+      "librettist": "",
+      "title": "L'elisir d'amore",
+      "url": "https://findopera.com/opera/125/l-elisir-d-amore",
+      "language": {
+        "name": "Italian",
+        "abbreviation": "it"
+      },
+      "composer": {
+        "born": 1797,
+        "died": 1848,
+        "fullName": "Gaetano Donizetti",
+        "firstName": "Gaetano",
+        "lastName": "Donizetti"
+      }
+    },
+    "notedSingers": [
+      {
+        "fullName": "Joan Sutherland",
+        "firstName": "Joan",
+        "lastName": "Sutherland"
+      },
+      {
+        "fullName": "Luciano Pavarotti",
+        "firstName": "Luciano",
+        "lastName": "Pavarotti"
+      },
+      {
+        "fullName": "Spiro Malas",
+        "firstName": "Spiro",
+        "lastName": "Malas"
+      }
+    ]
+  },
+  {
+    "year": 1980,
+    "month": null,
+    "day": null,
+    "orchestra": "Conservatorio di Santa Cecilia",
+    "chorus": "Conservatorio di Santa Cecilia",
+    "id": 5000,
+    "upcs": [],
+    "conductor": {
+      "born": null,
+      "died": null,
+      "fullName": "Ottavio Ziino",
+      "firstName": "Ottavio",
+      "lastName": "Ziino"
+    },
+    "url": "https://findopera.com/recording/5000/maria-egiziaca-1980-ziino",
+    "opera": {
+      "englishTitle": null,
+      "librettist": "",
+      "language": null,
+      "title": "Maria Egiziaca",
+      "url": "https://findopera.com/opera/1111/maria-egiziaca",
+      "composer": {
+        "born": 1879,
+        "died": 1936,
+        "fullName": "Ottorino Respighi",
+        "firstName": "Ottorino",
+        "lastName": "Respighi"
+      }
+    },
+    "notedSingers": [
+      {
+        "fullName": "Nazareno Antinori",
+        "firstName": "Nazareno",
+        "lastName": "Antinori"
+      },
+      {
+        "fullName": "Marcello Giordani",
+        "firstName": "Marcello",
+        "lastName": "Giordani"
+      },
+      {
+        "fullName": "Ambra Vespasiani",
+        "firstName": "Ambra",
+        "lastName": "Vespasiani"
+      }
+    ]
+  },
+  {
+    "year": 1999,
+    "month": 8,
+    "day": 21,
+    "orchestra": "Vienna Philharmonic",
+    "chorus": "Concert Association of the Vienna State Opera Chorus",
+    "id": 8814,
+    "upcs": [],
+    "conductor": {
+      "born": null,
+      "died": null,
+      "fullName": "Lorin Maazel",
+      "firstName": "Lorin",
+      "lastName": "Maazel"
+    },
+    "url": "https://findopera.com/recording/8814/don-giovanni-1999-maazel",
+    "opera": {
+      "englishTitle": null,
+      "librettist": "",
+      "title": "Don Giovanni",
+      "url": "https://findopera.com/opera/115/don-giovanni",
+      "language": {
+        "name": "Italian",
+        "abbreviation": "it"
+      },
+      "composer": {
+        "born": 1756,
+        "died": 1791,
+        "fullName": "Wolfgang Amadeus Mozart",
+        "firstName": "Wolfgang Amadeus",
+        "lastName": "Mozart"
+      }
+    },
+    "notedSingers": [
+      {
+        "fullName": "Bruce Ford",
+        "firstName": "Bruce",
+        "lastName": "Ford"
+      },
+      {
+        "fullName": "Robert Lloyd",
+        "firstName": "Robert",
+        "lastName": "Lloyd"
+      },
+      {
+        "fullName": "Barbara Frittoli",
+        "firstName": "Barbara",
+        "lastName": "Frittoli"
+      }
+    ]
+  }
+]
