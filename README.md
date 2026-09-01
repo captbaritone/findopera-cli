@@ -37,7 +37,7 @@ findopera organize ~/Music --config ~/Music/by-conductor.toml
 findopera organize ~/Music -t '{{opera.title}}'  # or just override the template
 ```
 
-## Scanning
+## Reading the library
 
 `findopera organize` walks a directory for marker files and shows what each
 folder would be called:
@@ -78,8 +78,7 @@ Results go to stdout, one line per recording; everything else to stderr.
 
 ## Building the tree
 
-`organize` only prints unless you say `--write`. With a destination set it
-builds what it describes:
+The same command builds it, given a destination and `--write`:
 
 ```toml
 destination = "/Volumes/Opera/named"
@@ -188,10 +187,10 @@ findopera: {{year}} may be absent, and is not inside a group
 
 | Exit | |
 |---|---|
-| 0 | everything rendered |
-| 1 | a recording is missing, its render is not a usable path, or two directories want the same name |
-| 2 | the template or the arguments are wrong |
-| 3 | the API was unreachable or errored |
+| 0 | nothing to report |
+| 1 | a recording is missing, a name is not a usable path, two folders want the same name, or something was in the way of building |
+| 2 | the settings, the template or the arguments are wrong |
+| 3 | the API was unreachable, or refused |
 
 ## Talking to findopera.com
 
@@ -210,9 +209,9 @@ findopera: the server refused the request:
     [CLIENT_TOO_OLD] findopera-cli 0.1.0 is no longer supported. Upgrade to 0.3 or later
 ```
 
-## The template language
+## Using it as a library
 
-A small language for turning record metadata into path-safe names.
+The naming is a small template language, usable on its own:
 
 ```rust
 let tmpl = Template::parse("{{composer.lastName}}/{{opera.title}}[/{{year}}]", FIELDS)?;
@@ -224,7 +223,7 @@ to_path(&rendered)?;                         // ["Handel", "Sosarme, Re di Media
 record, there is a string. Whether that string is a usable relative path is a
 separate question, and the only one still decided per record.
 
-## The language
+## The template language
 
 A placeholder is `{{field}}`. Alternatives separated by `|` are tried left to
 right, and a quoted literal serves as a last resort:

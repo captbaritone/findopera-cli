@@ -1,9 +1,14 @@
-//! A small template language for turning record metadata into path-safe names.
+//! Naming a music library from FindOpera metadata.
+//!
+//! [`scan`] finds the marker files in a library, [`api`] fetches what they
+//! name, [`plan`] works out what each folder should be called, and [`apply`]
+//! builds a tree of those names. The naming itself is a small template
+//! language, re-exported here.
 //!
 //! ```text
-//! {{a|b|"lit"}}   first alternative that resolves; a quoted literal always does
+//! {{a|b|"lit"}}   first alternative that has a value; a quoted literal always has
 //! [ … ]           optional group, dropped entirely if a placeholder inside
-//!                 resolves to nothing
+//!                 turns out to be absent
 //! \[ \] \{ \} \\  escapes
 //! ```
 //!

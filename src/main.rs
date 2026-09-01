@@ -11,11 +11,11 @@ use std::path::{Path, PathBuf};
 
 const AFTER_HELP: &str = "\
 Exit codes:
-  0  everything rendered
-  1  a recording is missing, its render is not a usable path, or two
-     directories want the same name
-  2  the template or the arguments are wrong
-  3  the API was unreachable or errored
+  0  nothing to report
+  1  a recording is missing, a name is not a usable path, two folders want
+     the same name, or something was in the way of building
+  2  the settings, the template or the arguments are wrong
+  3  the API was unreachable, or refused
 
 Results go to stdout; everything else to stderr.";
 

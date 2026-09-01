@@ -1,9 +1,9 @@
 //! The template language: lexer, parser, renderer, and the schema seam.
 //!
 //! ```text
-//! {{a|b|"lit"}}   first alternative that resolves; a quoted literal always does
+//! {{a|b|"lit"}}   first alternative that has a value; a quoted literal always has
 //! [ … ]           optional group, dropped entirely if a placeholder inside
-//!                 resolves to nothing
+//!                 turns out to be absent
 //! \[ \] \{ \} \\  escapes
 //! ```
 //!

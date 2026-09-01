@@ -12,7 +12,7 @@
 //!
 //! Collapsing them here, at the deserialization boundary, is deliberate. It
 //! means the Rust type says what is true: `Option<String>` is `None` exactly
-//! when there is no value, so [`findopera::Fields`] has nothing left to decide
+//! when there is no value, so [`crate::Fields`] has nothing left to decide
 //! and a template reasons only about present-versus-absent.
 //!
 //! `@semanticNonNull` fields are left alone. The schema says they always have
