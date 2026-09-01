@@ -61,6 +61,16 @@ enum ConductorSortBy {
   LAST_EDITED
 }
 
+"""What a piece of feedback is about."""
+enum FeedbackKind {
+  album
+  bug
+  error
+  general
+  recording
+  suggestion
+}
+
 enum LanguageSortBy {
   DATE_CREATED
   LAST_EDITED
@@ -461,8 +471,33 @@ input UpdateWikipediaImageInput {
   wikipediaUrl: String
 }
 
+"""A newly issued token, and the account it belongs to."""
+type AccessToken {
+  """
+  The token. Send it as `Authorization: Bearer <token>`.
+  
+  Only its hash is stored, so this is the one and only time it can be read.
+  A lost token is replaced, not recovered.
+  """
+  token: String @semanticNonNull
+  """The name edits made with this token will be attributed to."""
+  username: String @semanticNonNull
+}
+
 type AlbumCoverArt {
   history: [Edit!] @semanticNonNull
+  """
+  The value that identifies this record.
+  
+  A cover image is stored against the release it belongs to, so the UPC is
+  both its key and its identity.
+  
+  Every other type here answers to `id`, and code that walks all of them —
+  the CLI's get/create/edit/delete commands, for one — should not have to
+  carry a table of which five are spelled differently. The underlying column
+  is unchanged; this is another name for it.
+  """
+  id: String @semanticNonNull
   imageUrl: String
   source: String
   upc: String @semanticNonNull
@@ -707,6 +742,25 @@ type Mutation {
     justification: String!
   ): WikipediaImage @semanticNonNull
   """
+  Get a token, so that requests can be told apart from one another.
+  
+  Nobody is asked to prove who they are: this hands out a fresh account to
+  whoever asks. The point is not to know which person is editing, it is that a
+  given editor is the same editor from one request to the next — which is what
+  lets an edit be attributed, traffic be shaped per caller, and a run of bad
+  changes be found together and undone.
+  """
+  createAccessToken(
+    """
+    Optional, and never verified. Somewhere to reach you if something you are
+    doing is being blocked — a limit, or a bug at this end. It is not a login
+    and it is not published; leave it out and everything still works.
+    """
+    email: String
+    """What to call this token, so it can be told from your others later"""
+    label: String
+  ): AccessToken @semanticNonNull
+  """
   Delete a AlbumCoverArt record by ID.
   Returns true if the record was deleted, false if it didn't exist.
   """
@@ -892,6 +946,27 @@ type Mutation {
     justification: String!
   ): Boolean @semanticNonNull
   """
+  Say something to whoever maintains this.
+  
+  The website has had a way to do this since long before there was an API. A
+  tool talking to that API is where a problem is most likely to be met and
+  least likely to be reported, since there is no page to notice a link on, so
+  the same box is reachable from here.
+  
+  Anonymous on purpose: someone blocked by a token, or by a limit, still needs
+  a way to say so.
+  """
+  submitFeedback(
+    """Optional, and only used to reply to you"""
+    email: String
+    """What this is about"""
+    kind: FeedbackKind!
+    """What you want to say"""
+    message: String!
+    """Optional. What you were looking at, or the command you ran"""
+    url: String
+  ): Boolean @semanticNonNull
+  """
   Assuming a UPC and Recording exist, unlink them. Returns true if a link was
   deleted, false if no link existed.
   """
@@ -1046,6 +1121,17 @@ type Mutation {
 type NaxosAlbum {
   catalogueId: String @semanticNonNull
   history: [Edit!] @semanticNonNull
+  """
+  The value that identifies this record.
+  
+  Naxos catalogue numbers are unique, and are what their own site keys on.
+  
+  Every other type here answers to `id`, and code that walks all of them —
+  the CLI's get/create/edit/delete commands, for one — should not have to
+  carry a table of which five are spelled differently. The underlying column
+  is unchanged; this is another name for it.
+  """
+  id: String @semanticNonNull
   upc: Upc
   """URL to the catalogue page on naxos.com."""
   url: String @semanticNonNull
@@ -1078,6 +1164,19 @@ type Portrayal {
 
 type PrestoMusicAlbum {
   history: [Edit!] @semanticNonNull
+  """
+  The value that identifies this record.
+  
+  The slug, which is what `presto_music_album_id` holds and what getById
+  looks up. Not `prestoCode`, which is derived from it by taking the part
+  before the dashes and cannot be looked up with.
+  
+  Every other type here answers to `id`, and code that walks all of them —
+  the CLI's get/create/edit/delete commands, for one — should not have to
+  carry a table of which five are spelled differently. The underlying column
+  is unchanged; this is another name for it.
+  """
+  id: String @semanticNonNull
   isStreaming: Boolean
   """
   The numeric Presto Music product code, extracted from the slug.
@@ -1189,6 +1288,7 @@ type Recording {
   history: [Edit!] @semanticNonNull
   historyUrl: String @semanticNonNull
   id: Int @semanticNonNull
+  markerUrl: String @semanticNonNull
   month: Int
   musicBrainzReleaseGroups: [MusicBrainzReleaseGroup!] @semanticNonNull
   """Returns singers on the recording who received top billing."""
@@ -1264,6 +1364,17 @@ type Upc {
   """
   collection: Boolean @semanticNonNull
   history: [Edit!] @semanticNonNull
+  """
+  The value that identifies this record.
+  
+  A UPC is its own identity.
+  
+  Every other type here answers to `id`, and code that walks all of them —
+  the CLI's get/create/edit/delete commands, for one — should not have to
+  carry a table of which five are spelled differently. The underlying column
+  is unchanged; this is another name for it.
+  """
+  id: String @semanticNonNull
   musicBrainzReleases: [MusicBrainzRelease!] @semanticNonNull
   naxosAlbums: [NaxosAlbum!] @semanticNonNull
   prestoMusicAlbums: [PrestoMusicAlbum!] @semanticNonNull
@@ -1275,6 +1386,17 @@ type Upc {
 
 type WikipediaImage {
   history: [Edit!] @semanticNonNull
+  """
+  The value that identifies this record.
+  
+  Keyed by the Wikipedia page it came from.
+  
+  Every other type here answers to `id`, and code that walks all of them —
+  the CLI's get/create/edit/delete commands, for one — should not have to
+  carry a table of which five are spelled differently. The underlying column
+  is unchanged; this is another name for it.
+  """
+  id: String @semanticNonNull
   imageUrl: String
   wikipediaUrl: String @semanticNonNull
 }

@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { buildSchema, parse, validate, getNamedType } from "graphql";
 
+import { crud } from "./crud.mjs";
 import { walk } from "./walk.mjs";
 import { emit } from "./emit.mjs";
 import { snake } from "./schema.mjs";
@@ -31,16 +32,29 @@ if (errors.length) {
   process.exit(1);
 }
 
-// The lookup queries generate no Rust, but they are still strings this binary
-// sends, so they are validated here too: a field renamed upstream should fail
-// the build rather than someone's search.
-const lookups = parse(readFileSync(at("schema/search.graphql"), "utf8"));
-const lookupErrors = validate(schema, lookups);
-if (lookupErrors.length) {
-  console.error("search.graphql does not validate against the schema:");
-  for (const e of lookupErrors) console.error("  " + e.message);
-  process.exit(1);
+// These generate no model, but they are still strings this binary sends, so
+// they are validated here too: a field renamed upstream should fail the build
+// rather than someone's search.
+for (const file of ["schema/search.graphql", "schema/get.graphql"]) {
+  const errors = validate(schema, parse(readFileSync(at(file), "utf8")));
+  if (errors.length) {
+    console.error(`${file} does not validate against the schema:`);
+    for (const e of errors) console.error("  " + e.message);
+    process.exit(1);
+  }
 }
+
+// The table of types the CRUD commands work through, derived from the schema
+// and keyed to the curated queries by the type each one returns.
+const getDoc = parse(readFileSync(at("schema/get.graphql"), "utf8"));
+const getOperations = new Map();
+for (const def of getDoc.definitions) {
+  if (def.kind !== "OperationDefinition") continue;
+  const root = def.selectionSet.selections[0].name.value;
+  const returned = getNamedType(schema.getQueryType().getFields()[root].type);
+  getOperations.set(returned.name, def.name.value);
+}
+writeFileSync(at("src/model/crud.rs"), crud(schema, getOperations));
 
 const overlay = (await import(at("schema/fields.mjs"))).default;
 

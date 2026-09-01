@@ -1,5 +1,6 @@
 //! Fetching recordings from the FindOpera GraphQL API.
 
+use crate::model::crud::Type;
 use crate::model::{Recording, QUERY};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -29,12 +30,101 @@ const PATIENCE: std::time::Duration = std::time::Duration::from_secs(180);
 /// tell this apart from a browser, and tell one version of it from another.
 pub const USER_AGENT: &str = concat!("findopera-cli/", env!("CARGO_PKG_VERSION"));
 
+/// One thing the server objected to.
+#[derive(Debug, Clone)]
+pub struct Complaint {
+    pub message: String,
+    /// Where a program should look to decide what to do.
+    pub code: Option<String>,
+    /// Which part of the query, when the server said.
+    ///
+    /// Its presence is the whole difference between an error about one field
+    /// and an error about the request: `["opera", "composer"]` says the rest
+    /// of the answer may be fine, and a bare refusal says nothing came back.
+    pub path: Vec<String>,
+}
+
+/// Everything the server objected to, in one place.
+///
+/// Kept as data rather than as a formatted string so that there is one
+/// description of what went wrong and two ways of showing it — the words for a
+/// person, the same fields for a program — instead of a human sentence that a
+/// program has to take apart again.
+#[derive(Debug, Clone)]
+pub struct Refusal(pub Vec<Complaint>);
+
+impl Refusal {
+    /// The shape a program sees.
+    ///
+    /// Deliberately GraphQL's own — `message`, `path`, `extensions.code` — so
+    /// that anything already able to read a GraphQL error can read this, and
+    /// nobody has to learn a second vocabulary for the same thing.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "errors": self.0.iter().map(|c| {
+                let mut o = serde_json::Map::new();
+                o.insert("message".into(), c.message.clone().into());
+                if let Some(code) = &c.code {
+                    o.insert("code".into(), code.clone().into());
+                }
+                if !c.path.is_empty() {
+                    o.insert("path".into(), c.path.clone().into());
+                }
+                serde_json::Value::Object(o)
+            }).collect::<Vec<_>>()
+        })
+    }
+}
+
+impl std::fmt::Display for Refusal {
+    /// One complaint per line, indented under a heading.
+    ///
+    /// The server's words come through as it wrote them — this is the channel
+    /// it uses to say a client is too old, and a long explanation would not
+    /// survive being summarised into a sentence.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "the server refused the request:")?;
+        for c in &self.0 {
+            write!(f, "\n   ")?;
+            if let Some(code) = &c.code {
+                write!(f, " [{code}]")?;
+            }
+            write!(f, " {}", c.message)?;
+            if !c.path.is_empty() {
+                write!(f, " (at {})", c.path.join("."))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Why a request did not produce an answer.
 #[derive(Debug)]
-pub struct ApiError(String);
+pub enum ApiError {
+    /// The server was not reached, or said something unreadable.
+    Unreachable(String),
+    /// The server was reached, and said no.
+    Refused(Refusal),
+}
+
+impl ApiError {
+    /// The shape a program sees, whichever kind this is.
+    pub fn to_json(&self) -> serde_json::Value {
+        match self {
+            ApiError::Refused(r) => r.to_json(),
+            ApiError::Unreachable(why) => serde_json::json!({
+                "errors": [{ "message": why, "code": "UNREACHABLE" }]
+            }),
+        }
+    }
+}
 
 impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        match self {
+            ApiError::Unreachable(why) => write!(f, "{why}"),
+            ApiError::Refused(r) => write!(f, "{r}"),
+        }
     }
 }
 
@@ -132,29 +222,37 @@ fn disposition_filename(header: &str) -> Option<String> {
 /// A GraphQL response can carry both data and errors, and for this client an
 /// error is always fatal: `@semanticNonNull` means a null in an annotated
 /// position is explained by exactly one of these, so data alongside an error
-/// cannot be trusted to be whole.
-///
-/// It is also how the server talks to whoever is running this — every request
-/// says which version it is, and this is the channel for the answer "that one
-/// is too old". So the words come through as they were written, one to a
-/// line, rather than being summarised into a single line that a long
-/// explanation would not survive.
-pub fn refusal(payload: &serde_json::Value) -> Option<String> {
+/// cannot be trusted to be whole. That is why a field-level error is not
+/// softened into a warning — it is recorded with its path and still refused.
+pub fn refusal(payload: &serde_json::Value) -> Option<Refusal> {
     let errors = payload.get("errors")?.as_array()?;
     if errors.is_empty() {
         return None;
     }
-    let mut said = String::from("the server refused the request:");
-    for error in errors {
-        let message = error["message"].as_str().unwrap_or("(no message given)");
-        // A code is where a server puts something a program can act on, so it
-        // is worth showing beside the words meant for a person.
-        match error["extensions"]["code"].as_str() {
-            Some(code) => said.push_str(&format!("\n    [{code}] {message}")),
-            None => said.push_str(&format!("\n    {message}")),
-        }
+    Some(Refusal(
+        errors
+            .iter()
+            .map(|e| Complaint {
+                message: e["message"]
+                    .as_str()
+                    .unwrap_or("(no message given)")
+                    .to_string(),
+                code: e["extensions"]["code"].as_str().map(str::to_string),
+                path: e["path"]
+                    .as_array()
+                    .map(|p| p.iter().map(scalar_path).collect())
+                    .unwrap_or_default(),
+            })
+            .collect(),
+    ))
+}
+
+/// A path segment, which GraphQL allows to be a list index as well as a name.
+fn scalar_path(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        other => other.to_string(),
     }
-    Some(said)
 }
 
 /// A server, and who this program is when it talks to it.
@@ -243,7 +341,7 @@ impl Client {
             "variables": variables,
         }))?;
         if let Some(said) = refusal(&payload) {
-            return Err(ApiError(said));
+            return Err(ApiError::Refused(said));
         }
         Ok(payload)
     }
@@ -267,9 +365,9 @@ impl Client {
                 // rather than the API, and the status is the only clue as to
                 // which.
                 if status.is_success() {
-                    ApiError(format!("the API returned something unreadable: {e}"))
+                    ApiError::Unreachable(format!("the API returned something unreadable: {e}"))
                 } else {
-                    ApiError(format!(
+                    ApiError::Unreachable(format!(
                         "{} answered {status}, and not with JSON",
                         self.endpoint
                     ))
@@ -291,14 +389,15 @@ impl Client {
         let mut spent = Duration::ZERO;
 
         for attempt in 0..=RETRIES {
-            let response = send(self).map_err(|e| ApiError(format!("cannot reach {what}: {e}")))?;
+            let response = send(self)
+                .map_err(|e| ApiError::Unreachable(format!("cannot reach {what}: {e}")))?;
             let status = response.status();
 
             if status.as_u16() != 429 {
                 return Ok((status, response));
             }
             if attempt == RETRIES {
-                return Err(ApiError(format!(
+                return Err(ApiError::Unreachable(format!(
                     "{what} is still refusing after {} attempts. It is asking for less \
                      traffic, so the thing to do is wait rather than try again now.{}",
                     RETRIES + 1,
@@ -313,7 +412,7 @@ impl Client {
 
             let wait = retry_after(&response).unwrap_or_else(|| backoff(attempt));
             if spent + wait > PATIENCE {
-                return Err(ApiError(format!(
+                return Err(ApiError::Unreachable(format!(
                     "{what} asked to be left alone for another {}s, which is longer than this \
                      will wait. Try again later.",
                     wait.as_secs()
@@ -344,12 +443,12 @@ impl Client {
         })?;
 
         if !status.is_success() {
-            return Err(ApiError(format!("{url} answered {status}")));
+            return Err(ApiError::Unreachable(format!("{url} answered {status}")));
         }
         response
             .body_mut()
             .read_to_string()
-            .map_err(|e| ApiError(format!("the schema could not be read: {e}")))
+            .map_err(|e| ApiError::Unreachable(format!("the schema could not be read: {e}")))
     }
 
     /// Fetch a recording's notes, and the name to keep them under.
@@ -366,10 +465,12 @@ impl Client {
         })?;
 
         if status.as_u16() == 404 {
-            return Err(ApiError(format!("findopera.com has no recording {id}")));
+            return Err(ApiError::Unreachable(format!(
+                "findopera.com has no recording {id}"
+            )));
         }
         if !status.is_success() {
-            return Err(ApiError(format!("{url} answered {status}")));
+            return Err(ApiError::Unreachable(format!("{url} answered {status}")));
         }
 
         // The name comes from the header rather than from the URL: the URL is
@@ -385,7 +486,7 @@ impl Client {
         let body = response
             .body_mut()
             .read_to_string()
-            .map_err(|e| ApiError(format!("the notes could not be read: {e}")))?;
+            .map_err(|e| ApiError::Unreachable(format!("the notes could not be read: {e}")))?;
 
         Ok(Notes { filename, body })
     }
@@ -407,14 +508,14 @@ impl Client {
         let payload = self.post(QUERY, Some(serde_json::json!({ "ids": ids })))?;
 
         if let Some(said) = refusal(&payload) {
-            return Err(ApiError(said));
+            return Err(ApiError::Refused(said));
         }
 
         let list = payload
             .get("data")
             .and_then(|d| d.get("getRecordingByIds"))
             .and_then(|r| r.as_array())
-            .ok_or_else(|| ApiError("the API returned no recordings".into()))?;
+            .ok_or_else(|| ApiError::Unreachable("the API returned no recordings".into()))?;
 
         let mut out = BTreeMap::new();
         for (id, value) in ids.iter().zip(list) {
@@ -422,7 +523,7 @@ impl Client {
                 continue; // an id the database does not know
             }
             let rec: Recording = serde_json::from_value(value.clone()).map_err(|e| {
-                ApiError(format!(
+                ApiError::Unreachable(format!(
                     "recording {id} did not match the generated model: {e}"
                 ))
             })?;
@@ -435,7 +536,8 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::{
-        disposition_filename, found, lifespan, notes_url, percent_decode, schema_url, Kind, LOOKUPS,
+        disposition_filename, found, lifespan, notes_url, percent_decode, schema_url, Kind, GETS,
+        LOOKUPS,
     };
 
     const KINDS: [Kind; 6] = [
@@ -465,6 +567,74 @@ mod tests {
                 "search.graphql never selects `{field}`"
             );
         }
+    }
+
+    #[test]
+    fn every_type_has_a_query_and_asks_for_the_right_field() {
+        // The registry is generated from the schema and the queries are
+        // written by hand, so this is where the two could disagree: a query
+        // renamed in get.graphql still validates, and only the request fails.
+        // Codegen refuses to emit a type with no query, so this guards the
+        // other direction — that what it emitted still matches the file.
+        for kind in crate::model::crud::TYPES {
+            assert!(
+                GETS.contains(&format!("query {}(", kind.get)),
+                "get.graphql has no `{}` for {}",
+                kind.get,
+                kind.name
+            );
+            assert!(
+                GETS.contains(&format!("{}(id: $id)", kind.root)),
+                "`{}` never selects {}",
+                kind.get,
+                kind.root
+            );
+        }
+    }
+
+    #[test]
+    fn every_type_can_be_identified_by_the_same_field() {
+        // One line of GraphQL serves all twenty mutations because each returns
+        // `id`. Five types only gained one recently; if any lost it, creates
+        // would start returning nothing and only at runtime.
+        for kind in crate::model::crud::TYPES {
+            let query = GETS
+                .split("query ")
+                .find(|q| q.starts_with(&format!("{}(", kind.get)))
+                .unwrap_or_else(|| panic!("no query for {}", kind.name));
+            assert!(
+                query.lines().any(|l| l.trim() == "id"),
+                "{} does not select id, so a create could not report one",
+                kind.name
+            );
+        }
+    }
+
+    #[test]
+    fn a_refusal_keeps_the_path_that_makes_it_field_level() {
+        let payload = serde_json::json!({
+            "errors": [{
+                "message": "Singer with ID 9 not found.",
+                "path": ["updateSinger"],
+                "extensions": { "code": "NOT_FOUND" }
+            }]
+        });
+        let r = super::refusal(&payload).expect("a refusal");
+        assert_eq!(r.0[0].path, vec!["updateSinger".to_string()]);
+        // Both renderings carry it: the words say where, and the JSON keeps
+        // the field a program would branch on.
+        assert!(r.to_string().contains("(at updateSinger)"), "got: {r}");
+        assert_eq!(r.to_json()["errors"][0]["path"][0], "updateSinger");
+        assert_eq!(r.to_json()["errors"][0]["code"], "NOT_FOUND");
+    }
+
+    #[test]
+    fn a_refusal_without_a_path_says_nothing_about_one() {
+        let payload = serde_json::json!({ "errors": [{ "message": "Unauthorized" }] });
+        let r = super::refusal(&payload).expect("a refusal");
+        assert!(r.0[0].path.is_empty());
+        assert!(!r.to_string().contains("(at"), "got: {r}");
+        assert!(r.to_json()["errors"][0].get("path").is_none());
     }
 
     #[test]
@@ -670,7 +840,7 @@ impl Client {
         let payload = self.query_named(LOOKUPS, operation, variables)?;
         let list = payload["data"][field]
             .as_array()
-            .ok_or_else(|| ApiError(format!("the API returned no {field}")))?;
+            .ok_or_else(|| ApiError::Unreachable(format!("the API returned no {field}")))?;
 
         Ok(list.iter().map(|v| found(kind, v)).collect())
     }
@@ -719,5 +889,99 @@ fn found(kind: Kind, v: &serde_json::Value) -> Found {
             name: text(&v["fullName"]),
             about: lifespan(v),
         },
+    }
+}
+
+/// The curated per-type queries, validated against the schema by codegen.
+const GETS: &str = include_str!("../schema/get.graphql");
+
+impl Client {
+    /// Fetch one record whole.
+    pub fn get(&self, kind: &Type, id: &str) -> Result<serde_json::Value, ApiError> {
+        let payload = self.query_named(GETS, kind.get, serde_json::json!({ "id": id }))?;
+        let record = &payload["data"][kind.root];
+        if record.is_null() {
+            // Not `Unreachable`: the server answered, and the answer was that
+            // there is no such record. A caller deciding whether to retry
+            // needs those to look different.
+            return Err(ApiError::Refused(Refusal(vec![Complaint {
+                message: format!("there is no {} with the id {id}", kind.name),
+                code: Some("NOT_FOUND".to_string()),
+                path: Vec::new(),
+            }])));
+        }
+        Ok(record.clone())
+    }
+
+    /// Add a record, and hand back the id it was given.
+    ///
+    /// Every type answers to `id` now, which is what lets one line of GraphQL
+    /// serve all twenty; before that this would have needed a table of which
+    /// field to ask each one for.
+    pub fn create(
+        &self,
+        kind: &Type,
+        input: serde_json::Value,
+        justification: &str,
+    ) -> Result<String, ApiError> {
+        let document = format!(
+            "mutation Add($input: {}!, $justification: String!) {{\n  \
+             {}(input: $input, justification: $justification) {{ id }}\n}}",
+            kind.create_input, kind.add
+        );
+        let payload = self.query_named(
+            &document,
+            "Add",
+            serde_json::json!({ "input": input, "justification": justification }),
+        )?;
+        identifier(&payload["data"][kind.add], kind)
+    }
+
+    /// Change a record.
+    pub fn edit(
+        &self,
+        kind: &Type,
+        id: &str,
+        input: serde_json::Value,
+        justification: &str,
+    ) -> Result<String, ApiError> {
+        let document = format!(
+            "mutation Edit($id: String!, $input: {}!, $justification: String!) {{\n  \
+             {}(id: $id, input: $input, justification: $justification) {{ id }}\n}}",
+            kind.edit_input, kind.update
+        );
+        let payload = self.query_named(
+            &document,
+            "Edit",
+            serde_json::json!({ "id": id, "input": input, "justification": justification }),
+        )?;
+        identifier(&payload["data"][kind.update], kind)
+    }
+
+    /// Remove a record.
+    pub fn delete(&self, kind: &Type, id: &str, justification: &str) -> Result<(), ApiError> {
+        let document = format!(
+            "mutation Remove($id: String!, $justification: String!) {{\n  \
+             {}(id: $id, justification: $justification)\n}}",
+            kind.remove
+        );
+        self.query_named(
+            &document,
+            "Remove",
+            serde_json::json!({ "id": id, "justification": justification }),
+        )?;
+        Ok(())
+    }
+}
+
+/// The id out of whatever a mutation handed back.
+fn identifier(value: &serde_json::Value, kind: &Type) -> Result<String, ApiError> {
+    match &value["id"] {
+        serde_json::Value::Number(n) => Ok(n.to_string()),
+        serde_json::Value::String(s) => Ok(s.clone()),
+        _ => Err(ApiError::Unreachable(format!(
+            "the server accepted the {} but did not say what it is called",
+            kind.name
+        ))),
     }
 }

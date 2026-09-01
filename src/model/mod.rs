@@ -20,6 +20,7 @@
 //! a deserialization error, which is the correct reading of the directive: it
 //! means the response carried a matching entry in its `errors` array.
 
+pub mod crud;
 mod generated;
 
 pub use generated::{Recording, FIELDS, QUERY};

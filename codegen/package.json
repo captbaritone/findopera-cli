@@ -5,7 +5,7 @@
   "description": "Derives the Rust recording model from the GraphQL schema and query",
   "scripts": {
     "generate": "node generate.mjs && cargo fmt",
-    "fetch-schema": "curl -sS -A \"findopera-cli-codegen/$(grep -m1 '^version' ../Cargo.toml | cut -d'\"' -f2)\" https://findopera.com/schema.graphql -o ../schema/schema.graphql"
+    "fetch-schema": "curl -fsS --retry 3 --retry-delay 2 -A \"findopera-cli-codegen/$(grep -m1 '^version' ../Cargo.toml | cut -d'\"' -f2)\" https://findopera.com/schema.graphql -o ../schema/schema.graphql.new && mv ../schema/schema.graphql.new ../schema/schema.graphql"
   },
   "dependencies": {
     "graphql": "^16.9.0"

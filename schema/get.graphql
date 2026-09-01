@@ -1,0 +1,241 @@
+# What `findopera get <type> <id>` fetches, one operation per type.
+#
+# Curated rather than derived: the schema is cyclic, so "everything" has no
+# meaning, and what is worth seeing differs per type. A recording wants its
+# cast; a streaming album wants a URL and the UPC it hangs off.
+#
+# Validated against the schema by codegen, so a field renamed upstream fails
+# the build. The operation names are the contract with src/model/crud.rs, and
+# a test checks the two still agree.
+#
+# Relations are selected with enough to identify them and to look them up
+# again — an id and a name — never followed further, so no query here can
+# grow without someone deciding it should.
+
+query GetRecording($id: String!) {
+  getRecordingById(id: $id) {
+    id
+    year
+    month
+    day
+    orchestra
+    chorus
+    url
+    historyUrl
+    opera { id title englishTitle composer { id fullName } language { name } }
+    conductor { id fullName born died }
+    portrayals { id noted character { id name } singer { id fullName } }
+    upcs { upc }
+    relatedUrls { id url }
+    coverArt { imageUrl source }
+  }
+}
+
+query GetOpera($id: String!) {
+  getOperaById(id: $id) {
+    id
+    title
+    englishTitle
+    librettist
+    operaclassId
+    wikipediaUrl
+    url
+    historyUrl
+    composer { id fullName born died }
+    language { id name abbreviation }
+    characters { id name englishName }
+  }
+}
+
+query GetSinger($id: String!) {
+  getSingerById(id: $id) {
+    id
+    firstName
+    lastName
+    fullName
+    born
+    died
+    operaclassId
+    spotifyArtistId
+    wikipediaUrl
+    url
+    historyUrl
+    wikipediaImage { imageUrl }
+  }
+}
+
+query GetConductor($id: String!) {
+  getConductorById(id: $id) {
+    id
+    firstName
+    lastName
+    fullName
+    born
+    died
+    operaclassId
+    spotifyArtistId
+    wikipediaUrl
+    url
+    historyUrl
+    wikipediaImage { imageUrl }
+  }
+}
+
+query GetComposer($id: String!) {
+  getComposerById(id: $id) {
+    id
+    firstName
+    lastName
+    fullName
+    born
+    died
+    operaclassId
+    spotifyArtistId
+    wikipediaUrl
+    url
+    historyUrl
+    wikipediaImage { imageUrl }
+  }
+}
+
+query GetCharacter($id: String!) {
+  getCharacterById(id: $id) {
+    id
+    name
+    englishName
+    url
+    historyUrl
+    opera { id title composer { id fullName } }
+  }
+}
+
+query GetPortrayal($id: String!) {
+  getPortrayalById(id: $id) {
+    id
+    noted
+    singer { id fullName }
+    character { id name }
+    recording { id year opera { id title } }
+  }
+}
+
+query GetLanguage($id: String!) {
+  getLanguageById(id: $id) {
+    id
+    name
+    abbreviation
+    wikipediaCategory
+  }
+}
+
+query GetUpc($id: String!) {
+  getUpcById(id: $id) {
+    id
+    upc
+    collection
+    recordings { id year opera { id title } }
+    spotifyAlbums { id albumName url }
+    appleMusicAlbums { id url }
+    tidalAlbums { id url }
+    naxosAlbums { catalogueId url }
+    prestoMusicAlbums { prestoCode url isStreaming }
+    musicBrainzReleases { id }
+  }
+}
+
+query GetRecordingURL($id: String!) {
+  getRecordingURLById(id: $id) {
+    id
+    url
+    recording { id year opera { id title } }
+  }
+}
+
+query GetAlbumCoverArt($id: String!) {
+  getAlbumCoverArtById(id: $id) {
+    id
+    imageUrl
+    source
+    upc
+  }
+}
+
+query GetWikipediaImage($id: String!) {
+  getWikipediaImageById(id: $id) {
+    id
+    imageUrl
+    wikipediaUrl
+  }
+}
+
+query GetSpotifyAlbum($id: String!) {
+  getSpotifyAlbumById(id: $id) {
+    id
+    albumName
+    url
+    upc { upc }
+    tracks { id name discNumber trackNumber durationMs }
+  }
+}
+
+query GetSpotifyTrack($id: String!) {
+  getSpotifyTrackById(id: $id) {
+    id
+    name
+    artists
+    discNumber
+    trackNumber
+    durationMs
+    spotifyAlbum { id albumName }
+  }
+}
+
+query GetAppleMusicAlbum($id: String!) {
+  getAppleMusicAlbumById(id: $id) {
+    id
+    url
+    upc { upc }
+  }
+}
+
+query GetTidalAlbum($id: String!) {
+  getTidalAlbumById(id: $id) {
+    id
+    url
+    upc { upc }
+  }
+}
+
+query GetNaxosAlbum($id: String!) {
+  getNaxosAlbumById(id: $id) {
+    id
+    catalogueId
+    url
+    upc { upc }
+  }
+}
+
+query GetPrestoMusicAlbum($id: String!) {
+  getPrestoMusicAlbumById(id: $id) {
+    id
+    prestoCode
+    slug
+    url
+    isStreaming
+    upc { upc }
+  }
+}
+
+query GetMusicBrainzRelease($id: String!) {
+  getMusicBrainzReleaseById(id: $id) {
+    id
+    upc { upc }
+  }
+}
+
+query GetMusicBrainzReleaseGroup($id: String!) {
+  getMusicBrainzReleaseGroupById(id: $id) {
+    id
+    recording { id year opera { id title } }
+  }
+}

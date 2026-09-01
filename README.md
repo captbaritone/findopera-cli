@@ -76,6 +76,50 @@ $ findopera organize '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' ~/Musi
 ./Handel - Sosarme 2026       Handel/Sosarme, Re di Media (2026)
 ```
 
+## Reading and changing records
+
+Every type in the database can be read, added to, changed and removed:
+
+```bash
+$ findopera get recording 264
+$ findopera get singer 133 --json
+
+$ findopera describe singer          # what a create takes
+$ findopera describe singer --json   # the same, as a JSON Schema
+
+$ echo '{"firstName":"Maria","lastName":"Callas"}' \
+    | findopera create singer -m 'https://en.wikipedia.org/wiki/Maria_Callas'
+$ echo '{"died":1977}' | findopera edit singer 133 -m 'https://...'
+$ findopera delete singer 133 -m '...' --yes
+```
+
+`findopera describe` lists the twenty types. Input is JSON on stdin or from a
+file, and the fields are checked here before anything is sent — a misspelling
+is answered in the terms you used rather than as a GraphQL error about an input
+type you never mentioned.
+
+Every change needs `-m`: a source, ideally a URL, and enough context for
+someone reading the history later to judge it. The server requires one.
+
+The queries live in [`schema/get.graphql`](schema/get.graphql), curated per
+type and validated against the schema by codegen. The table of types and their
+input fields is generated from the schema, so twenty types cost the same to
+keep current as one.
+
+### Errors
+
+One convention everywhere. A person gets the server's words on stderr:
+
+```
+findopera: the server refused the request:
+    [NOT_FOUND] there is no singer with the id 999999999
+```
+
+With `--json`, the same facts in GraphQL's own shape — `message`, `code`,
+`path` — also on stderr, since stdout carries results and a failure has none.
+A `path` is what makes an error about one field rather than the whole request.
+The exit status says which happened either way.
+
 ## Finding an id
 
 Everything here takes an id, so `search` is how you get one:

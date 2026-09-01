@@ -3,7 +3,7 @@
 use clap::{Args, Parser, Subcommand};
 use findopera::config::{self, Config};
 use findopera::credentials;
-use findopera::model::{Recording, FIELDS};
+use findopera::model::{crud, Recording, FIELDS};
 use findopera::FieldDoc;
 use findopera::{api, apply, plan, scan, Template};
 use std::collections::BTreeMap;
@@ -103,6 +103,66 @@ Examples:
   findopera organize ~/Music --config ~/Music/by-conductor.toml"
     )]
     Organize(OrganizeArgs),
+
+    /// Show one record whole.
+    #[command(long_about = "\
+Fetch a record and print everything worth knowing about it, including the
+records it points at.
+
+  findopera get recording 264
+  findopera get singer 133 --json
+
+`findopera describe` lists the types.")]
+    Get(GetArgs),
+
+    /// Add a record.
+    #[command(long_about = "\
+Add a record from a JSON object on standard input, or from a file.
+
+  echo '{\"firstName\":\"Maria\",\"lastName\":\"Callas\"}' \\
+    | findopera create singer -m 'https://en.wikipedia.org/wiki/Maria_Callas'
+
+`findopera describe singer` says which fields it takes and which are required;
+--json there gives the same as a JSON Schema. The fields are checked here
+before anything is sent, so a misspelling is answered in the terms you used
+rather than as a GraphQL error about a type you never mentioned.
+
+Every change needs -m: a source, ideally a URL, and enough context for someone
+reading the history later to judge it. The server requires one and will refuse
+without it.")]
+    Create(CreateArgs),
+
+    /// Change a record.
+    #[command(long_about = "\
+Change some fields of a record, from a JSON object on standard input or a
+file. Only the fields present are touched.
+
+  echo '{\"died\":1977}' | findopera edit singer 133 -m 'https://...'
+
+Every change needs -m, as `create` does.")]
+    Edit(EditArgs),
+
+    /// Remove a record.
+    #[command(long_about = "\
+Remove a record.
+
+Nothing here is really destroyed — every change is versioned and can be
+reverted — but this is still the only command that takes something away, so it
+asks for --yes as well as a reason.")]
+    Delete(DeleteArgs),
+
+    /// List the types, or say what one holds.
+    #[command(long_about = "\
+With no argument, list every type these commands work on.
+
+With one, say what that type holds and what it takes to make one:
+
+  findopera describe singer
+  findopera describe singer --json    a JSON Schema for the create input
+
+The JSON form is a schema in the ordinary sense — draft 2020-12 — so anything
+that already validates JSON can check an input before sending it.")]
+    Describe(DescribeArgs),
 
     /// Look up an id by name.
     #[command(
@@ -322,8 +382,11 @@ struct OrganizeArgs {
     #[arg(long)]
     follow_links: bool,
     /// Separate the columns with a tab instead of padding, for piping.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "json")]
     tabs: bool,
+    /// Print the plan as JSON.
+    #[arg(long)]
+    json: bool,
     /// Fail if any folder had to be numbered.
     ///
     /// Two rips of one recording get a number each unless a marker says which
@@ -370,6 +433,99 @@ struct GraphqlArgs {
 }
 
 #[derive(Args)]
+struct GetArgs {
+    /// What kind of record.
+    #[arg(value_name = "TYPE")]
+    kind: String,
+    /// Its id.
+    #[arg(value_name = "ID")]
+    id: String,
+    /// Print it as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+#[derive(Args)]
+struct CreateArgs {
+    /// What kind of record.
+    #[arg(value_name = "TYPE")]
+    kind: String,
+    /// A JSON object. Omit to read it from standard input.
+    #[arg(long, short = 'i', value_name = "FILE")]
+    input: Option<PathBuf>,
+    /// Source and context for this change, for the record's history.
+    #[arg(long, short = 'm', value_name = "TEXT")]
+    message: String,
+    /// Print the result as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+#[derive(Args)]
+struct EditArgs {
+    /// What kind of record.
+    #[arg(value_name = "TYPE")]
+    kind: String,
+    /// Its id.
+    #[arg(value_name = "ID")]
+    id: String,
+    /// A JSON object of the fields to change. Omit to read from standard input.
+    #[arg(long, short = 'i', value_name = "FILE")]
+    input: Option<PathBuf>,
+    /// Source and context for this change, for the record's history.
+    #[arg(long, short = 'm', value_name = "TEXT")]
+    message: String,
+    /// Print the result as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+#[derive(Args)]
+struct DeleteArgs {
+    /// What kind of record.
+    #[arg(value_name = "TYPE")]
+    kind: String,
+    /// Its id.
+    #[arg(value_name = "ID")]
+    id: String,
+    /// Source and context for this change, for the record's history.
+    #[arg(long, short = 'm', value_name = "TEXT")]
+    message: String,
+    /// Say so out loud. Nothing is removed without it.
+    #[arg(long)]
+    yes: bool,
+    /// Print the result as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+#[derive(Args)]
+struct DescribeArgs {
+    /// The type. Omit to list them all.
+    #[arg(value_name = "TYPE")]
+    kind: Option<String>,
+    /// Print a JSON Schema for the create input.
+    #[arg(long)]
+    json: bool,
+}
+
+#[derive(Args)]
 struct SearchArgs {
     /// What to look for.
     #[arg(value_name = "KIND", value_parser = ["recording", "opera", "singer", "conductor", "composer", "character"])]
@@ -390,8 +546,11 @@ struct SearchArgs {
     #[arg(long, default_value_t = 10, value_name = "N")]
     first: u32,
     /// Separate the columns with a tab instead of padding, for piping.
-    #[arg(long)]
+    #[arg(long, conflicts_with = "json")]
     tabs: bool,
+    /// Print the results as JSON.
+    #[arg(long)]
+    json: bool,
     /// GraphQL endpoint.
     #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
     endpoint: String,
@@ -505,6 +664,11 @@ fn emit(out: &mut impl Write, line: std::fmt::Arguments) -> bool {
 fn run() -> i32 {
     match Cli::parse().command {
         Command::Organize(args) => cmd_organize(args),
+        Command::Get(args) => cmd_get(args),
+        Command::Create(args) => cmd_create(args),
+        Command::Edit(args) => cmd_edit(args),
+        Command::Delete(args) => cmd_delete(args),
+        Command::Describe(args) => cmd_describe(args),
         Command::Search(args) => cmd_search(args),
         Command::Annotate(args) => cmd_annotate(args),
         Command::Fields => cmd_fields(),
@@ -526,6 +690,315 @@ fn client(endpoint: &str, token: Option<&String>) -> Result<api::Client, i32> {
             Err(2)
         }
     }
+}
+
+// ---- the CRUD commands ----------------------------------------------------
+//
+// One convention for failure, applied by every command here. A person gets the
+// server's words on stderr; a program asking for --json gets the same facts as
+// JSON, in GraphQL's own shape, also on stderr — results go to stdout and a
+// failure has no result, so mixing the two would mean every caller had to
+// check before parsing. The exit code says which happened either way.
+
+/// Report a request that did not produce an answer.
+fn failed(e: &api::ApiError, json: bool) -> i32 {
+    if json {
+        eprintln!(
+            "{}",
+            serde_json::to_string_pretty(&e.to_json()).unwrap_or_default()
+        );
+    } else {
+        eprintln!("findopera: {e}");
+    }
+    3
+}
+
+/// Report something wrong with the request before it was ever sent.
+fn refused(message: &str, code: &str, json: bool, exit: i32) -> i32 {
+    if json {
+        let body = serde_json::json!({ "errors": [{ "message": message, "code": code }] });
+        eprintln!(
+            "{}",
+            serde_json::to_string_pretty(&body).unwrap_or_default()
+        );
+    } else {
+        eprintln!("findopera: {message}");
+    }
+    exit
+}
+
+fn cmd_get(args: GetArgs) -> i32 {
+    let kind = match kind_named(&args.kind) {
+        Ok(k) => k,
+        Err(code) => return code,
+    };
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let record = match api.get(kind, &args.id) {
+        Ok(r) => r,
+        Err(e) => return failed(&e, args.json),
+    };
+    let mut out = std::io::stdout().lock();
+    if args.json {
+        emit(
+            &mut out,
+            format_args!(
+                "{}",
+                serde_json::to_string_pretty(&record).unwrap_or_default()
+            ),
+        );
+    } else {
+        render(&mut out, &record, 0);
+    }
+    0
+}
+
+fn cmd_create(args: CreateArgs) -> i32 {
+    let kind = match kind_named(&args.kind) {
+        Ok(k) => k,
+        Err(code) => return code,
+    };
+    if args.message.trim().is_empty() {
+        return refused(
+            "-m needs a source and some context; it goes into the record's history",
+            "NO_JUSTIFICATION",
+            args.json,
+            2,
+        );
+    }
+    let input = match read_input(args.input.as_ref()) {
+        Ok(v) => v,
+        Err(why) => return refused(&why, "BAD_INPUT", args.json, 2),
+    };
+    if let Err(why) = check_input(&input, kind.create, kind.name) {
+        return refused(&why, "BAD_INPUT", args.json, 2);
+    }
+
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match api.create(kind, input, &args.message) {
+        Ok(id) => {
+            let mut out = std::io::stdout().lock();
+            if args.json {
+                emit(
+                    &mut out,
+                    format_args!("{}", serde_json::json!({ "id": id })),
+                );
+            } else {
+                emit(&mut out, format_args!("{id}"));
+                eprintln!("findopera: added {} {id}", kind.name);
+            }
+            0
+        }
+        Err(e) => failed(&e, args.json),
+    }
+}
+
+fn cmd_edit(args: EditArgs) -> i32 {
+    let kind = match kind_named(&args.kind) {
+        Ok(k) => k,
+        Err(code) => return code,
+    };
+    if args.message.trim().is_empty() {
+        return refused(
+            "-m needs a source and some context; it goes into the record's history",
+            "NO_JUSTIFICATION",
+            args.json,
+            2,
+        );
+    }
+    let input = match read_input(args.input.as_ref()) {
+        Ok(v) => v,
+        Err(why) => return refused(&why, "BAD_INPUT", args.json, 2),
+    };
+    // An edit with nothing in it would be recorded as a change that changed
+    // nothing, which is worse than being told to say what you meant.
+    if input.as_object().is_some_and(|o| o.is_empty()) {
+        return refused("nothing to change", "BAD_INPUT", args.json, 2);
+    }
+    if let Err(why) = check_input(&input, kind.edit, kind.name) {
+        return refused(&why, "BAD_INPUT", args.json, 2);
+    }
+
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match api.edit(kind, &args.id, input, &args.message) {
+        Ok(id) => {
+            let mut out = std::io::stdout().lock();
+            if args.json {
+                emit(
+                    &mut out,
+                    format_args!("{}", serde_json::json!({ "id": id })),
+                );
+            } else {
+                emit(&mut out, format_args!("{id}"));
+                eprintln!("findopera: changed {} {id}", kind.name);
+            }
+            0
+        }
+        Err(e) => failed(&e, args.json),
+    }
+}
+
+fn cmd_delete(args: DeleteArgs) -> i32 {
+    let kind = match kind_named(&args.kind) {
+        Ok(k) => k,
+        Err(code) => return code,
+    };
+    if args.message.trim().is_empty() {
+        return refused(
+            "-m needs a source and some context; it goes into the record's history",
+            "NO_JUSTIFICATION",
+            args.json,
+            2,
+        );
+    }
+    if !args.yes {
+        return refused(
+            &format!(
+                "this would remove {} {}. Pass --yes to do it.",
+                kind.name, args.id
+            ),
+            "NEEDS_CONFIRMATION",
+            args.json,
+            2,
+        );
+    }
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match api.delete(kind, &args.id, &args.message) {
+        Ok(()) => {
+            if args.json {
+                let mut out = std::io::stdout().lock();
+                emit(
+                    &mut out,
+                    format_args!("{}", serde_json::json!({ "deleted": args.id })),
+                );
+            } else {
+                eprintln!("findopera: removed {} {}", kind.name, args.id);
+            }
+            0
+        }
+        Err(e) => failed(&e, args.json),
+    }
+}
+
+fn cmd_describe(args: DescribeArgs) -> i32 {
+    let mut out = std::io::stdout().lock();
+    let Some(name) = args.kind else {
+        if args.json {
+            let names: Vec<&str> = crud::TYPES.iter().map(|t| t.name).collect();
+            emit(
+                &mut out,
+                format_args!("{}", serde_json::json!({ "types": names })),
+            );
+            return 0;
+        }
+        let width = crud::TYPES.iter().map(|t| t.name.len()).max().unwrap_or(0);
+        for t in crud::TYPES {
+            let required = t.create.iter().filter(|f| f.required).count();
+            if !emit(
+                &mut out,
+                format_args!(
+                    "{:<width$}  {} field{}, {required} required",
+                    t.name,
+                    t.create.len(),
+                    if t.create.len() == 1 { "" } else { "s" }
+                ),
+            ) {
+                break;
+            }
+        }
+        return 0;
+    };
+    let kind = match kind_named(&name) {
+        Ok(k) => k,
+        Err(code) => return code,
+    };
+
+    if args.json {
+        emit(
+            &mut out,
+            format_args!(
+                "{}",
+                serde_json::to_string_pretty(&json_schema(kind)).unwrap_or_default()
+            ),
+        );
+        return 0;
+    }
+
+    eprintln!("{} — the fields a create takes\n", kind.name);
+    let width = kind.create.iter().map(|f| f.name.len()).max().unwrap_or(0);
+    for f in kind.create {
+        let required = if f.required { "required" } else { "        " };
+        let about = if f.about.is_empty() {
+            String::new()
+        } else {
+            format!("  {}", f.about)
+        };
+        if !emit(
+            &mut out,
+            format_args!("{:<width$}  {:<7}  {required}{about}", f.name, f.json),
+        ) {
+            break;
+        }
+    }
+    eprintln!(
+        "\nAn edit takes the same fields, none of them required. \
+         `findopera describe {} --json` gives this as a JSON Schema.",
+        kind.name
+    );
+    0
+}
+
+/// A JSON Schema for what a create takes.
+///
+/// Draft 2020-12 rather than a shape of our own, because anything that already
+/// validates JSON can then check an input before it is sent, and nobody has to
+/// be taught a vocabulary that exists only here.
+fn json_schema(kind: &crud::Type) -> serde_json::Value {
+    let mut properties = serde_json::Map::new();
+    for f in kind.create {
+        let mut prop = serde_json::Map::new();
+        // Every field but the required ones may be sent as null to mean absent.
+        prop.insert(
+            "type".into(),
+            if f.required {
+                f.json.into()
+            } else {
+                serde_json::json!([f.json, "null"])
+            },
+        );
+        if !f.about.is_empty() {
+            prop.insert("description".into(), f.about.into());
+        }
+        properties.insert(f.name.to_string(), serde_json::Value::Object(prop));
+    }
+    let required: Vec<&str> = kind
+        .create
+        .iter()
+        .filter(|f| f.required)
+        .map(|f| f.name)
+        .collect();
+    serde_json::json!({
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": format!("Create{}Input", kind.graphql),
+        "description": format!("What `findopera create {}` accepts.", kind.name),
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        // The command refuses an unknown key before sending, so saying so here
+        // lets a validator agree with it rather than pass something we reject.
+        "additionalProperties": false,
+    })
 }
 
 fn cmd_search(args: SearchArgs) -> i32 {
@@ -573,11 +1046,25 @@ fn cmd_search(args: SearchArgs) -> i32 {
     };
     let found = match api.search(kind, &criteria) {
         Ok(f) => f,
-        Err(e) => {
-            eprintln!("findopera: {e}");
-            return 3;
-        }
+        Err(e) => return failed(&e, args.json),
     };
+    if args.json {
+        let rows: Vec<serde_json::Value> = found
+            .iter()
+            .map(|f| serde_json::json!({ "id": f.id, "name": f.name, "about": f.about }))
+            .collect();
+        let mut out = std::io::stdout().lock();
+        emit(
+            &mut out,
+            format_args!(
+                "{}",
+                serde_json::to_string_pretty(&rows).unwrap_or_default()
+            ),
+        );
+        // Nothing found is not an error in JSON: an empty list is a perfectly
+        // good answer, and a caller can see it is empty.
+        return i32::from(found.is_empty());
+    }
     if found.is_empty() {
         eprintln!("findopera: nothing found");
         // Partial names match, so a search that finds nothing is usually
@@ -855,6 +1342,36 @@ fn cmd_organize(args: OrganizeArgs) -> i32 {
     let plan = plan::plan(&p.report.markers, &p.recordings, &p.template);
     let listing = plan.listing(args.tabs);
 
+    /// One row of the plan, as a program sees it.
+    ///
+    /// The same fields the columns show, named, plus the two things the
+    /// columns cannot say: which marker a row came from, and whether its name
+    /// was chosen or fallen back to.
+    fn row_json(row: &plan::Row, outcome: Option<&apply::Outcome>) -> serde_json::Value {
+        let mut o = serde_json::json!({
+            "directory": row.marker.directory.display().to_string(),
+            "marker": row.marker.marker_path.display().to_string(),
+            "id": row.marker.id,
+            "path": row.path,
+            "segments": row.segments,
+            "variant": row.marker.variant,
+            "numbered": row.derived,
+        });
+        if let Some(outcome) = outcome {
+            let (state, why) = match outcome {
+                apply::Outcome::Created => ("created", None),
+                apply::Outcome::Skipped => ("skipped", None),
+                apply::Outcome::Conflict(w) => ("conflict", Some(w.clone())),
+                apply::Outcome::Failed(w) => ("failed", Some(w.clone())),
+            };
+            o["outcome"] = state.into();
+            if let Some(why) = why {
+                o["reason"] = why.into();
+            }
+        }
+        o
+    }
+
     let destination = p.settings.as_ref().and_then(|c| c.destination.clone());
     let link = p.settings.as_ref().map(|c| c.link).unwrap_or_default();
     let dry_run = !args.write;
@@ -864,6 +1381,19 @@ fn cmd_organize(args: OrganizeArgs) -> i32 {
     // any question of a destination.
     let Some(destination) = destination else {
         let mut out = std::io::stdout().lock();
+        if args.json {
+            let rows: Vec<serde_json::Value> =
+                plan.rows.iter().map(|r| row_json(r, None)).collect();
+            emit(
+                &mut out,
+                format_args!(
+                    "{}",
+                    serde_json::to_string_pretty(&rows).unwrap_or_default()
+                ),
+            );
+            report(&plan, p.require_variants);
+            return i32::from(plan.blocked(p.require_variants));
+        }
         for line in &listing {
             if !emit(&mut out, format_args!("{line}")) {
                 return 0;
@@ -899,6 +1429,23 @@ fn cmd_organize(args: OrganizeArgs) -> i32 {
 
     let done = apply::apply(&plan, &destination, link, dry_run);
     let mut out = std::io::stdout().lock();
+    if args.json {
+        let rows: Vec<serde_json::Value> = plan
+            .rows
+            .iter()
+            .zip(&done.entries)
+            .map(|(row, entry)| row_json(row, Some(&entry.outcome)))
+            .collect();
+        emit(
+            &mut out,
+            format_args!(
+                "{}",
+                serde_json::to_string_pretty(&rows).unwrap_or_default()
+            ),
+        );
+        report(&plan, p.require_variants);
+        return i32::from(done.troubled() || plan.blocked(p.require_variants));
+    }
     for (line, entry) in listing.iter().zip(&done.entries) {
         let mark = match &entry.outcome {
             apply::Outcome::Created => '+',
@@ -1279,9 +1826,267 @@ fn cmd_fields() -> i32 {
     0
 }
 
+/// Print a record as indented lines.
+///
+/// One renderer rather than twenty, because the curation lives in
+/// `schema/get.graphql` — what is fetched is decided there, and this only has
+/// to lay out whatever came back. A per-type renderer would be a second place
+/// to keep in step with the first.
+fn render(out: &mut impl Write, value: &serde_json::Value, indent: usize) -> bool {
+    let pad = " ".repeat(indent);
+    let serde_json::Value::Object(map) = value else {
+        return emit(out, format_args!("{pad}{}", scalar(value)));
+    };
+
+    // Keys are laid out in a column, but only against their own siblings: a
+    // nested object padded to its parent's width reads as though it were part
+    // of it.
+    // Everything that ends up on one line shares the column, which includes an
+    // empty list and a list of plain values — they print inline too, and
+    // leaving them out of the count makes them the only crooked rows.
+    let inline = |v: &serde_json::Value| match v {
+        serde_json::Value::Object(_) => false,
+        serde_json::Value::Array(items) => items.iter().all(|i| !i.is_object()),
+        _ => true,
+    };
+    let width = map
+        .iter()
+        .filter(|(_, v)| inline(v))
+        .map(|(k, _)| k.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    // A record's own values first, then the records it points at. Alphabetical
+    // order alone interleaves them, and a nested block between two scalars
+    // makes both harder to read than either would be alone.
+    let (nested, plain): (Vec<_>, Vec<_>) = map.iter().partition(|(_, v)| {
+        v.is_object() || matches!(v, serde_json::Value::Array(a) if a.iter().any(|i| i.is_object()))
+    });
+
+    for (key, child) in plain.into_iter().chain(nested) {
+        match child {
+            serde_json::Value::Object(_) => {
+                if !emit(out, format_args!("{pad}{key}")) {
+                    return false;
+                }
+                if !render(out, child, indent + 2) {
+                    return false;
+                }
+            }
+            serde_json::Value::Array(items) => {
+                if items.is_empty() {
+                    if !emit(out, format_args!("{pad}{key:width$}  —")) {
+                        return false;
+                    }
+                    continue;
+                }
+                // A list of plain values belongs on one line; a list of records
+                // does not.
+                if items.iter().all(|i| !i.is_object()) {
+                    let joined: Vec<String> = items.iter().map(scalar).collect();
+                    if !emit(
+                        out,
+                        format_args!("{pad}{key:width$}  {}", joined.join(", ")),
+                    ) {
+                        return false;
+                    }
+                    continue;
+                }
+                if !emit(out, format_args!("{pad}{key}")) {
+                    return false;
+                }
+                for item in items {
+                    if !render(out, item, indent + 2) {
+                        return false;
+                    }
+                    if !emit(out, format_args!("")) {
+                        return false;
+                    }
+                }
+            }
+            _ => {
+                if !emit(out, format_args!("{pad}{key:width$}  {}", scalar(child))) {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// One value, as a person would read it.
+///
+/// An absent value is shown rather than dropped: a field that is empty is
+/// something to fill in, and a reader deciding what to send needs to know the
+/// difference between empty and not a field at all.
+fn scalar(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "—".to_string(),
+        serde_json::Value::String(s) if s.is_empty() => "—".to_string(),
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Bool(b) => if *b { "yes" } else { "no" }.to_string(),
+        other => other.to_string(),
+    }
+}
+
+/// The type this command is about.
+fn kind_named(name: &str) -> Result<&'static crud::Type, i32> {
+    if let Some(t) = crud::TYPES.iter().find(|t| t.name == name) {
+        return Ok(t);
+    }
+    eprintln!("findopera: there is no type called `{name}`");
+    eprintln!("  help: `findopera describe` lists them all");
+    Err(2)
+}
+
+/// JSON from a file, or from standard input.
+fn read_input(from: Option<&PathBuf>) -> Result<serde_json::Value, String> {
+    let text = match from {
+        Some(path) if path.as_os_str() != "-" => std::fs::read_to_string(path)
+            .map_err(|e| format!("cannot read {}: {e}", path.display()))?,
+        _ => std::io::read_to_string(std::io::stdin())
+            .map_err(|e| format!("cannot read the input from standard input: {e}"))?,
+    };
+    if text.trim().is_empty() {
+        return Err("no input given".to_string());
+    }
+    serde_json::from_str(&text).map_err(|e| format!("that is not valid JSON: {e}"))
+}
+
+/// Check the keys against what the type accepts, before spending a request.
+///
+/// The server would refuse an unknown field too, but it would name it in a
+/// GraphQL validation error against an input type the caller never mentioned.
+/// A typo is the likeliest mistake here and deserves an answer in the terms
+/// the caller used.
+fn check_input(
+    value: &serde_json::Value,
+    accepted: &[crud::InputField],
+    what: &str,
+) -> Result<(), String> {
+    let serde_json::Value::Object(map) = value else {
+        return Err(format!(
+            "a {what} takes a JSON object, with one key per field"
+        ));
+    };
+    for key in map.keys() {
+        if accepted.iter().any(|f| f.name == key) {
+            continue;
+        }
+        let near = accepted
+            .iter()
+            .find(|f| f.name.eq_ignore_ascii_case(key))
+            .map(|f| format!(" — did you mean `{}`?", f.name));
+        return Err(format!(
+            "`{key}` is not a field of a {what}{}",
+            near.unwrap_or_default()
+        ));
+    }
+    for field in accepted.iter().filter(|f| f.required) {
+        if !map.contains_key(field.name) {
+            return Err(format!("a {what} needs `{}`", field.name));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use super::crud;
     use super::{definition, with_variant};
+
+    #[test]
+    fn an_unknown_field_is_refused_with_the_nearest_real_one() {
+        let fields = &[
+            crud::InputField {
+                name: "firstName",
+                json: "string",
+                required: true,
+                about: "",
+            },
+            crud::InputField {
+                name: "born",
+                json: "integer",
+                required: false,
+                about: "",
+            },
+        ];
+        let why = super::check_input(
+            &serde_json::json!({ "firstname": "Maria" }),
+            fields,
+            "singer",
+        )
+        .expect_err("a typo is refused");
+        // Case is the likeliest slip, and the server would answer it with a
+        // GraphQL error naming an input type the caller never mentioned.
+        assert!(why.contains("firstName"), "got: {why}");
+    }
+
+    #[test]
+    fn a_missing_required_field_is_named() {
+        let fields = &[crud::InputField {
+            name: "firstName",
+            json: "string",
+            required: true,
+            about: "",
+        }];
+        let why = super::check_input(&serde_json::json!({}), fields, "singer")
+            .expect_err("required fields are checked");
+        assert!(why.contains("firstName"), "got: {why}");
+    }
+
+    #[test]
+    fn optional_fields_may_be_left_out() {
+        let fields = &[
+            crud::InputField {
+                name: "firstName",
+                json: "string",
+                required: true,
+                about: "",
+            },
+            crud::InputField {
+                name: "born",
+                json: "integer",
+                required: false,
+                about: "",
+            },
+        ];
+        super::check_input(
+            &serde_json::json!({ "firstName": "Maria" }),
+            fields,
+            "singer",
+        )
+        .expect("the optional one is optional");
+    }
+
+    #[test]
+    fn something_that_is_not_an_object_is_refused() {
+        let why = super::check_input(&serde_json::json!([1, 2]), &[], "singer")
+            .expect_err("a list is not an input");
+        assert!(why.contains("JSON object"), "got: {why}");
+    }
+
+    #[test]
+    fn absent_values_are_shown_rather_than_dropped() {
+        // A reader deciding what to fill in needs to see that a field exists
+        // and is empty, which is not the same as it not being a field.
+        assert_eq!(super::scalar(&serde_json::Value::Null), "—");
+        assert_eq!(super::scalar(&serde_json::json!("")), "—");
+        assert_eq!(super::scalar(&serde_json::json!(true)), "yes");
+        assert_eq!(super::scalar(&serde_json::json!(1923)), "1923");
+    }
+
+    #[test]
+    fn every_type_is_reachable_by_the_name_it_is_listed_under() {
+        for t in crud::TYPES {
+            assert!(
+                super::kind_named(t.name).is_ok(),
+                "{} is not findable",
+                t.name
+            );
+        }
+        assert!(super::kind_named("no-such-type").is_err());
+    }
 
     #[test]
     fn a_variant_goes_inside_the_brackets_with_the_id() {
