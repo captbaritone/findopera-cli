@@ -36,6 +36,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets -- -D warnings
+      # clippy does not see rustdoc's complaints, so a link that breaks when
+      # something is renamed goes unnoticed until someone reads the docs.
+      - run: cargo doc --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
 
   generated:
     name: model is up to date
