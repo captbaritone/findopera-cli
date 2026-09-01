@@ -3,9 +3,9 @@ The group drops for a recording with no chorus, leaving nothing at all.
 --- template
 [{{chorus}}]
 --- tree
-sosarme/10655.txt
-billy/75.txt
+sosarme/findopera-10655.txt
+billy/findopera-75.txt
 --- listing
 billy	Ambrosian Opera Chorus
 --- report
-recording 10655 rendered "", which has no path segments (from sosarme/10655.txt)
+recording 10655 rendered "", which has no path segments (from sosarme/findopera-10655.txt)

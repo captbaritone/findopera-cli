@@ -1,13 +1,13 @@
 --- template
 {{opera.title}} \[{{id}}\]
 --- tree
-rips/a/332.txt
-rips/b/332.txt
+rips/a/findopera-332.txt
+rips/b/findopera-332.txt
 --- listing
 rips/a	Don Giovanni [332]
 rips/b	Don Giovanni [332]
 --- report
 2 directories want the name "Don Giovanni [332]":
-    rips/a/332.txt
-    rips/b/332.txt
+    rips/a/findopera-332.txt
+    rips/b/findopera-332.txt
     ^ the template has no `{{variant}}` for them to differ in

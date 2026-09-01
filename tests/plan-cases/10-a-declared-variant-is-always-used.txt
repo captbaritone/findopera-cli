@@ -5,7 +5,7 @@ one is needed.
 --- template
 {{opera.title}} \[{{id}}\][ ({{variant}})]
 --- tree
-rips/flac/332 flac.txt
+rips/flac/findopera-332 flac.txt
 --- listing
 rips/flac	Don Giovanni [332] (flac)
 --- report

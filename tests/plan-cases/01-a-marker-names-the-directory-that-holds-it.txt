@@ -1,7 +1,7 @@
 --- template
 {{composer.lastName}}/{{opera.title}}
 --- tree
-Britten/Billy Budd (Decca)/75.txt
+Britten/Billy Budd (Decca)/findopera-75.txt
 --- listing
 Britten/Billy Budd (Decca)	Britten/Billy Budd
 --- report

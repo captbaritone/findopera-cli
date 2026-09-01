@@ -9,8 +9,8 @@ one recording is a thing people have, so it gets a name for each.
 --- template
 {{opera.title}} \[{{id}}\][ ({{variant}})]
 --- tree
-rips/only/332 flac.txt
-rips/only/332 mp3.txt
+rips/only/findopera-332 flac.txt
+rips/only/findopera-332 mp3.txt
 --- listing
 rips/only	Don Giovanni [332] (flac)
 rips/only	Don Giovanni [332] (mp3)

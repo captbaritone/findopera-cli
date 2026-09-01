@@ -5,10 +5,10 @@ indistinguishable, and no variant was declared, so they are numbered.
 --- template
 {{composer.lastName}}/{{opera.title}}[ ({{variant}})]
 --- tree
-a/332.txt
-b/5876.txt
+a/findopera-332.txt
+b/findopera-5876.txt
 --- listing
 a	Mozart/Don Giovanni (1)
 b	Mozart/Don Giovanni (2)
 --- report
-2 directories were numbered by walk order because no variant was declared; those numbers shift as the library changes. Write a word into each marker to fix them — mv 'a/332.txt' 'a/332 <word>.txt' — or pass --require-variants to make this an error.
+2 directories were numbered by walk order because no variant was declared; those numbers shift as the library changes. Write a word into each marker to fix them — mv 'a/findopera-332.txt' 'a/findopera-332 <word>.txt' — or pass --require-variants to make this an error.

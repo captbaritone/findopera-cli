@@ -5,9 +5,9 @@ said every duplicate must be named, so each one is spelled out.
 --- template
 {{opera.title}} \[{{id}}\][ ({{variant}})]
 --- tree
-rips/a/332.txt
-rips/b/332.txt
-elsewhere/75.txt
+rips/a/findopera-332.txt
+rips/b/findopera-332.txt
+elsewhere/findopera-75.txt
 --- strict
 yes
 --- listing
@@ -16,5 +16,5 @@ rips/a	Don Giovanni [332] (1)
 rips/b	Don Giovanni [332] (2)
 --- report
 2 directories would take the same name and were numbered by walk order. Write a word into each marker instead — one you choose, which `{{variant}}` then picks up:
-    mv 'rips/a/332.txt' 'rips/a/332 <word>.txt'
-    mv 'rips/b/332.txt' 'rips/b/332 <word>.txt'
+    mv 'rips/a/findopera-332.txt' 'rips/a/findopera-332 <word>.txt'
+    mv 'rips/b/findopera-332.txt' 'rips/b/findopera-332 <word>.txt'

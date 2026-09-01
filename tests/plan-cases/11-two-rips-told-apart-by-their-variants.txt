@@ -1,8 +1,8 @@
 --- template
 {{opera.title}} \[{{id}}\][ ({{variant}})]
 --- tree
-rips/flac/332 flac.txt
-rips/mp3/332 mp3.txt
+rips/flac/findopera-332 flac.txt
+rips/mp3/findopera-332 mp3.txt
 --- listing
 rips/flac	Don Giovanni [332] (flac)
 rips/mp3	Don Giovanni [332] (mp3)

@@ -13,14 +13,17 @@ $ findopera scan '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' ~/Music
 ./Handel - Sosarme 2026       Handel/Sosarme, Re di Media (2026)
 ```
 
-A marker is a `.txt` file whose **name** carries a recording id, saved into
-the recording's folder. Two spellings count, and both are things you end up
-with by accident:
+A marker is a `.txt` file whose **name** carries a `findopera-<id>` token,
+saved into the recording's folder:
 
 ```
-10655.txt                                          curl -O, wget
+findopera-10655.txt
 Sosarme, Re di Media-2026 [findopera-10655].txt    the site's suggested name
 ```
+
+A bare `10655.txt` is deliberately not enough — a number and a `.txt` is what
+a track listing, a year or a disc number looks like, and the token is the part
+that says the number means a recording.
 
 What a marker identifies is the directory holding it, and one directory can
 hold several: a box set covering several operas is listed once per recording,
@@ -31,7 +34,7 @@ in the library to learn that almost none are markers — on a 12,500-file tree
 that is 246ms against 66ms, nearly all of it wasted, and far worse over a
 network mount where opening a file costs so much more than listing one. It
 also keeps the contents from being load bearing: a marker may be empty, so
-`touch 10655.txt` works.
+`touch findopera-10655.txt` works.
 
 Results go to stdout, one line per recording; everything else to stderr.
 `--tabs` separates the columns with a tab instead of padding, for piping.
@@ -44,7 +47,7 @@ both knows what makes them different — and the marker's filename is where they
 say so. Anything after the id is a **variant**:
 
 ```
-332 flac.txt        332 mp3.txt        Don Giovanni [findopera-332] SACD.txt
+findopera-332 flac.txt   findopera-332 mp3.txt   Don Giovanni [findopera-332] SACD.txt
 ```
 
 which a template picks up as `{{variant}}`. It is nullable, so it wants a
@@ -66,7 +69,7 @@ one line, and carries on:
 ```
 findopera: 2 directories were numbered by walk order because no variant was
 declared; those numbers shift as the library changes. Write a word into each
-marker to fix them — mv 'rips/a/332.txt' 'rips/a/332 <word>.txt' — or pass
+marker to fix them — mv 'rips/a/findopera-332.txt' 'rips/a/findopera-332 <word>.txt' — or pass
 --require-variants to make this an error.
 ```
 

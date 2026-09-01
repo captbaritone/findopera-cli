@@ -1,9 +1,9 @@
 --- template
 {{opera.title}}
 --- tree
-somewhere/999999.txt
-elsewhere/75.txt
+somewhere/findopera-999999.txt
+elsewhere/findopera-75.txt
 --- listing
 elsewhere	Billy Budd
 --- report
-recording 999999 is not in the FindOpera database (from somewhere/999999.txt)
+recording 999999 is not in the FindOpera database (from somewhere/findopera-999999.txt)

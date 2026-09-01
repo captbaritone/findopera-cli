@@ -4,7 +4,7 @@ rip — a marker and a renamed copy of it. The directory is named once.
 --- template
 {{opera.title}} \[{{id}}\]
 --- tree
-rips/only/332.txt
+rips/only/findopera-332.txt
 rips/only/Don Giovanni [findopera-332].txt
 --- listing
 rips/only	Don Giovanni [332]

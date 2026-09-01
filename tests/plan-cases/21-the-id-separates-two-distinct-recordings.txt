@@ -1,8 +1,8 @@
 --- template
 {{composer.lastName}}/{{opera.title}} \[{{id}}\]
 --- tree
-a/332.txt
-b/5876.txt
+a/findopera-332.txt
+b/findopera-5876.txt
 --- listing
 a	Mozart/Don Giovanni [332]
 b	Mozart/Don Giovanni [5876]

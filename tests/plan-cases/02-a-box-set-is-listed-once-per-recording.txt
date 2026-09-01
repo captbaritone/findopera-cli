@@ -3,8 +3,8 @@ One directory holding two markers stands for both recordings.
 --- template
 {{composer.lastName}}/{{opera.title}}
 --- tree
-Box Sets/Donizetti box/1721.txt
-Box Sets/Donizetti box/5000.txt
+Box Sets/Donizetti box/findopera-1721.txt
+Box Sets/Donizetti box/findopera-5000.txt
 --- listing
 Box Sets/Donizetti box	Donizetti/L'elisir d'amore
 Box Sets/Donizetti box	Respighi/Maria Egiziaca

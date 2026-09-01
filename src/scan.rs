@@ -8,12 +8,21 @@
 //!
 //! # The name is the whole convention
 //!
-//! Two spellings count, and both are things you actually end up with:
+//! The name carries a `findopera-<id>` token:
 //!
 //! ```text
-//! 10655.txt                                          curl -O, wget
+//! findopera-10655.txt
 //! Sosarme, Re di Media-2026 [findopera-10655].txt    the site's suggested name
 //! ```
+//!
+//! The token is what is matched, not the brackets around it, so a title
+//! containing brackets cannot confuse it and the delimiter can change without
+//! invalidating anything already on disk.
+//!
+//! A bare `10655.txt` is deliberately not enough. A number and a `.txt` is
+//! what a track listing, a year or a disc number looks like, and a library is
+//! full of them — the token is the part that says the number means a FindOpera
+//! recording rather than any of the other things a number can mean.
 //!
 //! # Telling two rips apart
 //!
@@ -21,8 +30,8 @@
 //! organising the library chose to separate two copies of one recording.
 //!
 //! ```text
-//! 332 flac.txt        variant "flac"
-//! 332 mp3.txt         variant "mp3"
+//! findopera-332 flac.txt        variant "flac"
+//! findopera-332 mp3.txt         variant "mp3"
 //! ```
 //!
 //! This is the only thing here that the recording metadata cannot supply. Two
@@ -30,16 +39,14 @@
 //! them from the data alone — but the person who has both knows what makes
 //! them different, and the filename is where they can say so.
 //!
-//! The `findopera-<id>` token is what is matched, not the brackets around it,
-//! so a title containing brackets cannot confuse it and the delimiter can
-//! change without invalidating anything already on disk.
+//! # Names, not contents
 //!
 //! Nothing here opens a file. Deciding by content would mean reading every
 //! `.txt` in the library to discover that almost none of them are markers —
 //! on a 12,500-file tree that is three and a half times the work, nearly all
 //! of it wasted, and far worse over a network mount where opening a file
-//! costs so much more than listing one. It also makes the contents load
-//! bearing: as it is, the file can be empty, and `touch '10655.txt'` is a
+//! costs so much more than listing one. It also keeps the contents from being
+//! load bearing: the file can be empty, so `touch 'findopera-10655.txt'` is a
 //! perfectly good marker.
 
 use crate::FieldDoc;
@@ -65,7 +72,7 @@ pub struct Marker {
 /// disappears for every recording with only one copy.
 pub const VARIANT: FieldDoc = FieldDoc::new(
     "variant",
-    "Whatever the marker's filename carries after the id, e.g. `332 flac.txt`",
+    "Whatever the marker filename carries after the id, e.g. `findopera-332 flac.txt`",
 );
 
 #[derive(Debug, Default)]
@@ -92,16 +99,10 @@ fn normalize(digits: &str) -> Option<String> {
 
 /// The id a file's name carries, if it follows the convention.
 ///
-/// Accepts a stem that is nothing but the id, which is what `curl -O` and
-/// `wget` produce from the URL, and a `findopera-<id>` token anywhere in the
-/// stem, which is what the site's suggested filename carries.
+/// A `findopera-<id>` token anywhere in the stem, with whatever follows the
+/// digits taken as the variant.
 fn id_from_name(path: &Path) -> Option<(String, Option<String>)> {
     let stem = path.file_stem()?.to_str()?;
-    // A stem that opens with digits: the id, then anything else is a variant.
-    let digits: String = stem.chars().take_while(|c| c.is_ascii_digit()).collect();
-    if !digits.is_empty() {
-        return normalize(&digits).map(|id| (id, variant_after(&stem[digits.len()..])));
-    }
     const TOKEN: &str = "findopera-";
     let mut at = 0;
     while let Some(pos) = stem[at..].find(TOKEN) {

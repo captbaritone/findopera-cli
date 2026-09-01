@@ -4,8 +4,8 @@ differently, so there is nothing to number.
 --- template
 {{opera.title}} \[{{id}}\][ ({{variant}})]
 --- tree
-rips/flac/332 flac.txt
-rips/other/332.txt
+rips/flac/findopera-332 flac.txt
+rips/other/findopera-332.txt
 --- listing
 rips/flac	Don Giovanni [332] (flac)
 rips/other	Don Giovanni [332]

@@ -46,22 +46,22 @@ impl Drop for Tree {
 #[test]
 fn a_marker_names_the_directory_that_holds_it() {
     let t = Tree::new("holds");
-    t.touch("Britten/Billy Budd/75.txt");
+    t.touch("Britten/Billy Budd/findopera-75.txt");
     assert_eq!(t.scan(), vec![("Britten/Billy Budd".into(), "75".into())]);
 }
 
 #[test]
 fn the_walk_goes_arbitrarily_deep() {
     let t = Tree::new("deep");
-    t.touch("a/b/c/d/e/10655.txt");
+    t.touch("a/b/c/d/e/findopera-10655.txt");
     assert_eq!(t.scan(), vec![("a/b/c/d/e".into(), "10655".into())]);
 }
 
 #[test]
 fn a_box_set_directory_stands_for_every_recording_in_it() {
     let t = Tree::new("boxset");
-    t.touch("Box/1721.txt");
-    t.touch("Box/5000.txt");
+    t.touch("Box/findopera-1721.txt");
+    t.touch("Box/findopera-5000.txt");
     let found = t.scan();
     assert_eq!(found.len(), 2);
     assert!(found.iter().all(|(d, _)| d == "Box"));
@@ -99,16 +99,28 @@ fn a_name_that_merely_ends_in_the_token_is_not_a_marker() {
 #[test]
 fn leading_zeros_do_not_make_a_second_recording() {
     let t = Tree::new("zeros");
-    t.touch("a/075.txt");
+    t.touch("a/findopera-075.txt");
     assert_eq!(t.scan(), vec![("a".into(), "75".into())]);
 }
 
 #[test]
 fn one_directory_naming_a_recording_twice_is_reported_once() {
     let t = Tree::new("dupe");
-    t.touch("a/75.txt");
+    t.touch("a/findopera-75.txt");
     t.touch("a/Billy Budd [findopera-75].txt");
     assert_eq!(t.scan(), vec![("a".into(), "75".into())]);
+}
+
+#[test]
+fn a_bare_number_is_not_a_marker() {
+    // A number and a `.txt` is what a track listing, a year or a disc number
+    // looks like, and a library is full of them. The token is the part that
+    // says the number means a recording rather than anything else.
+    let t = Tree::new("bare");
+    t.touch("a/10655.txt");
+    t.touch("a/1967.txt");
+    t.touch("a/01.txt");
+    assert!(t.scan().is_empty());
 }
 
 #[test]
@@ -124,7 +136,7 @@ fn a_text_file_whose_name_carries_no_id_is_not_a_marker() {
 #[test]
 fn only_txt_files_count() {
     let t = Tree::new("ext");
-    t.touch("a/10655.jpg");
+    t.touch("a/findopera-10655.jpg");
     assert!(t.scan().is_empty());
 }
 
@@ -133,7 +145,7 @@ fn a_marker_may_be_empty() {
     // `touch 10655.txt` is a perfectly good marker; every file in these tests
     // is empty, and this one says so on purpose.
     let t = Tree::new("empty");
-    t.touch("a/10655.txt");
+    t.touch("a/findopera-10655.txt");
     assert_eq!(t.scan().len(), 1);
 }
 
@@ -154,8 +166,8 @@ fn scan_variants(t: &Tree) -> Vec<(String, String, Option<String>)> {
 #[test]
 fn whatever_follows_the_id_is_a_variant() {
     let t = Tree::new("variant");
-    t.touch("a/332 flac.txt");
-    t.touch("b/332 mp3.txt");
+    t.touch("a/findopera-332 flac.txt");
+    t.touch("b/findopera-332 mp3.txt");
     let found = scan_variants(&t);
     assert!(found.contains(&("a".into(), "332".into(), Some("flac".into()))));
     assert!(found.contains(&("b".into(), "332".into(), Some("mp3".into()))));
@@ -164,7 +176,7 @@ fn whatever_follows_the_id_is_a_variant() {
 #[test]
 fn a_bare_id_carries_no_variant() {
     let t = Tree::new("novariant");
-    t.touch("a/332.txt");
+    t.touch("a/findopera-332.txt");
     assert_eq!(scan_variants(&t), vec![("a".into(), "332".into(), None)]);
 }
 
@@ -172,9 +184,9 @@ fn a_bare_id_carries_no_variant() {
 fn the_delimiters_around_the_id_are_not_part_of_the_variant() {
     // However the id is spelled, the variant is the word after it.
     let t = Tree::new("vdelims");
-    t.touch("a/332-flac.txt");
+    t.touch("a/findopera-332-flac.txt");
     t.touch("b/Don Giovanni [findopera-332] SACD.txt");
-    t.touch("c/332 (LP).txt");
+    t.touch("c/findopera-332 (LP).txt");
     let found = scan_variants(&t);
     assert!(found.contains(&("a".into(), "332".into(), Some("flac".into()))));
     assert!(found.contains(&("b".into(), "332".into(), Some("SACD".into()))));
@@ -186,15 +198,15 @@ fn two_variants_of_one_recording_in_one_directory_are_both_kept() {
     // The dedup is on (directory, id, variant): saying they are different
     // rips is exactly what the variant is for.
     let t = Tree::new("twovariants");
-    t.touch("a/332 flac.txt");
-    t.touch("a/332 mp3.txt");
+    t.touch("a/findopera-332 flac.txt");
+    t.touch("a/findopera-332 mp3.txt");
     assert_eq!(scan_variants(&t).len(), 2);
 }
 
 #[test]
 fn the_same_marker_twice_is_still_reported_once() {
     let t = Tree::new("samevariant");
-    t.touch("a/332 flac.txt");
+    t.touch("a/findopera-332 flac.txt");
     t.touch("a/Don Giovanni [findopera-332] flac.txt");
     assert_eq!(scan_variants(&t).len(), 1);
 }
