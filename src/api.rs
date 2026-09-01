@@ -11,6 +11,13 @@ pub const DEFAULT_ENDPOINT: &str = "https://findopera.com/api/graphql";
 /// for them all in one query is a good way to be told no.
 const BATCH: usize = 100;
 
+/// The most rows the server will return for one request.
+///
+/// Its limit, mirrored here so that asking for more is answered before a round
+/// trip and in the terms the caller used — the server would otherwise object
+/// to a number they never typed, since this asks for one more than it shows.
+pub const MAX_FIRST: u32 = 200;
+
 /// How many times a request that was told "later" is sent again.
 ///
 /// Small on purpose. A caller who has said who they are has a budget far
@@ -570,6 +577,24 @@ mod tests {
     }
 
     #[test]
+    fn a_page_never_asks_for_more_than_the_server_allows() {
+        // The extra row that detects truncation must not push the request past
+        // the server's limit, or asking for the largest allowed page would be
+        // refused over a number the caller never typed.
+        for wanted in [1u32, 10, super::MAX_FIRST - 1, super::MAX_FIRST] {
+            let asked = wanted.saturating_add(1).min(super::MAX_FIRST);
+            assert!(
+                asked <= super::MAX_FIRST,
+                "asking for {wanted} would request {asked}"
+            );
+            assert!(
+                asked >= wanted,
+                "asking for {wanted} would request only {asked}"
+            );
+        }
+    }
+
+    #[test]
     fn every_type_has_a_query_and_asks_for_the_right_field() {
         // The registry is generated from the schema and the queries are
         // written by hand, so this is where the two could disagree: a query
@@ -829,10 +854,14 @@ impl Client {
     /// Look something up by name.
     pub fn search(&self, kind: Kind, criteria: &Criteria) -> Result<Results, ApiError> {
         let (operation, field) = kind.operation();
-        let wanted = criteria.first.max(1);
+        let wanted = criteria.first.clamp(1, MAX_FIRST);
         // One more than will be shown, so that a full page can be told from a
-        // page that happens to end there.
-        let first = wanted.saturating_add(1);
+        // page that happens to end there. At the server's limit there is no
+        // room for the extra one, so a page that comes back exactly full is
+        // reported as having more behind it. That errs toward telling someone
+        // to narrow a search that was already complete, which is the harmless
+        // direction; the other way round hides a match.
+        let first = wanted.saturating_add(1).min(MAX_FIRST);
 
         let variables = if kind == Kind::Recording {
             let mut filter = serde_json::Map::new();
@@ -862,7 +891,8 @@ impl Client {
             .ok_or_else(|| ApiError::Unreachable(format!("the API returned no {field}")))?;
 
         let mut all: Vec<Found> = list.iter().map(|v| found(kind, v)).collect();
-        let more = all.len() > wanted as usize;
+        let more =
+            all.len() > wanted as usize || (wanted == MAX_FIRST && all.len() as u32 == MAX_FIRST);
         all.truncate(wanted as usize);
         Ok(Results { found: all, more })
     }

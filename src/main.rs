@@ -550,7 +550,7 @@ struct Looking {
     /// The name, or part of one.
     #[arg(value_name = "QUERY", default_value = "")]
     query: Vec<String>,
-    /// How many results.
+    /// How many results, up to 200.
     #[arg(long, default_value_t = 10, value_name = "N")]
     first: u32,
     /// Separate the columns with a tab instead of padding, for piping.
@@ -1084,6 +1084,20 @@ fn cmd_search(args: SearchArgs) -> i32 {
         Searching::Composer(l) => plain(api::Kind::Composer, l),
         Searching::Character(l) => plain(api::Kind::Character, l),
     };
+
+    if looking.first > api::MAX_FIRST {
+        return refused(
+            &format!(
+                "--first is {} at most, and {} was asked for. Narrow the search rather than \
+                 widening the page.",
+                api::MAX_FIRST,
+                looking.first
+            ),
+            "TOO_MANY",
+            looking.json,
+            2,
+        );
+    }
 
     let narrowed = !criteria.singers.is_empty()
         || criteria.conductor.is_some()

@@ -163,7 +163,9 @@ there are more:
 findopera: these are the first 3, and there are more. Narrow the search, or raise --first.
 ```
 
-There is no way to page through them, on purpose — narrowing is a better
+At most 200 can be asked for at once; the server refuses more, and so does the
+CLI, before spending the request. There is no way to page through them, on
+purpose — narrowing is a better
 answer than paging, and a result you had to walk to is one you could have asked
 for. What matters is that a full page is never mistaken for the whole answer:
 something that matched perfectly well would look like it does not exist.
