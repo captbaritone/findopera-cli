@@ -251,7 +251,14 @@ impl Plan<'_> {
                     marker.marker_path.display()
                 )),
                 Problem::Unusable { marker, reason } => {
-                    out.push(format!("recording {} {reason}", marker.id));
+                    // The marker, as `Missing` and `Clash` give: being told a
+                    // recording failed without being told where it lives means
+                    // going and looking for it.
+                    out.push(format!(
+                        "recording {} {reason} (from {})",
+                        marker.id,
+                        marker.marker_path.display()
+                    ));
                 }
                 Problem::Numbered { markers } => {
                     if strict {

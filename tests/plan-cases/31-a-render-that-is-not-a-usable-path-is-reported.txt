@@ -8,4 +8,4 @@ billy/75.txt
 --- listing
 billy	Ambrosian Opera Chorus
 --- report
-recording 10655 rendered "", which has no path segments
+recording 10655 rendered "", which has no path segments (from sosarme/10655.txt)
