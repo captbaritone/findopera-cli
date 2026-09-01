@@ -1,12 +1,10 @@
 The same two markers, but each says which rip it is. They are different
 statements, so both are kept and the directory is offered under both names.
 
-This is almost certainly a mistake: a directory holds one rip, so it cannot be
-both the FLAC and the MP3 of one recording. It is not the same as a box set,
-which is one directory holding markers for *different* recordings — that is
-legitimate, and case 02 covers it. Recorded here as it behaves today; the
-combination is precisely detectable (one directory, one id, two variants) if
-it should become an error.
+One source standing for several names is not an anomaly here — it is already
+how a box set works (case 02), and a library built out of symlinks takes each
+name as another link to the same place. A folder holding a FLAC and an MP3 of
+one recording is a thing people have, so it gets a name for each.
 
 --- template
 {{opera.title}} \[{{id}}\][ ({{variant}})]
