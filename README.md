@@ -50,17 +50,25 @@ $ findopera organize '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' ~/Musi
 ./Handel - Sosarme 2026       Handel/Sosarme, Re di Media (2026)
 ```
 
-A marker is a `.txt` file whose **name** carries a `findopera-<id>` token,
-saved into the recording's folder:
+A folder is matched to a recording by a marker: a `.txt` file saved inside it
+whose **name** carries `findopera-<id>`. The id is the number in the
+recording's address on findopera.com, which serves the file:
+
+```
+https://findopera.com/recording/10655.txt
+```
+
+Save it into the folder holding that recording, named so the id is in it —
+a downloaded copy may not be, so check:
 
 ```
 findopera-10655.txt
-Sosarme, Re di Media-2026 [findopera-10655].txt    the site's suggested name
+Sosarme, Re di Media [findopera-10655].txt     also fine
 ```
 
 A bare `10655.txt` is deliberately not enough — a number and a `.txt` is what
-a track listing, a year or a disc number looks like, and the token is the part
-that says the number means a recording.
+a track listing, a year or a disc number looks like, and the `findopera-` is
+what says the number means a recording.
 
 What a marker identifies is the directory holding it, and one directory can
 hold several: a box set covering several operas is listed once per recording,

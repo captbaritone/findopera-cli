@@ -10,6 +10,14 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 const AFTER_HELP: &str = "\
+A folder is matched to a recording by a marker file saved inside it, whose
+name carries the recording's id. Download one from the recording's page and
+rename it so the id is in the name:
+
+  https://findopera.com/recording/10655.txt   ->   findopera-10655.txt
+
+Start with `findopera init`, then `findopera organize --help`.
+
 Exit codes:
   0  nothing to report
   1  a recording is missing, a name is not a usable path, two folders want
@@ -23,7 +31,7 @@ Results go to stdout; everything else to stderr.";
 #[command(
     name = "findopera",
     version,
-    about = "Name a music library from FindOpera metadata, through a template",
+    about = "Organize a library of opera recordings, using metadata from findopera.com",
     after_help = AFTER_HELP,
     subcommand_required = true,
     arg_required_else_help = true
@@ -39,12 +47,44 @@ enum Command {
     #[command(
         long_about = "\
 Walk a library for marker files, work out what each recording's folder should
-be called, and — with --write — build a tree of those names at the destination
-in the settings file.
+be called, and — with --write — build a tree of those folders at the
+destination in the settings file.
+
+MARKER FILES
+
+A folder is matched to a recording by a .txt file saved inside it, whose name
+carries `findopera-<id>`. The id is the number in the recording's address on
+findopera.com, which serves the file:
+
+  https://findopera.com/recording/10655.txt
+
+Save it into the folder holding that recording, named so the id is in it:
+
+  findopera-10655.txt
+  Sosarme, Re di Media [findopera-10655].txt     also fine
+
+A downloaded copy may not be named that way, so check. A bare `10655.txt` is
+not enough — a number and a .txt is what a track listing or a year looks like,
+and the `findopera-` is what says the number means a recording.
+
+The contents are never read, so an empty file will do: the whole convention is
+the name. `touch 'findopera-10655.txt'` makes a perfectly good marker.
+
+One folder may hold several markers; a box set covering several operas is
+listed once for each recording in it. Where two folders hold the *same*
+recording — a FLAC rip and an MP3 rip of one performance — nothing in the
+recording tells them apart, so put a word after the id to say which is which:
+
+  findopera-10655 flac.txt
+  findopera-10655 mp3.txt
+
+A template picks that word up as {{variant}}.
+
+BUILDING
 
 Nothing is written without --write. Nothing is ever deleted or overwritten.
 
-With no destination set the naming is still worked out and shown, which is
+With no destination set the folders are still worked out and shown, which is
 what you want while you are still settling on a template.",
         after_help = "\
 Examples:
@@ -162,7 +202,7 @@ fn cmd_organize(args: OrganizeArgs) -> i32 {
     let link = p.settings.as_ref().map(|c| c.link).unwrap_or_default();
     let dry_run = !args.write;
 
-    // Without somewhere to build, the naming is still worth having — it is
+    // Without somewhere to build, the folder names are still worth having — they are
     // what you are looking at while you settle on a template, before there is
     // any question of a destination.
     let Some(destination) = destination else {
@@ -174,7 +214,7 @@ fn cmd_organize(args: OrganizeArgs) -> i32 {
         }
         report(&plan, p.require_variants);
         eprintln!(
-            "findopera: no destination set, so this is the naming only. Add one to \
+            "findopera: no destination set, so these are only the folder names. Add one to \
              build it:\n\x20   destination = \"/path/to/named\""
         );
         return i32::from(plan.blocked(p.require_variants));
@@ -295,7 +335,7 @@ fn cmd_init(args: InitArgs) -> i32 {
     }
 }
 
-/// Everything needed before the naming can be worked out.
+/// Everything needed before the folders can be worked out.
 struct Prepared {
     settings: Option<Config>,
     template: Template,

@@ -50,7 +50,7 @@ pub enum Link {
 pub struct Config {
     /// The name each recording's folder should have.
     pub template: String,
-    /// Where `organize --write` builds the named tree.
+    /// Where `organize --write` builds the folders.
     #[serde(default)]
     pub destination: Option<PathBuf>,
     /// How each folder gets there.
@@ -142,7 +142,7 @@ pub fn starter() -> String {
         .map(|l| format!("#   {l}"))
         .collect::<Vec<_>>()
         .join("\n");
-    let head = r#"# How this library is named.
+    let head = r#"# How this library is organized.
 #
 # Run `findopera organize` in this folder to see what each recording's folder
 # would be called. Nothing is renamed or moved; it only ever prints.
@@ -178,8 +178,8 @@ template = '''
 # instead of numbered.
 require-variants = false
 
-# Where `findopera organize --write` builds the named tree. Until this is set
-# it has nowhere to build, and shows the naming on its own.
+# Where `findopera organize --write` builds the folders. Until this is set it
+# has nowhere to build, and only shows what it would call things.
 #
 # destination = "/path/to/named"
 
