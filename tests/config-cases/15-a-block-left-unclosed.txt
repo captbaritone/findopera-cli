@@ -1,0 +1,10 @@
+--- toml
+template = '''
+{{opera.title}}
+--- result
+findopera.toml is not valid:
+TOML parse error at line 2, column 16
+  |
+2 | {{opera.title}}
+  |                ^
+invalid multi-line literal string, expected `'`

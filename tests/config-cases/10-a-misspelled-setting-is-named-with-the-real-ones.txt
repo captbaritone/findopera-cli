@@ -1,0 +1,10 @@
+--- toml
+template = '''{{opera.title}}'''
+requre-variants = true
+--- result
+findopera.toml is not valid:
+TOML parse error at line 2, column 1
+  |
+2 | requre-variants = true
+  | ^^^^^^^^^^^^^^^
+unknown field `requre-variants`, expected one of `template`, `require-variants`, `follow-links`

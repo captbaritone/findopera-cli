@@ -95,13 +95,14 @@ fn cases() {
             // `--require-variants` would.
             let strict = input.contains_key("strict");
             let plan = plan::plan(&report.markers, &recordings(), &tmpl);
-            let strip = |s: String| s.replace(&format!("{}/", tree.0.display()), "");
+            let root = format!("{}/", fixture::slashes(&tree.0.display().to_string()));
+            let strip = |s: &str| fixture::slashes(s).replace(&root, "");
             BTreeMap::from([
                 (
                     "listing".to_string(),
                     plan.listing(true)
                         .into_iter()
-                        .map(strip)
+                        .map(|s| strip(&s))
                         .collect::<Vec<_>>()
                         .join("\n"),
                 ),
@@ -109,7 +110,7 @@ fn cases() {
                     "report".to_string(),
                     plan.report(strict)
                         .into_iter()
-                        .map(strip)
+                        .map(|s| strip(&s))
                         .collect::<Vec<_>>()
                         .join("\n"),
                 ),

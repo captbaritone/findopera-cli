@@ -1,0 +1,11 @@
+The apostrophe and the escaped bracket both survive, which is the whole reason
+for the ''' form: what is in the file is what you would have typed.
+
+--- toml
+template = '''
+{{opera.englishTitle|"L'inconnu"}} \[{{id}}\]
+'''
+--- result
+template = "{{opera.englishTitle|\"L'inconnu\"}} \\[{{id}}\\]"
+require-variants = false
+follow-links = false

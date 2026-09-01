@@ -25,6 +25,15 @@ pub struct Section;
 
 const EMPTY: &str = "(empty)";
 
+/// A path written the way the fixtures write them, whatever the platform uses.
+///
+/// The library hands back native paths, which is right for someone reading its
+/// output — but a snapshot that changed shape on Windows would test the
+/// platform rather than the program.
+pub fn slashes(s: &str) -> String {
+    s.replace(std::path::MAIN_SEPARATOR, "/")
+}
+
 /// Run every `.txt` case under `dir`.
 ///
 /// `inputs` and `outputs` name the sections, in the order they are written
@@ -62,8 +71,12 @@ pub fn run(
         let got = run_case(&name, &case.sections);
         let mut after = case.sections.clone();
         for key in outputs {
+            // Trailing newlines are trimmed off a parsed section, so they have
+            // to come off a produced one too — otherwise anything ending in a
+            // newline can never match what was written for it, and blessing
+            // rewrites the same bytes for ever.
             let value = got.get(*key).cloned().unwrap_or_default();
-            after.insert((*key).to_string(), value);
+            after.insert((*key).to_string(), value.trim_end_matches('\n').to_string());
         }
         if after == case.sections {
             continue;

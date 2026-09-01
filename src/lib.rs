@@ -16,6 +16,7 @@
 //! GraphQL schema by `codegen/generate.mjs`.
 
 pub mod api;
+pub mod config;
 pub mod model;
 pub mod plan;
 pub mod scan;

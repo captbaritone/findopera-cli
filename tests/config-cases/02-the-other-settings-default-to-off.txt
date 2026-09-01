@@ -1,0 +1,6 @@
+--- toml
+template = '''{{opera.title}}'''
+--- result
+template = "{{opera.title}}"
+require-variants = false
+follow-links = false

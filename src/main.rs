@@ -1,6 +1,7 @@
 //! `findopera` — name a music library from FindOpera metadata.
 
 use clap::{Args, Parser, Subcommand};
+use findopera::config::{self, Config};
 use findopera::model::FIELDS;
 use findopera::FieldDoc;
 use findopera::{api, plan, scan, Template};
@@ -52,18 +53,38 @@ Examples:
 
     /// List every field a template may use.
     Fields,
+
+    /// Write a starter findopera.toml, explaining every setting.
+    #[command(long_about = "\
+Write a starter findopera.toml into a directory, with every setting present
+and explained, so there is no blank file to guess at.
+
+It refuses to overwrite one that is already there.")]
+    Init(InitArgs),
+}
+
+#[derive(Args)]
+struct InitArgs {
+    /// Directory to write findopera.toml into.
+    #[arg(value_name = "DIR", default_value = ".")]
+    dir: PathBuf,
 }
 
 #[derive(Args)]
 struct ScanArgs {
-    /// Template. `{{field}}` placeholders, `|`-separated fallbacks with a
-    /// quoted literal last, and `[optional groups]` dropped when a placeholder
-    /// inside them turns out to be absent.
-    #[arg(value_name = "TEMPLATE")]
-    template: String,
     /// Directories to walk.
     #[arg(value_name = "DIR", default_value = ".")]
     roots: Vec<PathBuf>,
+    /// Settings file. Defaults to findopera.toml beside the first DIR.
+    #[arg(long, value_name = "FILE")]
+    config: Option<PathBuf>,
+    /// Template, overriding the one in the settings file.
+    ///
+    /// `{{field}}` placeholders, `|`-separated fallbacks with a quoted literal
+    /// last, and `[optional groups]` dropped when a placeholder inside them
+    /// turns out to be absent.
+    #[arg(long, short = 't', value_name = "TEMPLATE")]
+    template: Option<String>,
     /// Follow symlinks while walking.
     #[arg(long)]
     follow_links: bool,
@@ -100,11 +121,59 @@ fn run() -> i32 {
     match Cli::parse().command {
         Command::Scan(args) => cmd_scan(args),
         Command::Fields => cmd_fields(),
+        Command::Init(args) => cmd_init(args),
+    }
+}
+
+fn cmd_init(args: InitArgs) -> i32 {
+    let path = args.dir.join(config::FILE_NAME);
+    if path.exists() {
+        eprintln!("findopera: {} is already there", path.display());
+        return 2;
+    }
+    match std::fs::write(&path, config::starter()) {
+        Ok(()) => {
+            println!("{}", path.display());
+            eprintln!("findopera: edit the template in there, then run `findopera scan`");
+            0
+        }
+        Err(e) => {
+            eprintln!("findopera: cannot write {}: {e}", path.display());
+            1
+        }
     }
 }
 
 fn cmd_scan(args: ScanArgs) -> i32 {
-    let report = scan::scan(&args.roots, args.follow_links);
+    // The settings live beside what is being scanned, or wherever --config
+    // says. Nothing searches up the tree: a source can carry several of these,
+    // one per way of naming it, and which one ran should never be a guess.
+    let config_path = args
+        .config
+        .clone()
+        .unwrap_or_else(|| args.roots[0].join(config::FILE_NAME));
+    let settings = match Config::load(&config_path) {
+        Ok(c) => Some(c),
+        // A template on the command line is reason enough not to need a file.
+        Err(config::ConfigError::Missing { .. }) if args.template.is_some() => None,
+        Err(e) => {
+            eprintln!("findopera: {e}");
+            return 2;
+        }
+    };
+    let template = match args
+        .template
+        .clone()
+        .or_else(|| settings.as_ref().map(|c| c.template.clone()))
+    {
+        Some(t) => t,
+        None => unreachable!("a missing config without --template already returned"),
+    };
+    let follow_links = args.follow_links || settings.as_ref().is_some_and(|c| c.follow_links);
+    let require_variants =
+        args.require_variants || settings.as_ref().is_some_and(|c| c.require_variants);
+
+    let report = scan::scan(&args.roots, follow_links);
     for (path, why) in &report.unreadable {
         eprintln!("findopera: {}: {why}", path.display());
     }
@@ -127,11 +196,11 @@ fn cmd_scan(args: ScanArgs) -> i32 {
 
     // Parse before fetching: a bad template is the caller's mistake, and
     // should not cost a network round trip to discover.
-    let tmpl = match Template::parse(&args.template, &schema) {
+    let tmpl = match Template::parse(&template, &schema) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("findopera: {e}");
-            for line in e.underline(&args.template) {
+            for line in e.underline(&template) {
                 eprintln!("  {line}");
             }
             if let Some(help) = &e.help {
@@ -158,7 +227,7 @@ fn cmd_scan(args: ScanArgs) -> i32 {
             return 0;
         }
     }
-    let report_lines = plan.report(args.require_variants);
+    let report_lines = plan.report(require_variants);
     if !report_lines.is_empty() {
         eprintln!();
         for line in report_lines {
@@ -171,7 +240,7 @@ fn cmd_scan(args: ScanArgs) -> i32 {
             }
         }
     }
-    i32::from(plan.blocked(args.require_variants))
+    i32::from(plan.blocked(require_variants))
 }
 
 fn cmd_fields() -> i32 {

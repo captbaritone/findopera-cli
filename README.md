@@ -2,6 +2,43 @@
 
 Name a music library from FindOpera metadata, through a template.
 
+## Getting started
+
+```bash
+findopera init ~/Music     # write a findopera.toml, every setting explained
+findopera scan ~/Music     # see what each folder would be called
+```
+
+`findopera.toml` sits beside the library and holds the settings that should not
+change between runs — the template above all, since a library named by two
+slightly different templates is worse than one named by either:
+
+```toml
+# The name to give each folder. `/` separates folder levels.
+template = '''
+{{composer.lastName}}[ ({{composer.dates}})]/{{opera.title}}[ ({{year}})]
+'''
+
+require-variants = false
+follow-links = false
+```
+
+The template goes in a `'''` block, which is the only TOML form where what you
+write is exactly what you would type at the prompt: a plain `'…'` string cannot
+hold the apostrophe in `{{opera.title|"L'…"}}`, and a `"…"` string needs every
+`\[` written `\\[`.
+
+Nothing searches up the tree. `scan` reads the file beside what you scanned, or
+the one you name with `--config` — so one library can carry several, one per
+way of naming it, and which one ran is never a guess:
+
+```bash
+findopera scan ~/Music --config ~/Music/by-conductor.toml
+findopera scan ~/Music -t '{{opera.title}}'      # or just override the template
+```
+
+## Scanning
+
 `findopera scan` walks directories for marker files and shows what each folder
 would be called:
 

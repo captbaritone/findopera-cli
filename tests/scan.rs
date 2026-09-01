@@ -4,6 +4,8 @@
 //! its name, so the files are all empty.
 
 use findopera::scan;
+
+mod fixture;
 use std::fs;
 use std::path::PathBuf;
 
@@ -31,7 +33,7 @@ impl Tree {
             .iter()
             .map(|m| {
                 let dir = m.directory.strip_prefix(&self.0).unwrap_or(&m.directory);
-                (dir.display().to_string(), m.id.clone())
+                (fixture::slashes(&dir.display().to_string()), m.id.clone())
             })
             .collect()
     }
@@ -158,7 +160,11 @@ fn scan_variants(t: &Tree) -> Vec<(String, String, Option<String>)> {
         .iter()
         .map(|m| {
             let dir = m.directory.strip_prefix(&t.0).unwrap_or(&m.directory);
-            (dir.display().to_string(), m.id.clone(), m.variant.clone())
+            (
+                fixture::slashes(&dir.display().to_string()),
+                m.id.clone(),
+                m.variant.clone(),
+            )
         })
         .collect()
 }
