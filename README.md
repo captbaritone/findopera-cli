@@ -1,24 +1,55 @@
 # findopera
 
-Render FindOpera recording metadata through a template.
+Name a music library from FindOpera metadata, through a template.
+
+`findopera scan` walks directories for marker files and shows what each folder
+would be called:
 
 ```bash
-$ findopera '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' 10655 75
-Handel/Sosarme, Re di Media (2026)
-Britten/Billy Budd (1967)
-
-$ findopera --fields          # every path a template may use
+$ findopera scan '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' ~/Music
+./Box Sets/Donizetti box      Donizetti/L'elisir d'amore (1969)
+./Box Sets/Donizetti box      Respighi/Maria Egiziaca (1980)
+./Britten/Billy Budd (Decca)  Britten/Billy Budd (1967)
+./Handel - Sosarme 2026       Handel/Sosarme, Re di Media (2026)
 ```
 
-The id is the number in a findopera.com URL:
-`https://findopera.com/recording/10655` → `10655`. Results go to stdout, one
-line per recording; everything else goes to stderr.
+A marker is a `.txt` file whose **name** carries a recording id, saved into
+the recording's folder. Two spellings count, and both are things you end up
+with by accident:
+
+```
+10655.txt                                          curl -O, wget
+Sosarme, Re di Media-2026 [findopera-10655].txt    the site's suggested name
+```
+
+What a marker identifies is the directory holding it, and one directory can
+hold several: a box set covering several operas is listed once per recording,
+as above.
+
+Nothing opens the files. Deciding by content would mean reading every `.txt`
+in the library to learn that almost none are markers — on a 12,500-file tree
+that is 246ms against 66ms, nearly all of it wasted, and far worse over a
+network mount where opening a file costs so much more than listing one. It
+also keeps the contents from being load bearing: a marker may be empty, so
+`touch 10655.txt` works.
+
+Results go to stdout, one line per recording; everything else to stderr.
+`--tabs` separates the columns with a tab instead of padding, for piping.
+
+Two directories can legitimately name one recording — a FLAC rip and an MP3
+rip of the same performance. No template can separate them, because nothing in
+the recording does, so `scan` reports the clash and exits non-zero rather than
+proposing one destination for two sources.
+
+```bash
+$ findopera fields    # every path a template may use, and which are always present
+```
 
 A bad template never costs a network round trip — it is checked against the
 schema first:
 
 ```bash
-$ findopera '{{composer.lastName}}/{{year}}' 10655
+$ findopera scan '{{composer.lastName}}/{{year}}' ~/Music
 findopera: {{year}} can resolve to nothing, and is not inside a group
   {{composer.lastName}}/{{year}}
                         ^^^^^^^^
@@ -27,8 +58,8 @@ findopera: {{year}} can resolve to nothing, and is not inside a group
 
 | Exit | |
 |---|---|
-| 0 | every id rendered |
-| 1 | a recording is not in the database, or its render is not a usable path |
+| 0 | everything rendered |
+| 1 | a recording is missing, its render is not a usable path, or two directories want the same name |
 | 2 | the template or the arguments are wrong |
 | 3 | the API was unreachable or errored |
 

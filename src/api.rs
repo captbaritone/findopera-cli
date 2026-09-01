@@ -5,6 +5,10 @@ use std::collections::BTreeMap;
 
 pub const DEFAULT_ENDPOINT: &str = "https://findopera.com/api/graphql";
 
+/// Ids per request. A scan of a real library turns up thousands, and asking
+/// for them all in one query is a good way to be told no.
+const BATCH: usize = 100;
+
 #[derive(Debug)]
 pub struct ApiError(String);
 
@@ -20,6 +24,14 @@ impl std::fmt::Display for ApiError {
 /// `null` for any it does not know, so the returned map simply omits those and
 /// the caller reports them as not found.
 pub fn recordings(endpoint: &str, ids: &[String]) -> Result<BTreeMap<String, Recording>, ApiError> {
+    let mut out = BTreeMap::new();
+    for chunk in ids.chunks(BATCH) {
+        out.extend(fetch_batch(endpoint, chunk)?);
+    }
+    Ok(out)
+}
+
+fn fetch_batch(endpoint: &str, ids: &[String]) -> Result<BTreeMap<String, Recording>, ApiError> {
     let body = serde_json::json!({ "query": QUERY, "variables": { "ids": ids } });
 
     let mut response = ureq::post(endpoint)
