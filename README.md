@@ -184,6 +184,23 @@ findopera: {{year}} may be absent, and is not inside a group
 | 2 | the template or the arguments are wrong |
 | 3 | the API was unreachable or errored |
 
+## Talking to findopera.com
+
+Every request identifies itself — `User-Agent: findopera-cli/0.1.0`, taken
+from the package version so it cannot fall behind a release. One function
+builds every request, so a new one cannot quietly say nothing.
+
+A response carrying top-level `errors` is fatal, even when data came with it:
+a null in a `@semanticNonNull` position is explained by exactly one of those
+errors, so partial data cannot be trusted to be whole. The words come through
+as written, one to a line, which is what lets the server say something worth
+reading to whoever is running an old copy:
+
+```
+findopera: the server refused the request:
+    [CLIENT_TOO_OLD] findopera-cli 0.1.0 is no longer supported. Upgrade to 0.3 or later
+```
+
 ## The template language
 
 A small language for turning record metadata into path-safe names.

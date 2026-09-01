@@ -9,6 +9,22 @@ pub const DEFAULT_ENDPOINT: &str = "https://findopera.com/api/graphql";
 /// for them all in one query is a good way to be told no.
 const BATCH: usize = 100;
 
+/// What this program calls itself when it asks findopera.com for something.
+///
+/// Taken from the package version, so it cannot fall behind a release, and
+/// sent on every request — someone reading their own logs should be able to
+/// tell this apart from a browser, and tell one version of it from another.
+pub const USER_AGENT: &str = concat!("findopera-cli/", env!("CARGO_PKG_VERSION"));
+
+/// Start a request to the API.
+///
+/// Every request goes through here, so there is one place that decides what
+/// findopera.com is told about the caller, and no way to add a second request
+/// that quietly says nothing.
+fn request(endpoint: &str) -> ureq::RequestBuilder<ureq::typestate::WithBody> {
+    ureq::post(endpoint).header("User-Agent", USER_AGENT)
+}
+
 #[derive(Debug)]
 pub struct ApiError(String);
 
@@ -34,7 +50,7 @@ pub fn recordings(endpoint: &str, ids: &[String]) -> Result<BTreeMap<String, Rec
 fn fetch_batch(endpoint: &str, ids: &[String]) -> Result<BTreeMap<String, Recording>, ApiError> {
     let body = serde_json::json!({ "query": QUERY, "variables": { "ids": ids } });
 
-    let mut response = ureq::post(endpoint)
+    let mut response = request(endpoint)
         .send_json(&body)
         .map_err(|e| ApiError(format!("cannot reach {endpoint}: {e}")))?;
 
@@ -43,18 +59,31 @@ fn fetch_batch(endpoint: &str, ids: &[String]) -> Result<BTreeMap<String, Record
         .read_json()
         .map_err(|e| ApiError(format!("the API returned something unreadable: {e}")))?;
 
-    // A GraphQL response can carry both data and errors. Any error at all is
-    // worth reporting: `@semanticNonNull` means a null in an annotated
-    // position is explained by exactly one of these.
+    // A GraphQL response can carry both data and errors, and an error here is
+    // always fatal: `@semanticNonNull` means a null in an annotated position
+    // is explained by exactly one of these, so data alongside an error cannot
+    // be trusted to be whole.
+    //
+    // It is also how the server talks to whoever is running this — every
+    // request says which version it is, and this is the channel for the answer
+    // "that one is too old". So the words come through as they were written,
+    // one to a line, rather than being summarised into a single line that a
+    // long explanation would not survive.
     if let Some(errors) = payload.get("errors").and_then(|e| e.as_array()) {
-        let messages: Vec<&str> = errors
-            .iter()
-            .filter_map(|e| e["message"].as_str())
-            .collect();
-        return Err(ApiError(format!(
-            "the API reported: {}",
-            messages.join("; ")
-        )));
+        if !errors.is_empty() {
+            let mut said = String::from("the server refused the request:");
+            for error in errors {
+                let message = error["message"].as_str().unwrap_or("(no message given)");
+                // A code is where a server puts something a program can act
+                // on, so it is worth showing beside the words meant for a
+                // person.
+                match error["extensions"]["code"].as_str() {
+                    Some(code) => said.push_str(&format!("\n    [{code}] {message}")),
+                    None => said.push_str(&format!("\n    {message}")),
+                }
+            }
+            return Err(ApiError(said));
+        }
     }
 
     let list = payload
