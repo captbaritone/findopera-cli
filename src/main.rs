@@ -171,8 +171,13 @@ It is kept in your own configuration directory — not in findopera.toml, which
 lives inside the library being organized and is walked, linked and synced
 along with it.
 
-For anything unattended, set FINDOPERA_TOKEN instead and store nothing.")]
-    Login,
+For anything unattended, set FINDOPERA_TOKEN instead and store nothing.
+
+With --new there is nothing to paste: findopera.com issues one on the spot.
+It asks for no account and no proof of who you are — the token exists so that
+your requests can be told apart from everyone else's, not so that you can be
+identified. Edits made with it are recorded under a name it gives you.")]
+    Login(LoginArgs),
 
     /// Forget the stored token.
     Logout,
@@ -268,6 +273,19 @@ struct GraphqlArgs {
 }
 
 #[derive(Args)]
+struct LoginArgs {
+    /// Ask findopera.com for a new token instead of reading one.
+    #[arg(long)]
+    new: bool,
+    /// What to call the new token, so it can be told from your others.
+    #[arg(long, value_name = "TEXT", requires = "new")]
+    label: Option<String>,
+    /// GraphQL endpoint.
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+}
+
+#[derive(Args)]
 struct SchemaArgs {
     /// Print only this type. Omit for the whole schema.
     #[arg(value_name = "TYPE")]
@@ -310,7 +328,7 @@ fn run() -> i32 {
         Command::Fields => cmd_fields(),
         Command::Graphql(args) => cmd_graphql(args),
         Command::Schema(args) => cmd_schema(args),
-        Command::Login => cmd_login(),
+        Command::Login(args) => cmd_login(args),
         Command::Logout => cmd_logout(),
         Command::Init(args) => cmd_init(args),
     }
@@ -327,7 +345,59 @@ fn client(endpoint: &str, token: Option<&String>) -> Result<api::Client, i32> {
     }
 }
 
-fn cmd_login() -> i32 {
+/// Ask the server for a token, and say who it made you.
+fn request_token(args: &LoginArgs) -> Result<(String, String), i32> {
+    // Anonymous by necessity: this is how a caller stops being anonymous, so
+    // needing a token to ask for one would be a closed loop.
+    let api = api::Client::new(&args.endpoint, None);
+    let payload = match api.post(
+        "mutation NewToken($label: String) { createAccessToken(label: $label) { token username } }",
+        Some(serde_json::json!({ "label": args.label })),
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("findopera: {e}");
+            return Err(3);
+        }
+    };
+    if let Some(said) = api::refusal(&payload) {
+        eprintln!("findopera: {said}");
+        return Err(3);
+    }
+    let issued = &payload["data"]["createAccessToken"];
+    match (issued["token"].as_str(), issued["username"].as_str()) {
+        (Some(token), Some(username)) => Ok((token.to_string(), username.to_string())),
+        _ => {
+            eprintln!("findopera: the server issued no token");
+            Err(3)
+        }
+    }
+}
+
+fn cmd_login(args: LoginArgs) -> i32 {
+    if args.new {
+        let (token, username) = match request_token(&args) {
+            Ok(pair) => pair,
+            Err(code) => return code,
+        };
+        return match credentials::store(&token) {
+            Ok(path) => {
+                println!("{}", path.display());
+                eprintln!("findopera: your edits will be recorded as {username}");
+                // Only the server can show the token, and only once. Saying so
+                // here is cheaper than someone discovering it later.
+                eprintln!(
+                    "findopera: the token itself is in that file and nowhere else — \
+                     findopera.com keeps only a hash of it"
+                );
+                0
+            }
+            Err(why) => {
+                eprintln!("findopera: {why}");
+                1
+            }
+        };
+    }
     let token = match std::io::read_to_string(std::io::stdin()) {
         Ok(t) => t.trim().to_string(),
         Err(e) => {

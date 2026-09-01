@@ -238,10 +238,20 @@ Requests are anonymous by default, which is enough to read. A token makes them
 yours:
 
 ```bash
-findopera login < token.txt     # kept in your config dir, mode 600
+findopera login --new           # findopera.com issues one on the spot
+findopera login < token.txt     # or paste one you already have
 export FINDOPERA_TOKEN=...      # or this, for anything unattended
 findopera logout
 ```
+
+`--new` asks for no account and no proof of who you are. The token is not there
+to identify you; it is there so your requests can be told apart from everyone
+else's — which is what lets an edit be attributed, a bad run be found together
+and undone, and your reads be given a limit of their own. Edits made with it
+are recorded under a name the server gives you.
+
+findopera.com keeps only a hash of the token, so it is shown once and cannot be
+looked up again. A lost one is replaced, not recovered.
 
 The token is *not* kept in `findopera.toml`. That file lives inside the library
 being organized — the scan walks it, `--write` can link the folder holding it
