@@ -15,8 +15,8 @@
 //! vanish along with their value — `[{{year}} - ]` contributes nothing at all
 //! when the year is absent, rather than leaving a dangling ` - `.
 
-use crate::parser::{Alt, Node};
-use crate::Fields;
+use super::parser::{Alt, Node};
+use super::Fields;
 
 /// A rendered string that cannot be used as a relative path.
 #[derive(Debug)]

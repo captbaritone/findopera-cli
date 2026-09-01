@@ -12,8 +12,8 @@
 //! Field paths are checked against the known field set here, at parse time, so
 //! a mistyped field fails before any network request is made.
 
-use crate::lexer::{lex, Span, Tok, Token};
-use crate::FieldDoc;
+use super::lexer::{lex, Span, Tok, Token};
+use super::FieldDoc;
 
 #[derive(Debug, Clone)]
 pub enum Alt {
@@ -420,7 +420,7 @@ fn check_leading_separator(items: &[Node]) -> Result<(), ParseError> {
 /// abuts a placeholder or a group is not checked, because whatever that
 /// contributes joins the same segment.
 ///
-/// [`sanitize_value`]: crate::render
+/// [`sanitize_value`]: crate::template::render
 fn check_literal_segments(items: &[Node], top: bool) -> Result<(), ParseError> {
     for (i, node) in items.iter().enumerate() {
         match node {
