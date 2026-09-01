@@ -9,7 +9,7 @@
 // `@semanticNonNull`. If that annotation is ever removed upstream, the
 // change shows up here as a `String` becoming an `Option<String>`.
 
-use crate::model::text;
+use crate::model::{lifespan, text};
 use crate::{FieldDoc, Fields};
 use serde::Deserialize;
 
@@ -51,6 +51,14 @@ pub static FIELDS: &[FieldDoc] = &[
     FieldDoc::new("composer.born", "Composer year of birth"),
     FieldDoc::new("composer.died", "Composer year of death"),
     FieldDoc::new("opera.language", "Language sung, e.g. German"),
+    FieldDoc::new(
+        "composer.dates",
+        "Years, as 1685-1759 — or b1947 for someone still living",
+    ),
+    FieldDoc::new(
+        "conductor.dates",
+        "Years, as 1685-1759 — or b1947 for someone still living",
+    ),
     FieldDoc::new("upc", "First barcode listed for the release. Often absent"),
     FieldDoc::new("singers", "All noted singers, full names, comma-joined"),
     FieldDoc::new(
@@ -179,6 +187,8 @@ impl Fields for Recording {
             "composer.born" => self.opera.composer.born.map(|v| v.to_string()),
             "composer.died" => self.opera.composer.died.map(|v| v.to_string()),
             "opera.language" => Some(self.opera.language.as_ref()?.name.clone()),
+            "composer.dates" => lifespan(self.opera.composer.born, self.opera.composer.died),
+            "conductor.dates" => lifespan(self.conductor.born, self.conductor.died),
             "upc" => self.upcs.first().and_then(|e| text(&e.upc)),
             "singers" => {
                 let vs: Vec<String> = self

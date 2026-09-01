@@ -68,6 +68,27 @@ for (const [path, format] of Object.entries(overlay.format ?? {})) {
   f.format = format;
 }
 
+// A computed field is built from others the query already selects, so it can
+// only name fields that are there.
+const computed = [];
+for (const c of overlay.computed ?? []) {
+  if (c.rule !== "lifespan") {
+    throw new Error(`computed ${c.as}: no rule named ${c.rule}`);
+  }
+  for (const ns of c.on) {
+    const parts = ["born", "died"].map((leaf) => {
+      const f = fields.find((f) => f.path === `${ns}.${leaf}`);
+      if (!f) {
+        throw new Error(
+          `computed ${ns}.${c.as}: the query does not select ${ns}.${leaf}`,
+        );
+      }
+      return f;
+    });
+    computed.push({ path: `${ns}.${c.as}`, rule: c.rule, parts, doc: c.doc });
+  }
+}
+
 const derived = (overlay.derived ?? []).map((d) => {
   const list = lists.get(d.from);
   if (!list) {
@@ -92,14 +113,14 @@ for (const f of fields) {
 
 // Every path must be unique, or two match arms would collide.
 const seen = new Set();
-for (const f of [...fields, ...derived]) {
+for (const f of [...fields, ...computed, ...derived]) {
   if (seen.has(f.path)) throw new Error(`duplicate template path ${f.path}`);
   seen.add(f.path);
 }
 
-const out = emit({ fields, structs, derived, lists, query: querySrc });
+const out = emit({ fields, structs, computed, derived, lists, query: querySrc });
 writeFileSync(at("src/model/generated.rs"), out);
 console.error(
   `wrote src/model/generated.rs: ${fields.length} field(s) from the query, ` +
-    `${derived.length} derived, ${structs.size} struct(s)`,
+    `${computed.length} computed, ${derived.length} derived, ${structs.size} struct(s)`,
 );

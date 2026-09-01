@@ -291,6 +291,12 @@ carries a matching error. It matches what the database holds: `opera.title`,
 populated, while `opera.englishTitle` is annotated on neither count and sits at
 19.7%.
 
+Some fields are built from others by a named rule rather than read off a
+record. `composer.dates` and `conductor.dates` give `1685-1759`, or `b1947` for
+someone still living; with no birth year they give nothing at all, since a lone
+death year would need a spelling that means "died" and every candidate is
+either awkward in a filename or reads as a negative number.
+
 The output is checked in, so drift arrives as a reviewable diff. A field losing
 its annotation upstream shows up as `FieldDoc::non_null` becoming
 `FieldDoc::new` and `String` becoming `Option<String>` — which is exactly the

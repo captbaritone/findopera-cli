@@ -50,12 +50,15 @@ because a recording's opera may have no language at all.
 | `../schema/fields.mjs` | what the query cannot express |
 | `../src/model/generated.rs` | the output |
 
-`fields.mjs` covers three gaps. **Renames** hoist a subtree to a shorter path,
+`fields.mjs` covers four gaps. **Renames** hoist a subtree to a shorter path,
 because GraphQL aliases rename within a level but cannot lift `opera.composer`
 up to `composer`. **Derived fields** project single values out of a list —
 a query can select `notedSingers`, but it has no way to say "the second one",
-and the template language has no list syntax. **Descriptions** exist because
-the schema documents almost none of the fields a template would use.
+and the template language has no list syntax. **Computed fields** are built from
+others by a named rule — `composer.dates` from a born and a died year — rather
+than by an expression language, since the set is small and each one is a
+decision about how the library reads. **Descriptions** exist because the schema
+documents almost none of the fields a template would use.
 
 Every entry is checked against the query: renaming or projecting from
 something the query does not select is an error, so this file cannot drift

@@ -377,5 +377,56 @@
         "lastName": "Frittoli"
       }
     ]
+  },
+  {
+    "year": 2012,
+    "month": 4,
+    "day": 18,
+    "orchestra": "Orchestre de chambre de Paris",
+    "chorus": "Chœur du Chatelet",
+    "id": 9154,
+    "upcs": [],
+    "conductor": {
+      "born": null,
+      "died": null,
+      "fullName": "Alexander Briger",
+      "firstName": "Alexander",
+      "lastName": "Briger"
+    },
+    "url": "https://findopera.com/recording/9154/nixon-in-china-2012-briger",
+    "opera": {
+      "englishTitle": null,
+      "librettist": "",
+      "title": "Nixon in China",
+      "url": "https://findopera.com/opera/94/nixon-in-china",
+      "language": {
+        "name": "English",
+        "abbreviation": "en"
+      },
+      "composer": {
+        "born": 1947,
+        "died": null,
+        "fullName": "John Adams",
+        "firstName": "John",
+        "lastName": "Adams"
+      }
+    },
+    "notedSingers": [
+      {
+        "fullName": "Peter Sidhom",
+        "firstName": "Peter",
+        "lastName": "Sidhom"
+      },
+      {
+        "fullName": "June Anderson",
+        "firstName": "June",
+        "lastName": "Anderson"
+      },
+      {
+        "fullName": "Sumi Jo",
+        "firstName": "Sumi",
+        "lastName": "Jo"
+      }
+    ]
   }
 ]

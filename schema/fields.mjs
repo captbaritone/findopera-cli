@@ -25,6 +25,24 @@ export default {
     day: "pad2",
   },
 
+  // Values built from more than one field. Named rules rather than an
+  // expression language: the set is small and each one is a decision about how
+  // the library reads, not a calculation anybody needs to write inline.
+  //
+  // `lifespan` gives `1685-1759`, or `b1947` for someone still living. With no
+  // birth year it gives nothing at all — a lone death year would have to be
+  // spelled some way that says "died", and every candidate for that is either
+  // a character filesystems dislike or a bare `-1602` that reads as a negative
+  // number. The library agrees: its one such composer has no dates on him.
+  computed: [
+    {
+      rule: "lifespan",
+      on: ["composer", "conductor"],
+      as: "dates",
+      doc: "Years, as 1685-1759 — or b1947 for someone still living",
+    },
+  ],
+
   // Values projected out of a list. A query can select `notedSingers`, but it
   // has no way to say "the second one" or "all of them, comma-joined", and the
   // template language has no list syntax — by design, since optional groups

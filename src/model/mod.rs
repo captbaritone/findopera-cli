@@ -34,6 +34,20 @@ pub(crate) fn text(s: &str) -> Option<String> {
     (!t.is_empty()).then(|| t.to_string())
 }
 
+/// A person's years, the way the library writes them.
+///
+/// `1685-1759` when both are known, `b1947` when only the birth year is. With
+/// no birth year there is nothing usable to say: a lone death year would need
+/// a spelling that means "died", and the candidates are either awkward in a
+/// filename or read as a negative number.
+pub(crate) fn lifespan(born: Option<i64>, died: Option<i64>) -> Option<String> {
+    let born = born?;
+    Some(match died {
+        Some(died) => format!("{born}-{died}"),
+        None => format!("b{born}"),
+    })
+}
+
 pub(crate) mod de {
     use serde::{Deserialize, Deserializer};
 
