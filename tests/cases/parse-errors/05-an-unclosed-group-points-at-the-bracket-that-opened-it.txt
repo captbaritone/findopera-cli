@@ -1,6 +1,6 @@
 --- template
 {{composer.lastName}}[/{{year}}
---- error
+--- expect
 error[template_syntax_error]: unclosed `[` — every group needs a matching `]`
 {{composer.lastName}}[/{{year}}
                      ^

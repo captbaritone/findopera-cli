@@ -1,6 +1,6 @@
 --- template
 {{year|"n.d.}}
---- error
+--- expect
 error[template_syntax_error]: unterminated quoted literal
 {{year|"n.d.}}
        ^^^^^^^

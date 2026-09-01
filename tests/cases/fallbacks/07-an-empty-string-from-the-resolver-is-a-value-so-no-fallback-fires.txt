@@ -7,5 +7,5 @@ contract an implementation honors by collapsing its own empty sentinels into
 {{year|"n.d."}}
 --- data
 year = ""
---- error
+--- expect
 error[path_empty]: rendered "", which has no path segments

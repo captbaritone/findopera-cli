@@ -7,5 +7,5 @@ that is not the real one. Recorded as it behaves today.
 [{{year}}]/{{opera.title}}
 --- data
 opera.title = Salome
---- error
+--- expect
 error[path_absolute]: rendered "/Salome", which names an absolute path — something before the leading `/` resolved to nothing

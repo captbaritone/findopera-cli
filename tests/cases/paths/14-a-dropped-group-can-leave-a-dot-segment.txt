@@ -7,5 +7,5 @@ because a group dropped cannot be — which is why the check survives in
 --- data
 composer.lastName = Strauss
 opera.title = Salome
---- error
+--- expect
 error[path_traversal]: rendered "Strauss/./Salome", which contains a `.` or `..` segment

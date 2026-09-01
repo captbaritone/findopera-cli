@@ -1,6 +1,6 @@
 --- template
 {{year}} {{month}}
---- error
+--- expect
 error[template_unresolvable]: {{year}} can resolve to nothing, and is not inside a group
 {{year}} {{month}}
 ^^^^^^^^

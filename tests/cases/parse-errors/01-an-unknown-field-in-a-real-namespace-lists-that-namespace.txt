@@ -1,6 +1,6 @@
 --- template
 {{composer.surname}}
---- error
+--- expect
 error[template_unknown_field]: unknown field `composer.surname`
 {{composer.surname}}
   ^^^^^^^^^^^^^^^^

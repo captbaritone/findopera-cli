@@ -1,6 +1,6 @@
 --- template
 {{opera.title}}[ - ]
---- error
+--- expect
 error[template_empty_group]: this group contains no placeholder of its own, so it would always render
 {{opera.title}}[ - ]
                ^^^^^

@@ -4,7 +4,7 @@ equidistant from `id` and `year` and pick whichever came first.
 
 --- template
 {{yaer}}
---- error
+--- expect
 error[template_unknown_field]: unknown field `yaer`
 {{yaer}}
   ^^^^

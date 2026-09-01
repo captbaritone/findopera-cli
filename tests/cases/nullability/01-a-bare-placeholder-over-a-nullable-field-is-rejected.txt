@@ -2,7 +2,7 @@
 {{composer.lastName}}/{{year}}
 --- data
 composer.lastName = Strauss
---- error
+--- expect
 error[template_unresolvable]: {{year}} can resolve to nothing, and is not inside a group
 {{composer.lastName}}/{{year}}
                       ^^^^^^^^

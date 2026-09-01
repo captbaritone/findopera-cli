@@ -21,12 +21,13 @@
 //! ```
 //!
 //! A section runs until the next line beginning with `--- `. Each case names
-//! a `--- template`, optionally some `--- data`, and exactly one outcome:
+//! a `--- template`, optionally some `--- data`, and an outcome:
 //!
-//! - `--- expect` — the rendered path, segments joined with `/`. Values are
-//!   sanitized so a segment can never itself contain `/`, so this round-trips.
-//! - `--- error` — the diagnostic: `error[code]: message`, then for a parse
-//!   error the template with the offending span underlined, then `help:`.
+//! `--- expect` is the outcome: either the rendered path, segments joined with
+//! `/`, or a diagnostic beginning `error[code]:` — for a parse error followed
+//! by the template with the offending span underlined and a `help:` line.
+//! Values are sanitized so a segment can never itself contain `/`, so a
+//! rendered path round-trips.
 //!
 //! A `template_*` code is a parse error, settled against the schema with no
 //! record in hand. A `path_*` code is the one thing still decided per record:
@@ -48,16 +49,16 @@
 //! UPDATE_EXPECT=1 cargo test
 //! ```
 //!
-//! rewrites every `--- expect` / `--- error` block in place, including
-//! switching a case between the two. That is the intended way to write a new
-//! case: state the template and data, leave the outcome empty, bless, and
+//! rewrites every `--- expect` block in place. That is the intended way to
+//! write a new case: state the template and data, leave the outcome empty,
+//! bless, and
 //! read the diff. Blessing is only ever as good as the review of that diff,
 //! so a run that rewrote anything *fails*, listing the files it touched — a
 //! green test always means the expectations on disk are the ones that ran.
 
 use findopera::{to_path, FieldDoc, Fields, Template};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// The field surface the fixtures are written against.
 ///
@@ -113,280 +114,58 @@ impl Fields for Record {
 
 // ---------------------------------------------------------------- the test
 
+mod fixture;
+
 #[test]
 fn cases() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases");
-    let bless = std::env::var_os("UPDATE_EXPECT").is_some();
-
-    let mut files = Vec::new();
-    collect(&dir, &mut files);
-    files.sort();
-    assert!(!files.is_empty(), "no fixtures under {}", dir.display());
-
-    let mut failures = Vec::new();
-    let mut blessed = Vec::new();
-
-    for path in &files {
-        let name = path
-            .strip_prefix(&dir)
-            .expect("collected from dir")
-            .to_string_lossy()
-            .into_owned();
-        let original = std::fs::read_to_string(path).expect("fixture is readable");
-        let before = Case::parse(&original, &name);
-
-        let (outcome, expected) = run(&before);
-        if before.outcome == outcome && before.expected == expected {
-            continue;
-        }
-        let after = Case {
-            outcome,
-            expected,
-            ..before.clone()
-        };
-
-        if bless {
-            std::fs::write(path, after.render()).expect("fixture is writable");
-            blessed.push(name);
-        } else {
-            failures.push(report(&name, &before, &after));
-        }
-    }
-
-    if bless {
-        // Fail on a run that changed something, so a bless can never be
-        // mistaken for a green test — cargo swallows the output of a passing
-        // one, and a rewritten expectation is exactly what wants reading.
-        assert!(
-            blessed.is_empty(),
-            "UPDATE_EXPECT rewrote {} case(s):\n{}\n\n\
-             Read the diff, then re-run without UPDATE_EXPECT to confirm.",
-            blessed.len(),
-            blessed
-                .iter()
-                .map(|b| format!("  tests/cases/{b}"))
-                .collect::<Vec<_>>()
-                .join("\n"),
-        );
-        return;
-    }
-
-    assert!(
-        failures.is_empty(),
-        "{} case(s) did not match:\n\n{}\n\
-         Re-run with UPDATE_EXPECT=1 to rewrite the expectations, then read the diff.",
-        failures.len(),
-        failures.join("\n")
+    fixture::run(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases"),
+        &["template"],
+        &["data"],
+        &["expect"],
+        |name, input| {
+            let outcome = run_case(name, &input["template"], input.get("data"));
+            BTreeMap::from([("expect".to_string(), outcome)])
+        },
     );
 }
 
-fn collect(dir: &Path, out: &mut Vec<PathBuf>) {
-    let entries =
-        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
-    for entry in entries {
-        let path = entry.expect("readable dir entry").path();
-        if path.is_dir() {
-            collect(&path, out);
-        } else if path.extension().is_some_and(|x| x == "txt") {
-            out.push(path);
+/// Parse and render one case, returning the outcome it should carry.
+fn run_case(name: &str, template: &str, data: Option<&String>) -> String {
+    let mut record = BTreeMap::new();
+    for line in data.map(String::as_str).unwrap_or("").lines() {
+        if line.trim().is_empty() {
+            continue;
         }
-    }
-}
-
-/// Parse and render one case, returning the outcome section it should carry.
-fn run(case: &Case) -> (Outcome, String) {
-    let mut data = BTreeMap::new();
-    for (path, value) in &case.data {
+        let (path, raw) = line
+            .split_once('=')
+            .unwrap_or_else(|| panic!("{name}: a data line reads `path = value`"));
+        let path = path.trim().to_string();
         assert!(
-            SCHEMA.iter().any(|f| f.path == *path),
-            "tests/cases/{}: data names `{path}`, which is not in SCHEMA",
-            case.name
+            SCHEMA.iter().any(|f| f.path == path),
+            "{name}: data names `{path}`, which is not in SCHEMA"
         );
-        data.insert(path.clone(), value.clone());
+        record.insert(path, unquote(raw.trim()));
     }
 
-    let tmpl = match Template::parse(&case.template, SCHEMA) {
+    let tmpl = match Template::parse(template, SCHEMA) {
         Ok(t) => t,
         Err(e) => {
             let mut out = format!("error[{}]: {}\n", e.code, e.message);
-            out.push_str(&e.underline(&case.template).join("\n"));
+            out.push_str(&e.underline(template).join("\n"));
             if let Some(help) = &e.help {
                 out.push_str(&format!("\nhelp: {help}"));
             }
-            return (Outcome::Error, out);
+            return out;
         }
     };
 
     // Rendering cannot fail; only judging the result as a path can.
-    let rendered = tmpl.render(&Record(data));
+    let rendered = tmpl.render(&Record(record));
     match to_path(&rendered) {
-        Ok(segments) => (Outcome::Expect, segments.join("/")),
-        Err(e) => (Outcome::Error, format!("error[{}]: {e}", e.code())),
+        Ok(segments) => segments.join("/"),
+        Err(e) => format!("error[{}]: {e}", e.code()),
     }
-}
-
-fn report(file: &str, before: &Case, after: &Case) -> String {
-    let block = |c: &Case| {
-        let body = if c.expected.is_empty() {
-            "    (empty)".to_string()
-        } else {
-            c.expected
-                .lines()
-                .map(|l| format!("    {l}"))
-                .collect::<Vec<_>>()
-                .join("\n")
-        };
-        format!("  --- {}\n{body}", c.outcome.keyword())
-    };
-    format!(
-        "tests/cases/{file}\n  --- template\n    {}\nexpected:\n{}\nactual:\n{}\n",
-        before.template.replace('\n', "\n    "),
-        block(before),
-        block(after),
-    )
-}
-
-// -------------------------------------------------------- the fixture format
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Outcome {
-    Expect,
-    Error,
-}
-
-impl Outcome {
-    fn keyword(self) -> &'static str {
-        match self {
-            Outcome::Expect => "expect",
-            Outcome::Error => "error",
-        }
-    }
-}
-
-#[derive(Clone)]
-struct Case {
-    /// Path relative to `tests/cases`, used to name the case in failures.
-    name: String,
-    /// Free text before the first section, kept verbatim.
-    note: Vec<String>,
-    template: String,
-    /// Verbatim `--- data` lines, so blessing round-trips them untouched.
-    data_lines: Vec<String>,
-    /// The same lines, parsed.
-    data: Vec<(String, String)>,
-    outcome: Outcome,
-    expected: String,
-}
-
-impl Case {
-    fn parse(text: &str, name: &str) -> Case {
-        let mut case = Case {
-            name: name.to_string(),
-            note: Vec::new(),
-            template: String::new(),
-            data_lines: Vec::new(),
-            data: Vec::new(),
-            outcome: Outcome::Expect,
-            expected: String::new(),
-        };
-        // Which section body the following lines belong to, if any.
-        let mut section: Option<&str> = None;
-        let mut seen_outcome = false;
-
-        for (n, line) in text.lines().enumerate() {
-            let at = |msg: &str| format!("tests/cases/{name}:{}: {msg}", n + 1);
-
-            if let Some(rest) = line.strip_prefix("---") {
-                let head = rest.trim();
-                match head {
-                    "template" | "data" => {}
-                    "expect" | "error" => {
-                        assert!(!seen_outcome, "{}", at("a case has one outcome section"));
-                        seen_outcome = true;
-                        case.outcome = if head == "error" {
-                            Outcome::Error
-                        } else {
-                            Outcome::Expect
-                        };
-                    }
-                    other => panic!("{}", at(&format!("unknown section `--- {other}`"))),
-                }
-                section = Some(if head == "expect" || head == "error" {
-                    "outcome"
-                } else {
-                    head
-                });
-                continue;
-            }
-
-            match section {
-                None => case.note.push(line.to_string()),
-                Some("template") => push_line(&mut case.template, line),
-                Some("outcome") => push_line(&mut case.expected, line),
-                Some("data") => {
-                    if line.trim().is_empty() {
-                        continue;
-                    }
-                    let (path, raw) = line
-                        .split_once('=')
-                        .unwrap_or_else(|| panic!("{}", at("a data line reads `path = value`")));
-                    case.data_lines.push(line.to_string());
-                    case.data
-                        .push((path.trim().to_string(), unquote(raw.trim())));
-                }
-                Some(_) => unreachable!(),
-            }
-        }
-
-        // A body picks up the blank line that ends the file; that is layout,
-        // not content.
-        case.template = case.template.trim_end_matches('\n').to_string();
-        case.expected = case.expected.trim_end_matches('\n').to_string();
-        while case.note.last().is_some_and(|l| l.trim().is_empty()) {
-            case.note.pop();
-        }
-        assert!(
-            !case.template.is_empty(),
-            "tests/cases/{name}: no `--- template` section"
-        );
-        assert!(
-            seen_outcome,
-            "tests/cases/{name}: no `--- expect` or `--- error` section"
-        );
-        case
-    }
-
-    fn render(&self) -> String {
-        let mut out = String::new();
-        for line in &self.note {
-            out.push_str(line);
-            out.push('\n');
-        }
-        if !self.note.is_empty() {
-            out.push('\n');
-        }
-        out.push_str("--- template\n");
-        out.push_str(&self.template);
-        out.push('\n');
-        if !self.data_lines.is_empty() {
-            out.push_str("--- data\n");
-            for line in &self.data_lines {
-                out.push_str(line);
-                out.push('\n');
-            }
-        }
-        out.push_str(&format!("--- {}\n", self.outcome.keyword()));
-        if !self.expected.is_empty() {
-            out.push_str(&self.expected);
-            out.push('\n');
-        }
-        out
-    }
-}
-
-fn push_line(buf: &mut String, line: &str) {
-    buf.push_str(line);
-    buf.push('\n');
 }
 
 /// A bare value is taken as written; a quoted one honors escapes, which is the

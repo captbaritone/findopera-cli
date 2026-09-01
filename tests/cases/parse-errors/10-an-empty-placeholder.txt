@@ -1,6 +1,6 @@
 --- template
 {{}}
---- error
+--- expect
 error[template_syntax_error]: empty placeholder
 {{}}
 ^^^^

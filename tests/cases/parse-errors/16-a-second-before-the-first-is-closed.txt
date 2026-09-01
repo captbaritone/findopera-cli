@@ -1,6 +1,6 @@
 --- template
 {{year {{opera.title}}
---- error
+--- expect
 error[template_syntax_error]: `{{` inside a placeholder — the previous one is not closed
 {{year {{opera.title}}
        ^^

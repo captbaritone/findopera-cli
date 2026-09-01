@@ -6,5 +6,5 @@ Rendering still succeeds; there is simply no segment in the result.
 {{opera.title}}
 --- data
 opera.title = ""
---- error
+--- expect
 error[path_empty]: rendered "", which has no path segments

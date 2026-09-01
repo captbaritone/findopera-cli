@@ -1,6 +1,6 @@
 --- template
 {{opera.title}}]
---- error
+--- expect
 error[template_syntax_error]: unmatched `]`
 {{opera.title}}]
                ^

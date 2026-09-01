@@ -2,7 +2,7 @@
 /{{composer.lastName}}
 --- data
 composer.lastName = Strauss
---- error
+--- expect
 error[template_absolute_path]: template renders an absolute path
 /{{composer.lastName}}
 ^

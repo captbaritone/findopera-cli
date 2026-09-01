@@ -2,7 +2,7 @@
 {{opera.title}}[ ({{year|"n.d."}})]
 --- data
 opera.title = Salome
---- error
+--- expect
 error[template_dead_group]: every placeholder in this group always resolves, so it would always render
 {{opera.title}}[ ({{year|"n.d."}})]
                ^^^^^^^^^^^^^^^^^^^^

@@ -1,6 +1,6 @@
 --- template
 {{opera.englishTitle|opera.librettist}}
---- error
+--- expect
 error[template_unresolvable]: {{opera.englishTitle|opera.librettist}} can resolve to nothing, and is not inside a group
 {{opera.englishTitle|opera.librettist}}
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

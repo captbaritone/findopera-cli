@@ -3,7 +3,7 @@ record, so the literal is dead text.
 
 --- template
 {{opera.englishTitle|opera.title|"Untitled"}}
---- error
+--- expect
 error[template_unreachable_alternative]: this alternative is unreachable — `opera.title` is never absent
 {{opera.englishTitle|opera.title|"Untitled"}}
                                  ^^^^^^^^^^

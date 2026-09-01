@@ -1,6 +1,6 @@
 --- template
 {{opera.englishTitle|"Unknown"|opera.title}}
---- error
+--- expect
 error[template_unreachable_alternative]: this alternative is unreachable — a quoted literal always resolves
 {{opera.englishTitle|"Unknown"|opera.title}}
                                ^^^^^^^^^^^
