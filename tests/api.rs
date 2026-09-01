@@ -159,3 +159,26 @@ fn an_empty_errors_list_is_not_an_error() {
     // sends `"errors": []` should not be read as refusing.
     ask(br#"{"errors":[],"data":{"getRecordingByIds":[null]}}"#).expect("nothing was reported");
 }
+
+#[test]
+fn the_schema_lives_beside_the_api_on_the_same_server() {
+    // Derived from the endpoint so that pointing at a development server moves
+    // both, rather than leaving a second setting behind on production.
+    assert_eq!(
+        findopera::api::schema_url("https://findopera.com/api/graphql"),
+        "https://findopera.com/schema.graphql"
+    );
+    assert_eq!(
+        findopera::api::schema_url("http://localhost:3333/api/graphql"),
+        "http://localhost:3333/schema.graphql"
+    );
+    // An endpoint with no path of its own, with and without a trailing slash.
+    assert_eq!(
+        findopera::api::schema_url("https://example.test"),
+        "https://example.test/schema.graphql"
+    );
+    assert_eq!(
+        findopera::api::schema_url("https://example.test/"),
+        "https://example.test/schema.graphql"
+    );
+}

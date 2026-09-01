@@ -98,6 +98,62 @@ Examples:
     /// List every field a template may use, and the syntax.
     Fields,
 
+    /// Send a GraphQL query to findopera.com and print the response.
+    #[command(
+        long_about = "\
+Send a GraphQL document to findopera.com and print the whole response as
+JSON, for looking up ids, checking what a recording holds, or anything the
+other commands do not cover.
+
+The query may be an argument, a file, or standard input:
+
+  findopera graphql '{ searchOperas(query: \"Tosca\", first: 3) { id title } }'
+  findopera graphql --file lookup.graphql
+  echo '{ ... }' | findopera graphql
+
+Standard input is the one to reach for from a script: a GraphQL document is
+full of braces and quotes, and often names people, so getting it through a
+shell intact is harder than it looks.
+
+The response goes to stdout exactly as it arrived, so it can be piped to jq.
+If the server reports errors it is still printed — an error names the field it
+objected to, which is the useful part — but the messages are repeated on
+stderr and the exit status is 3, so a script cannot mistake a refusal for an
+answer.
+
+Requests are anonymous, which is enough to read. Anything needing an account,
+mutations included, will be refused by the server.",
+        after_help = "\
+Examples:
+  findopera graphql '{ getRecordingById(id: \"10655\") { id year } }'
+  findopera graphql --file q.graphql --variables '{\"ids\": [\"10655\"]}'
+  echo '{ listSingers(first: 3) { id lastName } }' | findopera graphql | jq ."
+    )]
+    Graphql(GraphqlArgs),
+
+    /// Print the GraphQL schema, or one type from it.
+    #[command(
+        long_about = "\
+Fetch the schema findopera.com is serving, and print it as SDL.
+
+Fetched rather than built in, because the server gains fields between releases
+of this program: what it prints is what the server will actually answer to
+today, not what this binary was compiled against.
+
+The whole schema is long. Naming a type prints just that one, which is usually
+what you wanted:
+
+  findopera schema Query        what can be asked for
+  findopera schema Mutation     what can be changed
+  findopera schema Recording",
+        after_help = "\
+Examples:
+  findopera schema
+  findopera schema Mutation
+  findopera schema | grep -n 'search'"
+    )]
+    Schema(SchemaArgs),
+
     /// Write a starter findopera.toml, explaining every setting.
     #[command(long_about = "\
 Write a starter findopera.toml into a directory, with every setting present
@@ -156,6 +212,35 @@ struct OrganizeArgs {
 }
 
 #[derive(Args)]
+struct GraphqlArgs {
+    /// The query. Omit to read it from standard input.
+    #[arg(value_name = "QUERY")]
+    query: Option<String>,
+    /// Read the query from a file instead. `-` means standard input.
+    #[arg(long, short = 'f', value_name = "FILE", conflicts_with = "query")]
+    file: Option<PathBuf>,
+    /// Variables, as a JSON object.
+    #[arg(long, value_name = "JSON")]
+    variables: Option<String>,
+    /// Print the response on one line.
+    #[arg(long)]
+    compact: bool,
+    /// GraphQL endpoint.
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+}
+
+#[derive(Args)]
+struct SchemaArgs {
+    /// Print only this type. Omit for the whole schema.
+    #[arg(value_name = "TYPE")]
+    name: Option<String>,
+    /// GraphQL endpoint. The schema is fetched from the same server.
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+}
+
+#[derive(Args)]
 struct InitArgs {
     /// Directory to write findopera.toml into.
     #[arg(value_name = "DIR", default_value = ".")]
@@ -179,6 +264,8 @@ fn run() -> i32 {
     match Cli::parse().command {
         Command::Organize(args) => cmd_organize(args),
         Command::Fields => cmd_fields(),
+        Command::Graphql(args) => cmd_graphql(args),
+        Command::Schema(args) => cmd_schema(args),
         Command::Init(args) => cmd_init(args),
     }
 }
@@ -314,6 +401,149 @@ fn rerun_with_write(args: &OrganizeArgs) -> String {
     }
     parts.push("--write".to_string());
     parts.join(" ")
+}
+
+fn cmd_graphql(args: GraphqlArgs) -> i32 {
+    let query = match read_query(&args) {
+        Ok(q) => q,
+        Err(why) => {
+            eprintln!("findopera: {why}");
+            return 2;
+        }
+    };
+    if query.trim().is_empty() {
+        eprintln!("findopera: no query given");
+        return 2;
+    }
+
+    // Parsed here rather than passed through as text, so that a typo in the
+    // variables is caught before the round trip and reported as the caller's
+    // mistake instead of the server's.
+    let variables = match args.variables.as_deref().map(serde_json::from_str) {
+        None => None,
+        Some(Ok(v)) => Some(v),
+        Some(Err(e)) => {
+            eprintln!("findopera: --variables is not valid JSON: {e}");
+            return 2;
+        }
+    };
+
+    let payload = match api::post(&args.endpoint, &query, variables) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("findopera: {e}");
+            return 3;
+        }
+    };
+
+    // Printed before anything is said about it. A refusal names the field it
+    // objected to and where, which is worth having whichever way this ends.
+    let rendered = if args.compact {
+        payload.to_string()
+    } else {
+        serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+    };
+    if !emit(&mut std::io::stdout().lock(), format_args!("{rendered}")) {
+        return 0;
+    }
+
+    match api::refusal(&payload) {
+        Some(said) => {
+            eprintln!("findopera: {said}");
+            3
+        }
+        None => 0,
+    }
+}
+
+/// The query text, from wherever this run keeps it.
+fn read_query(args: &GraphqlArgs) -> Result<String, String> {
+    match (&args.query, &args.file) {
+        (Some(q), _) => Ok(q.clone()),
+        (None, Some(f)) if f.as_os_str() != "-" => {
+            std::fs::read_to_string(f).map_err(|e| format!("cannot read {}: {e}", f.display()))
+        }
+        // No query and no file is not a mistake: it is the pipe.
+        _ => std::io::read_to_string(std::io::stdin())
+            .map_err(|e| format!("cannot read the query from standard input: {e}")),
+    }
+}
+
+fn cmd_schema(args: SchemaArgs) -> i32 {
+    let sdl = match api::schema(&args.endpoint) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("findopera: {e}");
+            return 3;
+        }
+    };
+    let mut out = std::io::stdout().lock();
+    let Some(name) = args.name else {
+        emit(&mut out, format_args!("{}", sdl.trim_end()));
+        return 0;
+    };
+    match definition(&sdl, &name) {
+        Some(block) => {
+            emit(&mut out, format_args!("{block}"));
+            0
+        }
+        None => {
+            eprintln!("findopera: the schema has no `{name}`");
+            // The names are the schema's own, so the only honest suggestion is
+            // to go and look at them.
+            eprintln!("  help: `findopera schema` prints all of it");
+            2
+        }
+    }
+}
+
+/// One named definition out of an SDL document, with its leading doc comment.
+///
+/// SDL as served is formatted one definition per block, opening on a line of
+/// its own and closing on a `}` in the first column, so that is what this
+/// looks for rather than parsing the language.
+fn definition<'a>(sdl: &'a str, name: &str) -> Option<&'a str> {
+    let lines: Vec<&str> = sdl.lines().collect();
+    let keywords = [
+        "type",
+        "input",
+        "enum",
+        "interface",
+        "union",
+        "scalar",
+        "directive",
+    ];
+    let start = lines.iter().position(|line| {
+        let Some(rest) = keywords.iter().find_map(|k| line.strip_prefix(*k)) else {
+            return false;
+        };
+        rest.strip_prefix(' ')
+            .and_then(|r| r.strip_prefix(name))
+            // What follows the name has to be a boundary, or `Recording` would
+            // match `RecordingURL`.
+            .is_some_and(|after| !after.starts_with(|c: char| c.is_alphanumeric() || c == '_'))
+    })?;
+
+    // Take the description above it too: in this schema that is where a field
+    // says what it means, which is the reason to be reading it at all.
+    let mut first = start;
+    while first > 0 {
+        let above = lines[first - 1].trim_start();
+        if above.starts_with('"') || above.starts_with('#') {
+            first -= 1;
+        } else {
+            break;
+        }
+    }
+
+    // A single-line definition — `scalar Date` — closes itself.
+    let mut last = start;
+    if lines[start].contains('{') {
+        last = (start + 1..lines.len()).find(|&i| lines[i].starts_with('}'))?;
+    }
+    let head: usize = lines[..first].iter().map(|l| l.len() + 1).sum();
+    let len: usize = lines[first..=last].iter().map(|l| l.len() + 1).sum();
+    Some(sdl[head..head + len].trim_end())
 }
 
 fn cmd_init(args: InitArgs) -> i32 {
@@ -462,4 +692,63 @@ fn cmd_fields() -> i32 {
         }
     }
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::definition;
+
+    const SDL: &str = concat!(
+        "\"\"\"A recorded performance.\"\"\"\n",
+        "type Recording {\n",
+        "  id: Int!\n",
+        "}\n",
+        "\n",
+        "type RecordingURL {\n",
+        "  url: String!\n",
+        "}\n",
+        "\n",
+        "scalar Date\n",
+        "\n",
+        "input UpdateSingerInput {\n",
+        "  lastName: String\n",
+        "}\n",
+    );
+
+    #[test]
+    fn a_type_comes_back_whole() {
+        let block = definition(SDL, "Recording").expect("Recording is there");
+        assert!(
+            block.starts_with("\"\"\"A recorded performance."),
+            "got: {block}"
+        );
+        assert!(block.ends_with('}'), "got: {block}");
+        assert!(block.contains("id: Int!"), "got: {block}");
+    }
+
+    #[test]
+    fn a_longer_name_starting_the_same_way_is_not_it() {
+        // Asking for Recording must not hand back RecordingURL, nor stop at it.
+        let block = definition(SDL, "Recording").expect("Recording is there");
+        assert!(!block.contains("url: String!"), "got: {block}");
+        let other = definition(SDL, "RecordingURL").expect("RecordingURL is there");
+        assert!(other.contains("url: String!"), "got: {other}");
+    }
+
+    #[test]
+    fn a_definition_without_a_body_is_just_its_line() {
+        assert_eq!(definition(SDL, "Date"), Some("scalar Date"));
+    }
+
+    #[test]
+    fn inputs_are_findable_too() {
+        // Anything writing a mutation needs these, not just the output types.
+        let block = definition(SDL, "UpdateSingerInput").expect("the input is there");
+        assert!(block.starts_with("input UpdateSingerInput"), "got: {block}");
+    }
+
+    #[test]
+    fn a_name_the_schema_does_not_have_is_absent() {
+        assert_eq!(definition(SDL, "Nope"), None);
+    }
 }

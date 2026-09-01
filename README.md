@@ -232,6 +232,43 @@ findopera: the server refused the request:
     [CLIENT_TOO_OLD] findopera-cli 0.1.0 is no longer supported. Upgrade to 0.3 or later
 ```
 
+### Asking it anything else
+
+`organize` covers the one question this program exists to answer. For the
+rest — looking up an id, checking what a recording holds — there is a way
+through to the API itself:
+
+```
+$ findopera graphql '{ searchOperas(query: "Tosca", first: 2) { id title } }'
+{
+  "data": {
+    "searchOperas": [
+      { "id": 88, "title": "Tosca" }
+    ]
+  }
+}
+```
+
+The query can be an argument, `--file`, or standard input; the last is the one
+to reach for from a script, since a GraphQL document is full of braces and
+quotes and often names people. The response goes to stdout as it arrived, so
+it can be piped to `jq`. A refusal is still printed — it names the field it
+objected to, which is the useful part — but the messages are repeated on
+stderr and the exit status is 3, so nothing can mistake one for an answer.
+
+Requests are anonymous, which is enough to read. Mutations need an editor
+account and are refused.
+
+To find out what may be asked for, `findopera schema` prints the SDL the
+server is currently serving. It is fetched rather than built in, because the
+server gains fields between releases of this program. The whole thing is long,
+so naming a type prints just that one:
+
+```
+$ findopera schema Mutation
+$ findopera schema Recording
+```
+
 ## Using it as a library
 
 The naming is a small template language, usable on its own:
