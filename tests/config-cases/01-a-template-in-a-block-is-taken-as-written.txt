@@ -7,5 +7,7 @@ template = '''
 '''
 --- result
 template = "{{opera.englishTitle|\"L'inconnu\"}} \\[{{id}}\\]"
+destination = None
+link = Symlink
 require-variants = false
 follow-links = false

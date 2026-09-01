@@ -1,0 +1,13 @@
+The three are not interchangeable, so a fourth spelling has to be refused
+rather than guessed at.
+
+--- toml
+template = '''{{opera.title}}'''
+link = "shortcut"
+--- result
+findopera.toml is not valid:
+TOML parse error at line 2, column 8
+  |
+2 | link = "shortcut"
+  |        ^^^^^^^^^^
+unknown variant `shortcut`, expected one of `symlink`, `hardlink`, `copy`

@@ -40,8 +40,11 @@ fn cases() {
 
             let result = match Config::load(&path) {
                 Ok(c) => format!(
-                    "template = {:?}\nrequire-variants = {}\nfollow-links = {}",
+                    "template = {:?}\ndestination = {:?}\nlink = {:?}\n\
+                     require-variants = {}\nfollow-links = {}",
                     c.template.trim_end_matches('\n'),
+                    c.destination,
+                    c.link,
                     c.require_variants,
                     c.follow_links
                 ),

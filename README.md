@@ -76,6 +76,51 @@ also keeps the contents from being load bearing: a marker may be empty, so
 Results go to stdout, one line per recording; everything else to stderr.
 `--tabs` separates the columns with a tab instead of padding, for piping.
 
+## Building the tree
+
+`scan` only ever prints. `findopera apply` builds what it describes, at the
+destination in the settings file:
+
+```toml
+destination = "/Volumes/Opera/named"
+link = "symlink"        # or "hardlink" or "copy"
+```
+
+```bash
+$ findopera apply ~/Music --dry-run
+findopera: would build a link to each folder in /Volumes/Opera/named
++ /Volumes/Opera/named/Britten/Billy Budd [75]
+findopera: 1 to build, 0 already there, 0 left alone
+```
+
+The three ways of getting there are not spellings of one operation — the
+system forces them apart:
+
+| | what it makes | a track added later | across disks |
+|---|---|---|---|
+| `symlink` | one link to the folder | **appears** | yes |
+| `hardlink` | every file linked, sharing its contents | no | **no** |
+| `copy` | every file copied | no | yes |
+
+**No file is ever deleted or overwritten.** Anything already in place is left
+alone and counted, so running it again after adding one recording does one
+thing. `symlink` cannot merge — a link and a folder cannot share a name, so it
+stops and says what is there — while the other two fill a folder that already
+exists without writing over anything in it.
+
+What can be known before writing is checked first, because half a tree is
+worse than none: a plan with a clash, a destination inside the library it
+reads, or a hard link asked to cross a disk:
+
+```
+findopera: `link = "hardlink"` cannot reach from /Volumes/Opera/rips to /Users/me/named:
+they are on different disks, and a hard link is a second name for a file on the disk
+it already lives on. Use `link = "symlink"` to point at it instead, or `link = "copy"`
+to have two of it.
+```
+
+Nothing is moved or removed, so a renamed source leaves its old entry behind.
+
 ## Two rips of one recording
 
 A FLAC rip and an MP3 rip of the same performance are the same *recording*, so

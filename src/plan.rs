@@ -33,6 +33,10 @@ use std::path::{Path, PathBuf};
 #[derive(Debug)]
 pub struct Row<'a> {
     pub marker: &'a Marker,
+    /// The folder levels, outermost first. Kept apart rather than joined
+    /// because that is what builds a real path, on any platform.
+    pub segments: Vec<String>,
+    /// The same thing joined with `/`, for showing someone.
     pub path: String,
     /// A number stood in because no variant was declared and this clashed.
     pub derived: Option<String>,
@@ -99,22 +103,21 @@ pub fn plan<'a>(
 ) -> Plan<'a> {
     let mut out = Plan::default();
 
-    let render = |marker: &Marker, variant: Option<&str>| -> Result<String, Option<String>> {
+    let render = |marker: &Marker, variant: Option<&str>| -> Result<Vec<String>, Option<String>> {
         let Some(recording) = recordings.get(&marker.id) else {
             return Err(None);
         };
         // Rendering cannot fail; only judging the result as a path can.
         let rendered = tmpl.render(&Marked { recording, variant });
-        to_path(&rendered)
-            .map(|segments| segments.join("/"))
-            .map_err(|e| Some(e.to_string()))
+        to_path(&rendered).map_err(|e| Some(e.to_string()))
     };
 
     for marker in markers {
         match render(marker, marker.variant.as_deref()) {
-            Ok(path) => out.rows.push(Row {
+            Ok(segments) => out.rows.push(Row {
                 marker,
-                path,
+                path: segments.join("/"),
+                segments,
                 derived: None,
             }),
             Err(None) => out.problems.push(Problem::Missing { marker }),
@@ -151,9 +154,10 @@ pub fn plan<'a>(
         // within reach for a template that distinguishes them at all.
         for n in 1..=out.rows.len() + 1 {
             let derived = n.to_string();
-            let Ok(path) = render(out.rows[i].marker, Some(&derived)) else {
+            let Ok(segments) = render(out.rows[i].marker, Some(&derived)) else {
                 break;
             };
+            let path = segments.join("/");
             // A template that never mentions `{{variant}}` renders the same
             // string whatever it is given. Saying these were numbered would
             // then be a lie, and the clash below is the honest report.
@@ -163,6 +167,7 @@ pub fn plan<'a>(
             if !taken.contains(&path) {
                 taken.insert(path.clone());
                 out.rows[i].path = path;
+                out.rows[i].segments = segments;
                 out.rows[i].derived = Some(derived);
                 break;
             }

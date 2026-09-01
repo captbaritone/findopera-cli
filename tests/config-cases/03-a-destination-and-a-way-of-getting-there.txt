@@ -1,8 +1,10 @@
 --- toml
 template = '''{{opera.title}}'''
+destination = "/Volumes/Opera/named"
+link = "hardlink"
 --- result
 template = "{{opera.title}}"
-destination = None
-link = Symlink
+destination = Some("/Volumes/Opera/named")
+link = Hardlink
 require-variants = false
 follow-links = false

@@ -2,11 +2,12 @@
 
 use clap::{Args, Parser, Subcommand};
 use findopera::config::{self, Config};
-use findopera::model::FIELDS;
+use findopera::model::{Recording, FIELDS};
 use findopera::FieldDoc;
-use findopera::{api, plan, scan, Template};
+use findopera::{api, apply, plan, scan, Template};
+use std::collections::BTreeMap;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 const AFTER_HELP: &str = "\
 Exit codes:
@@ -54,6 +55,17 @@ Examples:
     /// List every field a template may use.
     Fields,
 
+    /// Build the named tree from the settings file.
+    #[command(long_about = "\
+Build the tree of names `scan` describes, at the destination in the settings
+file, by the means it names — a symlink to each folder, a hard link to every
+file in it, or a copy.
+
+Nothing is ever deleted or overwritten. Anything already in place is left as
+it is, so running this again after adding one recording does one thing, and
+meeting something unexpected stops it rather than deciding for you.")]
+    Apply(ApplyArgs),
+
     /// Write a starter findopera.toml, explaining every setting.
     #[command(long_about = "\
 Write a starter findopera.toml into a directory, with every setting present
@@ -61,6 +73,19 @@ and explained, so there is no blank file to guess at.
 
 It refuses to overwrite one that is already there.")]
     Init(InitArgs),
+}
+
+#[derive(Args)]
+struct ApplyArgs {
+    /// Directory to walk.
+    #[arg(value_name = "DIR", default_value = ".")]
+    root: PathBuf,
+    /// Settings file. Defaults to findopera.toml beside DIR.
+    #[arg(long, value_name = "FILE")]
+    config: Option<PathBuf>,
+    /// Say what would be built, and build nothing.
+    #[arg(long)]
+    dry_run: bool,
 }
 
 #[derive(Args)]
@@ -121,8 +146,103 @@ fn run() -> i32 {
     match Cli::parse().command {
         Command::Scan(args) => cmd_scan(args),
         Command::Fields => cmd_fields(),
+        Command::Apply(args) => cmd_apply(args),
         Command::Init(args) => cmd_init(args),
     }
+}
+
+fn cmd_apply(args: ApplyArgs) -> i32 {
+    let p = match prepare(
+        &args.root,
+        args.config.as_ref(),
+        None,
+        false,
+        false,
+        api::DEFAULT_ENDPOINT,
+    ) {
+        Ok(p) => p,
+        Err(code) => return code,
+    };
+    let Some(settings) = p.settings.as_ref() else {
+        eprintln!("findopera: apply needs a settings file, for the destination if nothing else");
+        return 2;
+    };
+    let Some(destination) = settings.destination.as_ref() else {
+        eprintln!(
+            "findopera: no destination set — add one to the settings file:\n\
+             \x20   destination = \"/path/to/named\""
+        );
+        return 2;
+    };
+
+    let plan = plan::plan(&p.report.markers, &p.recordings, &p.template);
+    for line in plan.report(p.require_variants) {
+        if line.starts_with(' ') {
+            eprintln!("{line}");
+        } else {
+            eprintln!("findopera: {line}");
+        }
+    }
+
+    // Everything knowable before writing is settled here, because half a tree
+    // is worse than none.
+    if let Err(why) = apply::preflight(
+        &plan,
+        &args.root,
+        destination,
+        settings.link,
+        p.require_variants,
+    ) {
+        eprintln!("findopera: {why}");
+        return 2;
+    }
+
+    // Say where, before doing it. Nothing on the command line names the
+    // destination, so this is the only place it is stated.
+    let what = match settings.link {
+        config::Link::Symlink => "a link to each folder",
+        config::Link::Hardlink => "a hard link to every file",
+        config::Link::Copy => "a copy of every file",
+    };
+    eprintln!(
+        "findopera: {} {} in {}",
+        if args.dry_run {
+            "would build"
+        } else {
+            "building"
+        },
+        what,
+        destination.display()
+    );
+
+    let done = apply::apply(&plan, destination, settings.link, args.dry_run);
+    let mut out = std::io::stdout().lock();
+    for entry in &done.entries {
+        let mark = match &entry.outcome {
+            apply::Outcome::Created => "+",
+            apply::Outcome::Skipped => " ",
+            apply::Outcome::Conflict(_) | apply::Outcome::Failed(_) => "!",
+        };
+        if !emit(
+            &mut out,
+            format_args!("{mark} {}", entry.destination.display()),
+        ) {
+            return 0;
+        }
+        match &entry.outcome {
+            apply::Outcome::Conflict(why) | apply::Outcome::Failed(why) => {
+                eprintln!("    {why}");
+                eprintln!("    (for {})", entry.source.display());
+            }
+            _ => {}
+        }
+    }
+    let (made, skipped, trouble) = done.counts();
+    eprintln!(
+        "findopera: {made} {}, {skipped} already there, {trouble} left alone",
+        if args.dry_run { "to build" } else { "built" }
+    );
+    i32::from(done.troubled())
 }
 
 fn cmd_init(args: InitArgs) -> i32 {
@@ -144,46 +264,59 @@ fn cmd_init(args: InitArgs) -> i32 {
     }
 }
 
-fn cmd_scan(args: ScanArgs) -> i32 {
-    // The settings live beside what is being scanned, or wherever --config
-    // says. Nothing searches up the tree: a source can carry several of these,
-    // one per way of naming it, and which one ran should never be a guess.
-    let config_path = args
-        .config
-        .clone()
-        .unwrap_or_else(|| args.root.join(config::FILE_NAME));
+/// Everything `scan` and `apply` both need before they can differ.
+struct Prepared {
+    settings: Option<Config>,
+    template: Template,
+    report: scan::Report,
+    recordings: BTreeMap<String, Recording>,
+    require_variants: bool,
+}
+
+/// Load the settings, parse the template, walk the library, fetch what it names.
+///
+/// The settings live beside what is being scanned, or wherever `--config`
+/// says. Nothing searches up the tree: a library can carry several of these,
+/// one per way of naming it, and which one ran should never be a guess.
+fn prepare(
+    root: &Path,
+    config: Option<&PathBuf>,
+    template_arg: Option<&String>,
+    follow_links_arg: bool,
+    require_variants_arg: bool,
+    endpoint: &str,
+) -> Result<Prepared, i32> {
+    let config_path = config
+        .cloned()
+        .unwrap_or_else(|| root.join(config::FILE_NAME));
     let settings = match Config::load(&config_path) {
         Ok(c) => Some(c),
         // A template on the command line is reason enough not to need a file.
-        Err(config::ConfigError::Missing { .. }) if args.template.is_some() => None,
+        Err(config::ConfigError::Missing { .. }) if template_arg.is_some() => None,
         Err(e) => {
             eprintln!("findopera: {e}");
-            return 2;
+            return Err(2);
         }
     };
-    let template = match args
-        .template
-        .clone()
+    let template = template_arg
+        .cloned()
         .or_else(|| settings.as_ref().map(|c| c.template.clone()))
-    {
-        Some(t) => t,
-        None => unreachable!("a missing config without --template already returned"),
-    };
-    let follow_links = args.follow_links || settings.as_ref().is_some_and(|c| c.follow_links);
+        .expect("a missing config without --template already returned");
+    let follow_links = follow_links_arg || settings.as_ref().is_some_and(|c| c.follow_links);
     let require_variants =
-        args.require_variants || settings.as_ref().is_some_and(|c| c.require_variants);
+        require_variants_arg || settings.as_ref().is_some_and(|c| c.require_variants);
 
-    let report = scan::scan(&args.root, follow_links);
+    let report = scan::scan(root, follow_links);
     for (path, why) in &report.unreadable {
         eprintln!("findopera: {}: {why}", path.display());
     }
     if report.markers.is_empty() {
-        eprintln!("findopera: no marker files under {}", args.root.display());
-        return 1;
+        eprintln!("findopera: no marker files under {}", root.display());
+        return Err(1);
     }
 
-    // The schema a scan template is checked against is the model's, plus the
-    // one field that comes from the marker rather than the recording.
+    // The schema a template is checked against is the model's, plus the one
+    // field that comes from the marker rather than the recording.
     let mut schema: Vec<FieldDoc> = FIELDS.to_vec();
     schema.push(scan::VARIANT);
 
@@ -204,20 +337,41 @@ fn cmd_scan(args: ScanArgs) -> i32 {
             // well as the fields, which makes it the right answer whether the
             // template named something that is not there or was malformed.
             eprintln!("  see `findopera fields` for every field and the syntax");
-            return 2;
+            return Err(2);
         }
     };
 
     let ids: Vec<String> = report.markers.iter().map(|m| m.id.clone()).collect();
-    let recordings = match api::recordings(&args.endpoint, &ids) {
+    let recordings = match api::recordings(endpoint, &ids) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("findopera: {e}");
-            return 3;
+            return Err(3);
         }
     };
+    Ok(Prepared {
+        settings,
+        template: tmpl,
+        report,
+        recordings,
+        require_variants,
+    })
+}
 
-    let plan = plan::plan(&report.markers, &recordings, &tmpl);
+fn cmd_scan(args: ScanArgs) -> i32 {
+    let p = match prepare(
+        &args.root,
+        args.config.as_ref(),
+        args.template.as_ref(),
+        args.follow_links,
+        args.require_variants,
+        &args.endpoint,
+    ) {
+        Ok(p) => p,
+        Err(code) => return code,
+    };
+    let require_variants = p.require_variants;
+    let plan = plan::plan(&p.report.markers, &p.recordings, &p.template);
 
     let mut out = std::io::stdout().lock();
     for line in plan.listing(args.tabs) {

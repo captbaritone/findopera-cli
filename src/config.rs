@@ -27,11 +27,35 @@ use std::path::{Path, PathBuf};
 /// The file `scan` looks for beside what it is scanning.
 pub const FILE_NAME: &str = "findopera.toml";
 
+/// How a recording's folder gets to the destination.
+///
+/// These are not three spellings of one operation; the system forces them
+/// apart. A directory cannot be hard-linked at all, so `Hardlink` and `Copy`
+/// have to walk the folder and treat each file separately, while `Symlink` is
+/// a single link to the folder itself — which stays live, so a track added to
+/// the source turns up in the destination without another run. Hard links also
+/// cannot cross a filesystem, which rules them out between a network mount and
+/// a local disk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Link {
+    #[default]
+    Symlink,
+    Hardlink,
+    Copy,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Config {
     /// The name each recording's folder should have.
     pub template: String,
+    /// Where `apply` builds the named tree.
+    #[serde(default)]
+    pub destination: Option<PathBuf>,
+    /// How each folder gets there.
+    #[serde(default)]
+    pub link: Link,
     /// Refuse to number two folders that want the same name.
     #[serde(default)]
     pub require_variants: bool,
@@ -153,6 +177,22 @@ template = '''
 # numbers move around as the library changes, so turn this on to be stopped
 # instead of numbered.
 require-variants = false
+
+# Where `findopera apply` builds the named tree. Until this is set, `apply`
+# has nowhere to write and will say so; `findopera scan` never needs it.
+#
+# destination = "/path/to/named"
+
+# How each folder gets there.
+#
+#   symlink    one link pointing at the folder — nothing is copied, and a
+#              track added to the original turns up here too
+#   hardlink   every file linked separately, sharing its contents. Cannot
+#              cross a disk, so the destination must be on the same one
+#   copy       every file copied. Takes the space twice over
+#
+# Nothing is ever deleted or overwritten.
+link = "symlink"
 
 # Follow symlinks while walking. Off by default: a library built out of
 # symlinks would otherwise report every recording twice.
