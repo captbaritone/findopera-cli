@@ -71,6 +71,62 @@ fn backoff(attempt: u32) -> Duration {
     Duration::from_secs(1u64 << attempt.min(6))
 }
 
+/// Where a recording's notes live, for a given API endpoint.
+pub fn notes_url(endpoint: &str, id: &str) -> String {
+    let base = schema_url(endpoint);
+    let host = base.trim_end_matches("/schema.graphql");
+    format!("{host}/recording/{id}.txt")
+}
+
+/// A recording's notes, and what findopera.com calls the file.
+pub struct Notes {
+    /// The name the server gives it, which is the one that will be recognised
+    /// again later. Taken from the server rather than assembled here so that
+    /// there is one authority for the convention.
+    pub filename: String,
+    pub body: String,
+}
+
+/// Undo the percent-encoding in an RFC 6266 `filename*`.
+fn percent_decode(encoded: &str) -> Option<String> {
+    let bytes = encoded.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let hex = encoded.get(i + 1..i + 3)?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+/// The filename out of a `Content-Disposition`.
+///
+/// Prefers the RFC 6266 `filename*`, which is UTF-8 and carries the accents;
+/// `filename` is the ASCII fallback the same header sends for old clients, and
+/// taking it would quietly strip every diacritic out of a composer's name.
+fn disposition_filename(header: &str) -> Option<String> {
+    if let Some(at) = header.find("filename*=") {
+        let value = header[at + "filename*=".len()..].trim();
+        let value = value.split(';').next()?.trim().trim_matches('"');
+        // `UTF-8''<encoded>`; the middle field is the language, and is empty.
+        if let Some(encoded) = value.strip_prefix("UTF-8''") {
+            if let Some(decoded) = percent_decode(encoded) {
+                return Some(decoded);
+            }
+        }
+    }
+    let at = header.find("filename=")?;
+    let value = header[at + "filename=".len()..].trim();
+    let value = value.split(';').next()?.trim().trim_matches('"');
+    (!value.is_empty()).then(|| value.to_string())
+}
+
 /// What the server said was wrong with the request, if it said anything.
 ///
 /// A GraphQL response can carry both data and errors, and for this client an
@@ -270,6 +326,44 @@ impl Client {
             .map_err(|e| ApiError(format!("the schema could not be read: {e}")))
     }
 
+    /// Fetch a recording's notes, and the name to keep them under.
+    ///
+    /// Plain HTTP rather than GraphQL, because the notes are a document the
+    /// site already serves, formatted for reading. Rendering them here from
+    /// the API would be a second implementation to keep in step, and it would
+    /// drift.
+    pub fn notes(&self, id: &str) -> Result<Notes, ApiError> {
+        let url = notes_url(&self.endpoint, id);
+        let (status, mut response) = self.with_retries(&url, |client| {
+            let request = ureq::get(&url).config().http_status_as_error(false).build();
+            client.identify(request).call()
+        })?;
+
+        if status.as_u16() == 404 {
+            return Err(ApiError(format!("findopera.com has no recording {id}")));
+        }
+        if !status.is_success() {
+            return Err(ApiError(format!("{url} answered {status}")));
+        }
+
+        // The name comes from the header rather than from the URL: the URL is
+        // whatever was asked for, and the header is what the server says the
+        // file should be called.
+        let filename = response
+            .headers()
+            .get("content-disposition")
+            .and_then(|v| v.to_str().ok())
+            .and_then(disposition_filename)
+            .unwrap_or_else(|| format!("findopera-{id}.txt"));
+
+        let body = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| ApiError(format!("the notes could not be read: {e}")))?;
+
+        Ok(Notes { filename, body })
+    }
+
     /// Fetch recordings by id.
     ///
     /// The API returns a list positionally aligned with the ids it was given,
@@ -309,5 +403,65 @@ impl Client {
             out.insert(id.clone(), rec);
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{disposition_filename, notes_url, percent_decode, schema_url};
+
+    #[test]
+    fn the_notes_live_beside_the_api() {
+        assert_eq!(
+            notes_url("https://findopera.com/api/graphql", "10655"),
+            "https://findopera.com/recording/10655.txt"
+        );
+        assert_eq!(
+            notes_url("http://localhost:3333/api/graphql", "75"),
+            "http://localhost:3333/recording/75.txt"
+        );
+        // Derived from the same place as the schema, so the two cannot end up
+        // pointing at different servers.
+        assert!(
+            schema_url("https://findopera.com/api/graphql").starts_with("https://findopera.com/")
+        );
+    }
+
+    #[test]
+    fn the_utf8_filename_wins_over_the_ascii_one() {
+        // The same header carries both: an ASCII `filename` for old clients and
+        // a percent-encoded `filename*` with the accents intact. Taking the
+        // first would silently strip the diacritics out of every name.
+        let header = "inline; filename=\"Sosarme-Angioloni [findopera-10655].txt\"; \
+                      filename*=UTF-8''Sosarme%2C%20Re%20di%20Media-Angioloni%20%5Bfindopera-10655%5D.txt";
+        assert_eq!(
+            disposition_filename(header).as_deref(),
+            Some("Sosarme, Re di Media-Angioloni [findopera-10655].txt")
+        );
+    }
+
+    #[test]
+    fn an_ascii_only_header_still_gives_a_name() {
+        let header = "inline; filename=\"findopera-10655.txt\"";
+        assert_eq!(
+            disposition_filename(header).as_deref(),
+            Some("findopera-10655.txt")
+        );
+    }
+
+    #[test]
+    fn a_header_with_no_filename_gives_nothing() {
+        assert_eq!(disposition_filename("inline"), None);
+        // Rather than an empty name, which would become the directory itself.
+        assert_eq!(disposition_filename("inline; filename=\"\""), None);
+    }
+
+    #[test]
+    fn percent_decoding_survives_multibyte_characters() {
+        assert_eq!(percent_decode("Op%C3%A9ra").as_deref(), Some("Opéra"));
+        assert_eq!(percent_decode("plain").as_deref(), Some("plain"));
+        // Truncated escapes are refused rather than guessed at.
+        assert_eq!(percent_decode("bad%C"), None);
+        assert_eq!(percent_decode("bad%ZZ"), None);
     }
 }

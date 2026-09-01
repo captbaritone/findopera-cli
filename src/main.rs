@@ -11,11 +11,15 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 const AFTER_HELP: &str = "\
-A folder is matched to a recording by a marker file saved inside it, whose
-name carries the recording's id. Download one from the recording's page and
-rename it so the id is in the name:
+Each folder holds a text file of notes about the recording in it — cast,
+conductor, year, orchestra, and where it came from — kept so that the folder
+says what it contains without anything having to be opened. `findopera
+annotate` writes one:
 
-  https://findopera.com/recording/10655.txt   ->   findopera-10655.txt
+  cd '~/Music/Sosarme' && findopera annotate 10655
+
+The id in its name is also how this program recognises the folder later, which
+is what everything else here is built on.
 
 Start with `findopera init`, then `findopera organize --help`.
 
@@ -47,37 +51,41 @@ enum Command {
     /// Work out what each folder should be called, and optionally build it.
     #[command(
         long_about = "\
-Walk a library for marker files, work out what each recording's folder should
+Walk a library for notes files, work out what each recording's folder should
 be called, and — with --write — build a tree of those folders at the
 destination in the settings file.
 
-MARKER FILES
+NOTES FILES
 
-A folder is matched to a recording by a .txt file saved inside it, whose name
-carries `findopera-<id>`. The id is the number in the recording's address on
-findopera.com, which serves the file:
+Each folder holds a text file of notes about its recording — the cast, the
+conductor, the year, the orchestra, and a link back to where it came from.
+They are meant to be read: a folder with one in it says what it holds without
+anything having to be opened, and keeps saying so on a disk that outlives this
+program.
 
-  https://findopera.com/recording/10655.txt
+  findopera annotate 10655
 
-Save it into the folder holding that recording, named so the id is in it:
+writes one into the current folder, named as findopera.com names it:
 
-  findopera-10655.txt
-  Sosarme, Re di Media [findopera-10655].txt     also fine
+  Sosarme, Re di Media-2026-Angioloni [findopera-10655].txt
 
-A downloaded copy may not be named that way, so check. A bare `10655.txt` is
-not enough — a number and a .txt is what a track listing or a year looks like,
-and the `findopera-` is what says the number means a recording.
+That name is also how this program recognises the folder again. It looks for
+`findopera-<id>` in it, so the file can be renamed freely as long as that part
+survives. A bare `10655.txt` is not enough — a number and a .txt is what a
+track listing or a year looks like, and the `findopera-` is what says the
+number means a recording.
 
-The contents are never read, so an empty file will do: the whole convention is
-the name. `touch 'findopera-10655.txt'` makes a perfectly good marker.
+Only the name is matched on, never the contents, so a folder can be claimed by
+hand — `touch 'findopera-10655.txt'` works — but that leaves a file with
+nothing in it for anyone to read.
 
-One folder may hold several markers; a box set covering several operas is
+One folder may hold several of these; a box set covering several operas is
 listed once for each recording in it. Where two folders hold the *same*
 recording — a FLAC rip and an MP3 rip of one performance — nothing in the
 recording tells them apart, so put a word after the id to say which is which:
 
-  findopera-10655 flac.txt
-  findopera-10655 mp3.txt
+  findopera annotate 10655 --variant flac
+  findopera annotate 10655 --variant mp3
 
 A template picks that word up as {{variant}}.
 
@@ -95,6 +103,38 @@ Examples:
   findopera organize ~/Music --config ~/Music/by-conductor.toml"
     )]
     Organize(OrganizeArgs),
+
+    /// Write a recording's notes into a folder.
+    #[command(
+        long_about = "\
+Fetch a recording's notes from findopera.com and write them into a folder, so
+that the folder says what it holds.
+
+  cd '~/Music/Sosarme, Re di Media' && findopera annotate 10655
+
+The id is the number in the recording's address on findopera.com. The file is
+named as the site names it — cast and conductor and year in the title, and the
+id in brackets on the end:
+
+  Sosarme, Re di Media-2026-Angioloni [findopera-10655].txt
+
+That name is taken from the server rather than assembled here, so there is one
+authority for it. It is also what `organize` looks for later, which is why the
+`findopera-<id>` part has to survive any renaming.
+
+Where a folder holds one of two rips of the same recording, --variant says
+which, and a template can pick it up as {{variant}}:
+
+  findopera annotate 10655 --variant flac
+
+Nothing is overwritten without --force.",
+        after_help = "\
+Examples:
+  findopera annotate 10655
+  findopera annotate 10655 ~/Music/Sosarme
+  findopera annotate 10655 --variant flac"
+    )]
+    Annotate(AnnotateArgs),
 
     /// List every field a template may use, and the syntax.
     Fields,
@@ -298,6 +338,28 @@ struct GraphqlArgs {
 }
 
 #[derive(Args)]
+struct AnnotateArgs {
+    /// The recording's id, from its address on findopera.com.
+    #[arg(value_name = "ID")]
+    id: String,
+    /// Folder to write into.
+    #[arg(value_name = "DIR", default_value = ".")]
+    dir: PathBuf,
+    /// Which rip this folder holds, when there is more than one.
+    #[arg(long, value_name = "NAME")]
+    variant: Option<String>,
+    /// Replace a file that is already there.
+    #[arg(long)]
+    force: bool,
+    /// GraphQL endpoint. The notes are fetched from the same server.
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    /// Token to identify as.
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+#[derive(Args)]
 struct FeedbackArgs {
     /// What you want to say. Omit to read it from standard input.
     #[arg(value_name = "MESSAGE")]
@@ -380,6 +442,7 @@ fn emit(out: &mut impl Write, line: std::fmt::Arguments) -> bool {
 fn run() -> i32 {
     match Cli::parse().command {
         Command::Organize(args) => cmd_organize(args),
+        Command::Annotate(args) => cmd_annotate(args),
         Command::Fields => cmd_fields(),
         Command::Graphql(args) => cmd_graphql(args),
         Command::Schema(args) => cmd_schema(args),
@@ -399,6 +462,73 @@ fn client(endpoint: &str, token: Option<&String>) -> Result<api::Client, i32> {
             Err(2)
         }
     }
+}
+
+fn cmd_annotate(args: AnnotateArgs) -> i32 {
+    let id = args.id.trim().trim_start_matches('#');
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_digit()) {
+        eprintln!("findopera: `{}` is not a recording id", args.id);
+        eprintln!("  help: the id is the number in the address, as in");
+        eprintln!("        https://findopera.com/recording/10655");
+        return 2;
+    }
+
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let notes = match api.notes(id) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("findopera: {e}");
+            return 3;
+        }
+    };
+
+    let filename = match args.variant.as_deref() {
+        None => notes.filename.clone(),
+        Some(variant) => match with_variant(&notes.filename, id, variant) {
+            Some(name) => name,
+            None => {
+                eprintln!(
+                    "findopera: cannot put a variant in `{}` — it does not carry `findopera-{id}`",
+                    notes.filename
+                );
+                return 3;
+            }
+        },
+    };
+
+    if !args.dir.is_dir() {
+        eprintln!("findopera: {} is not a folder", args.dir.display());
+        return 2;
+    }
+    let path = args.dir.join(&filename);
+    if path.exists() && !args.force {
+        eprintln!("findopera: {} is already there", path.display());
+        eprintln!("  help: pass --force to replace it");
+        return 1;
+    }
+    if let Err(e) = std::fs::write(&path, &notes.body) {
+        eprintln!("findopera: cannot write {}: {e}", path.display());
+        return 1;
+    }
+    println!("{}", path.display());
+    0
+}
+
+/// Put a variant into a name, right after the id it belongs to.
+///
+/// Inserted rather than appended, because the id is usually in brackets at the
+/// end and a variant outside them would not be read back: `scan` takes what
+/// follows `findopera-<id>` and trims the punctuation off both ends, so
+/// `[findopera-10655 flac]` gives `flac` while `[findopera-10655] flac` gives
+/// nothing.
+fn with_variant(filename: &str, id: &str, variant: &str) -> Option<String> {
+    let variant = variant.trim();
+    let token = format!("findopera-{id}");
+    let at = filename.find(&token)? + token.len();
+    Some(format!("{} {variant}{}", &filename[..at], &filename[at..]))
 }
 
 fn cmd_feedback(args: FeedbackArgs) -> i32 {
@@ -1008,7 +1138,37 @@ fn cmd_fields() -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::definition;
+    use super::{definition, with_variant};
+
+    #[test]
+    fn a_variant_goes_inside_the_brackets_with_the_id() {
+        // `scan` reads what follows `findopera-<id>` and trims punctuation off
+        // both ends, so a variant inside the brackets comes back and one after
+        // them does not. Getting this backwards would write files that look
+        // right and are silently unreadable.
+        assert_eq!(
+            with_variant(
+                "Sosarme-2026-Angioloni [findopera-10655].txt",
+                "10655",
+                "flac"
+            )
+            .as_deref(),
+            Some("Sosarme-2026-Angioloni [findopera-10655 flac].txt")
+        );
+    }
+
+    #[test]
+    fn a_name_without_the_id_cannot_take_a_variant() {
+        assert_eq!(with_variant("something-else.txt", "10655", "flac"), None);
+    }
+
+    #[test]
+    fn a_variant_is_trimmed_before_it_is_inserted() {
+        assert_eq!(
+            with_variant("[findopera-75].txt", "75", "  mp3  ").as_deref(),
+            Some("[findopera-75 mp3].txt")
+        );
+    }
 
     const SDL: &str = concat!(
         "\"\"\"A recorded performance.\"\"\"\n",

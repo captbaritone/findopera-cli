@@ -29,6 +29,7 @@ works too.
 ## Getting started
 
 ```bash
+findopera annotate 10655   # write a recording's notes into this folder
 findopera init ~/Music     # write a findopera.toml, every setting explained
 findopera organize ~/Music # see what each folder would be called
 ```
@@ -63,7 +64,7 @@ findopera organize ~/Music -t '{{opera.title}}'  # or just override the template
 
 ## Reading the library
 
-`findopera organize` walks a directory for marker files and shows what each
+`findopera organize` walks a directory for notes files and shows what each
 folder would be called:
 
 ```bash
@@ -74,19 +75,44 @@ $ findopera organize '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' ~/Musi
 ./Handel - Sosarme 2026       Handel/Sosarme, Re di Media (2026)
 ```
 
-A folder is matched to a recording by a marker: a `.txt` file saved inside it
-whose **name** carries `findopera-<id>`. The id is the number in the
-recording's address on findopera.com, which serves the file:
+## Notes files
+
+Each folder holds a text file of notes about its recording, written by
+`findopera annotate`:
+
+```bash
+$ cd '~/Music/Handel - Sosarme 2026'
+$ findopera annotate 10655
+./Sosarme, Re di Media-2026-Angioloni [findopera-10655].txt
+```
 
 ```
-https://findopera.com/recording/10655.txt
+                    SOSARME, RE DI MEDIA
+
+           by George Frideric Handel (1685-1759)
+
+                         -= Cast =-
+    Sosarme ......................... Rémy Brès-Feuillet
+    Elmira ............................... Sarah Charles
+    ...
+
+Conductor: Marco Angioloni
+Recorded: 2026
+Orchestra: Orchestre de l'Opéra Royal
+
+           https://findopera.com/recording/10655
 ```
 
-Save it into the folder holding that recording, named so the id is in it —
-a downloaded copy may not be, so check:
+They are meant to be read. A folder with one in it says what it holds without
+anything having to be opened, and goes on saying so on a disk that outlives
+this program and the service behind it.
+
+The name is what `organize` recognises later: it looks for `findopera-<id>`,
+where the id is the number in the recording's address. The file can be renamed
+freely as long as that part survives.
 
 ```
-findopera-10655.txt
+findopera-10655.txt                            fine
 Sosarme, Re di Media [findopera-10655].txt     also fine
 ```
 
@@ -94,9 +120,8 @@ A bare `10655.txt` is deliberately not enough — a number and a `.txt` is what
 a track listing, a year or a disc number looks like, and the `findopera-` is
 what says the number means a recording.
 
-What a marker identifies is the directory holding it, and one directory can
-hold several: a box set covering several operas is listed once per recording,
-as above.
+One folder can hold several: a box set covering several operas is listed once
+per recording, as above.
 
 Folders can be skipped, which on a network drive is worth more than it sounds
 — every folder looked at is a round trip:
@@ -117,8 +142,9 @@ Nothing opens the files. Deciding by content would mean reading every `.txt`
 in the library to learn that almost none are markers — on a 12,500-file tree
 that is 246ms against 66ms, nearly all of it wasted, and far worse over a
 network mount where opening a file costs so much more than listing one. It
-also keeps the contents from being load bearing: a marker may be empty, so
-`touch findopera-10655.txt` works.
+It also means a folder can be claimed without the network — `touch
+findopera-10655.txt` is enough to be matched — though that leaves a file with
+nothing in it for anyone to read, which is most of the point of having one.
 
 Results go to stdout, one line per recording; everything else to stderr.
 `--tabs` separates the columns with a tab instead of padding, for piping.
