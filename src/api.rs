@@ -223,6 +223,32 @@ impl Client {
         if let Some(variables) = variables {
             body["variables"] = variables;
         }
+        self.send(body)
+    }
+
+    /// Send one operation out of a document that holds several.
+    ///
+    /// The lookup queries live together in `schema/search.graphql` so that
+    /// codegen validates them in one pass; `operationName` is how GraphQL says
+    /// which of them this request means.
+    pub fn query_named(
+        &self,
+        document: &str,
+        operation: &str,
+        variables: serde_json::Value,
+    ) -> Result<serde_json::Value, ApiError> {
+        let payload = self.send(serde_json::json!({
+            "query": document,
+            "operationName": operation,
+            "variables": variables,
+        }))?;
+        if let Some(said) = refusal(&payload) {
+            return Err(ApiError(said));
+        }
+        Ok(payload)
+    }
+
+    fn send(&self, body: serde_json::Value) -> Result<serde_json::Value, ApiError> {
         self.with_retries(&self.endpoint.clone(), |client| {
             // A failing status is not an error, because a GraphQL server puts
             // its reason in the body — including the one reason this client
@@ -408,7 +434,90 @@ impl Client {
 
 #[cfg(test)]
 mod tests {
-    use super::{disposition_filename, notes_url, percent_decode, schema_url};
+    use super::{
+        disposition_filename, found, lifespan, notes_url, percent_decode, schema_url, Kind, LOOKUPS,
+    };
+
+    const KINDS: [Kind; 6] = [
+        Kind::Recording,
+        Kind::Opera,
+        Kind::Singer,
+        Kind::Conductor,
+        Kind::Composer,
+        Kind::Character,
+    ];
+
+    #[test]
+    fn every_operation_this_asks_for_is_in_the_document() {
+        // Codegen validates search.graphql against the schema, which catches a
+        // field that no longer exists. It cannot catch an operation renamed in
+        // that file, because the document stays perfectly valid — the request
+        // just names something that is not there, and only at runtime. This is
+        // the seam between the two, so it is checked here.
+        for kind in KINDS {
+            let (operation, field) = kind.operation();
+            assert!(
+                LOOKUPS.contains(&format!("query {operation}(")),
+                "search.graphql has no operation `{operation}`"
+            );
+            assert!(
+                LOOKUPS.contains(&format!("{field}(")),
+                "search.graphql never selects `{field}`"
+            );
+        }
+    }
+
+    #[test]
+    fn a_recording_is_described_by_what_tells_it_apart() {
+        let v = serde_json::json!({
+            "id": 264, "year": 1953,
+            "opera": { "title": "Tosca" },
+            "conductor": { "lastName": "de Sabata" },
+            "notedSingers": [{ "lastName": "Callas" }, { "lastName": "Gobbi" }],
+        });
+        let f = found(Kind::Recording, &v);
+        assert_eq!(f.id, "264");
+        assert_eq!(f.name, "Tosca");
+        // The year, the conductor and the cast, because a title alone does not
+        // distinguish one Tosca from the forty others.
+        assert!(f.about.contains("1953"), "got: {}", f.about);
+        assert!(f.about.contains("de Sabata"), "got: {}", f.about);
+        assert!(f.about.contains("Callas, Gobbi"), "got: {}", f.about);
+    }
+
+    #[test]
+    fn a_recording_missing_its_trimmings_still_prints() {
+        // Every one of these is nullable, and a search is the worst place to
+        // panic — the whole point is to find something you cannot name yet.
+        let f = found(Kind::Recording, &serde_json::json!({ "id": 1 }));
+        assert_eq!(f.id, "1");
+        assert_eq!(f.name, "");
+        assert_eq!(f.about, "");
+    }
+
+    #[test]
+    fn dates_are_shown_only_as_far_as_they_are_known() {
+        assert_eq!(
+            lifespan(&serde_json::json!({"born": 1923, "died": 1977})),
+            "1923–1977"
+        );
+        assert_eq!(lifespan(&serde_json::json!({"born": 1935})), "b1935");
+        // A death with no birth reads as nonsense on its own.
+        assert_eq!(lifespan(&serde_json::json!({"died": 1977})), "");
+        assert_eq!(lifespan(&serde_json::json!({})), "");
+    }
+
+    #[test]
+    fn a_character_is_shown_with_its_opera() {
+        let f = found(
+            Kind::Character,
+            &serde_json::json!({"id": 910, "name": "Baron Scarpia", "opera": {"title": "Tosca"}}),
+        );
+        assert_eq!(
+            (f.id.as_str(), f.name.as_str(), f.about.as_str()),
+            ("910", "Baron Scarpia", "Tosca")
+        );
+    }
 
     #[test]
     fn the_notes_live_beside_the_api() {
@@ -463,5 +572,152 @@ mod tests {
         // Truncated escapes are refused rather than guessed at.
         assert_eq!(percent_decode("bad%C"), None);
         assert_eq!(percent_decode("bad%ZZ"), None);
+    }
+}
+
+/// What a lookup can look for.
+///
+/// Everything but a recording is a plain text search, which is why they share
+/// one shape here; a recording is found by several things at once, so it
+/// carries the rest.
+#[derive(Debug, Default)]
+pub struct Criteria {
+    pub text: String,
+    pub singers: Vec<String>,
+    pub conductor: Option<String>,
+    pub year: Option<i64>,
+    pub first: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Recording,
+    Opera,
+    Singer,
+    Conductor,
+    Composer,
+    Character,
+}
+
+impl Kind {
+    /// The operation in `schema/search.graphql`, and the field it returns.
+    fn operation(self) -> (&'static str, &'static str) {
+        match self {
+            Kind::Recording => ("SearchRecordings", "filterRecordings"),
+            Kind::Opera => ("SearchOperas", "searchOperas"),
+            Kind::Singer => ("SearchSingers", "searchSingers"),
+            Kind::Conductor => ("SearchConductors", "searchConductors"),
+            Kind::Composer => ("SearchComposers", "searchComposers"),
+            Kind::Character => ("SearchCharacters", "searchCharacters"),
+        }
+    }
+}
+
+/// One result, already reduced to what a line of output needs.
+///
+/// Flattened here rather than in the caller because the shape differs per
+/// kind and the printing does not: an id, a name, and whatever tells this one
+/// apart from the next one with the same name.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Found {
+    pub id: String,
+    pub name: String,
+    pub about: String,
+}
+
+/// The lookup queries, checked in and validated against the schema by codegen.
+const LOOKUPS: &str = include_str!("../schema/search.graphql");
+
+fn text(value: &serde_json::Value) -> String {
+    value.as_str().unwrap_or_default().to_string()
+}
+
+/// A person's dates, as far as they are known.
+fn lifespan(value: &serde_json::Value) -> String {
+    match (value["born"].as_i64(), value["died"].as_i64()) {
+        (Some(b), Some(d)) => format!("{b}–{d}"),
+        (Some(b), None) => format!("b{b}"),
+        // A death with no birth is not worth printing on its own.
+        _ => String::new(),
+    }
+}
+
+impl Client {
+    /// Look something up by name.
+    pub fn search(&self, kind: Kind, criteria: &Criteria) -> Result<Vec<Found>, ApiError> {
+        let (operation, field) = kind.operation();
+        let first = criteria.first.max(1);
+
+        let variables = if kind == Kind::Recording {
+            let mut filter = serde_json::Map::new();
+            if !criteria.text.trim().is_empty() {
+                filter.insert("operaTitleSearch".into(), criteria.text.trim().into());
+            }
+            if !criteria.singers.is_empty() {
+                filter.insert("singerNameSearches".into(), criteria.singers.clone().into());
+            }
+            if let Some(conductor) = &criteria.conductor {
+                filter.insert("conductorNameSearch".into(), conductor.clone().into());
+            }
+            if let Some(year) = criteria.year {
+                filter.insert("approximateYear".into(), year.into());
+            }
+            serde_json::json!({ "filter": filter, "first": first })
+        } else {
+            serde_json::json!({ "query": criteria.text, "first": first })
+        };
+
+        let payload = self.query_named(LOOKUPS, operation, variables)?;
+        let list = payload["data"][field]
+            .as_array()
+            .ok_or_else(|| ApiError(format!("the API returned no {field}")))?;
+
+        Ok(list.iter().map(|v| found(kind, v)).collect())
+    }
+}
+
+fn found(kind: Kind, v: &serde_json::Value) -> Found {
+    let id = match v["id"].as_i64() {
+        Some(n) => n.to_string(),
+        None => text(&v["id"]),
+    };
+    match kind {
+        Kind::Recording => {
+            let singers: Vec<String> = v["notedSingers"]
+                .as_array()
+                .map(|s| s.iter().map(|s| text(&s["lastName"])).collect())
+                .unwrap_or_default();
+            let mut about = Vec::new();
+            if let Some(year) = v["year"].as_i64() {
+                about.push(year.to_string());
+            }
+            let conductor = text(&v["conductor"]["lastName"]);
+            if !conductor.is_empty() {
+                about.push(conductor);
+            }
+            if !singers.is_empty() {
+                about.push(singers.join(", "));
+            }
+            Found {
+                id,
+                name: text(&v["opera"]["title"]),
+                about: about.join("  "),
+            }
+        }
+        Kind::Opera => Found {
+            id,
+            name: text(&v["title"]),
+            about: text(&v["composer"]["lastName"]),
+        },
+        Kind::Character => Found {
+            id,
+            name: text(&v["name"]),
+            about: text(&v["opera"]["title"]),
+        },
+        Kind::Singer | Kind::Conductor | Kind::Composer => Found {
+            id,
+            name: text(&v["fullName"]),
+            about: lifespan(v),
+        },
     }
 }

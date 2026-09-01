@@ -104,6 +104,38 @@ Examples:
     )]
     Organize(OrganizeArgs),
 
+    /// Look up an id by name.
+    #[command(
+        long_about = "\
+Find the id of a recording, or of the people and works one is made of.
+
+Everything else here takes an id. This is how you get one.
+
+  findopera search recording tosca --singer callas
+  findopera search singer callas
+  findopera search opera tosca
+  findopera search character scarpia
+
+The first column is the id, so a result can be handed straight to another
+command:
+
+  findopera search recording tosca --tabs | head -1 | cut -f1 | xargs findopera annotate
+
+A recording can be narrowed by more than its title — --singer may be repeated,
+and --year matches within two years either side. The other kinds take a name
+and nothing else; searching is case and accent insensitive, and matches part
+of a name, so `boheme` finds `La Bohème`.
+
+Composers, singers, conductors and characters are what a recording is made of,
+and their ids are what it takes to describe a new one.",
+        after_help = "\
+Examples:
+  findopera search recording boheme --singer pavarotti --singer freni
+  findopera search recording tosca --conductor 'de sabata' --year 1953
+  findopera search conductor karajan --first 10"
+    )]
+    Search(SearchArgs),
+
     /// Write a recording's notes into a folder.
     #[command(
         long_about = "\
@@ -338,6 +370,37 @@ struct GraphqlArgs {
 }
 
 #[derive(Args)]
+struct SearchArgs {
+    /// What to look for.
+    #[arg(value_name = "KIND", value_parser = ["recording", "opera", "singer", "conductor", "composer", "character"])]
+    kind: String,
+    /// The name, or part of one.
+    #[arg(value_name = "QUERY", default_value = "")]
+    query: Vec<String>,
+    /// A singer on the recording. May be repeated; all must appear.
+    #[arg(long, value_name = "NAME")]
+    singer: Vec<String>,
+    /// The conductor of the recording.
+    #[arg(long, value_name = "NAME")]
+    conductor: Option<String>,
+    /// Recorded within two years of this.
+    #[arg(long, value_name = "YEAR")]
+    year: Option<i64>,
+    /// How many results.
+    #[arg(long, default_value_t = 10, value_name = "N")]
+    first: u32,
+    /// Separate the columns with a tab instead of padding, for piping.
+    #[arg(long)]
+    tabs: bool,
+    /// GraphQL endpoint.
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    /// Token to identify as.
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+#[derive(Args)]
 struct AnnotateArgs {
     /// The recording's id, from its address on findopera.com.
     #[arg(value_name = "ID")]
@@ -442,6 +505,7 @@ fn emit(out: &mut impl Write, line: std::fmt::Arguments) -> bool {
 fn run() -> i32 {
     match Cli::parse().command {
         Command::Organize(args) => cmd_organize(args),
+        Command::Search(args) => cmd_search(args),
         Command::Annotate(args) => cmd_annotate(args),
         Command::Fields => cmd_fields(),
         Command::Graphql(args) => cmd_graphql(args),
@@ -462,6 +526,85 @@ fn client(endpoint: &str, token: Option<&String>) -> Result<api::Client, i32> {
             Err(2)
         }
     }
+}
+
+fn cmd_search(args: SearchArgs) -> i32 {
+    let kind = match args.kind.as_str() {
+        "recording" => api::Kind::Recording,
+        "opera" => api::Kind::Opera,
+        "singer" => api::Kind::Singer,
+        "conductor" => api::Kind::Conductor,
+        "composer" => api::Kind::Composer,
+        "character" => api::Kind::Character,
+        other => {
+            eprintln!("findopera: there is nothing called `{other}` to search");
+            return 2;
+        }
+    };
+
+    let text = args.query.join(" ");
+    let narrowed = !args.singer.is_empty() || args.conductor.is_some() || args.year.is_some();
+    if text.trim().is_empty() && !narrowed {
+        eprintln!("findopera: nothing to search for");
+        eprintln!("  help: findopera search {} <name>", args.kind);
+        return 2;
+    }
+    // Saying nothing and quietly ignoring them is worse than refusing: the
+    // results would look like an answer to a question that was not asked.
+    if kind != api::Kind::Recording && narrowed {
+        eprintln!(
+            "findopera: --singer, --conductor and --year narrow a recording, and this is \
+             searching for a {}",
+            args.kind
+        );
+        return 2;
+    }
+
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let criteria = api::Criteria {
+        text,
+        singers: args.singer,
+        conductor: args.conductor,
+        year: args.year,
+        first: args.first,
+    };
+    let found = match api.search(kind, &criteria) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("findopera: {e}");
+            return 3;
+        }
+    };
+    if found.is_empty() {
+        eprintln!("findopera: nothing found");
+        // Partial names match, so a search that finds nothing is usually
+        // spelled differently rather than absent.
+        eprintln!("  help: try less of the name — matching is partial, and ignores accents");
+        return 1;
+    }
+
+    let mut out = std::io::stdout().lock();
+    let id_width = found.iter().map(|f| f.id.len()).max().unwrap_or(0);
+    let name_width = found
+        .iter()
+        .map(|f| f.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    for f in &found {
+        let line = if args.tabs {
+            format!("{}\t{}\t{}", f.id, f.name, f.about)
+        } else {
+            let pad = name_width.saturating_sub(f.name.chars().count());
+            format!("{:>id_width$}  {}{:pad$}  {}", f.id, f.name, "", f.about)
+        };
+        if !emit(&mut out, format_args!("{}", line.trim_end())) {
+            return 0;
+        }
+    }
+    0
 }
 
 fn cmd_annotate(args: AnnotateArgs) -> i32 {

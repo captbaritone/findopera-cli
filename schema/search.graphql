@@ -1,0 +1,72 @@
+# The lookup queries the CLI issues at runtime.
+#
+# Checked in and validated against the schema by codegen for the same reason
+# recording.graphql is: these are strings the binary sends, and a field renamed
+# upstream should fail the build rather than a user's search.
+#
+# Kept deliberately narrow. Every selection here is something the output prints
+# or something a caller needs in order to make the next request — an id, or
+# enough context to tell two people with the same surname apart.
+
+query SearchOperas($query: String!, $first: Int!) {
+  searchOperas(query: $query, first: $first) {
+    id
+    title
+    composer {
+      lastName
+    }
+  }
+}
+
+query SearchSingers($query: String!, $first: Int!) {
+  searchSingers(query: $query, first: $first) {
+    id
+    fullName
+    born
+    died
+  }
+}
+
+query SearchConductors($query: String!, $first: Int!) {
+  searchConductors(query: $query, first: $first) {
+    id
+    fullName
+    born
+    died
+  }
+}
+
+query SearchComposers($query: String!, $first: Int!) {
+  searchComposers(query: $query, first: $first) {
+    id
+    fullName
+    born
+    died
+  }
+}
+
+query SearchCharacters($query: String!, $first: Int!) {
+  searchCharacters(query: $query, first: $first) {
+    id
+    name
+    opera {
+      title
+    }
+  }
+}
+
+query SearchRecordings($filter: RecordingFilterInput!, $first: Int!) {
+  filterRecordings(filter: $filter, first: $first) {
+    id
+    year
+    opera {
+      title
+    }
+    conductor {
+      lastName
+    }
+    notedSingers {
+      lastName
+    }
+  }
+}

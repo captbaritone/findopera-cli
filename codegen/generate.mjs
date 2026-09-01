@@ -31,6 +31,17 @@ if (errors.length) {
   process.exit(1);
 }
 
+// The lookup queries generate no Rust, but they are still strings this binary
+// sends, so they are validated here too: a field renamed upstream should fail
+// the build rather than someone's search.
+const lookups = parse(readFileSync(at("schema/search.graphql"), "utf8"));
+const lookupErrors = validate(schema, lookups);
+if (lookupErrors.length) {
+  console.error("search.graphql does not validate against the schema:");
+  for (const e of lookupErrors) console.error("  " + e.message);
+  process.exit(1);
+}
+
 const overlay = (await import(at("schema/fields.mjs"))).default;
 
 // The operation selects a single root field; the model is that field's type.

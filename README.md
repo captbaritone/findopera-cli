@@ -29,6 +29,7 @@ works too.
 ## Getting started
 
 ```bash
+findopera search recording tosca --singer callas
 findopera annotate 10655   # write a recording's notes into this folder
 findopera init ~/Music     # write a findopera.toml, every setting explained
 findopera organize ~/Music # see what each folder would be called
@@ -74,6 +75,40 @@ $ findopera organize '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' ~/Musi
 ./Britten/Billy Budd (Decca)  Britten/Billy Budd (1967)
 ./Handel - Sosarme 2026       Handel/Sosarme, Re di Media (2026)
 ```
+
+## Finding an id
+
+Everything here takes an id, so `search` is how you get one:
+
+```bash
+$ findopera search recording tosca --conductor 'de sabata'
+264  Tosca  1953  Sabata  Callas, di Stefano, Gobbi
+
+$ findopera search singer callas
+133  Maria Callas  1923–1977
+```
+
+The kinds are `recording`, `opera`, `singer`, `conductor`, `composer` and
+`character`. Matching is partial and ignores case and accents, so `boheme`
+finds `La Bohème`.
+
+A recording can be narrowed by more than its title — `--singer` may be
+repeated, and `--year` matches within two years either side. The id is the
+first column, so a result can be handed straight to the next command:
+
+```bash
+findopera search recording tosca --tabs | head -1 | cut -f1 | xargs findopera annotate
+```
+
+The other kinds exist because a recording is made of them: describing a new one
+through the API means naming its opera, its conductor, and a singer and
+character for every role.
+
+The queries live in [`schema/search.graphql`](schema/search.graphql) and are
+validated against the schema by codegen, so a field renamed upstream fails the
+build rather than someone's search. Codegen cannot catch an operation renamed
+in that file — the document stays valid — so a test checks that seam
+separately.
 
 ## Notes files
 
