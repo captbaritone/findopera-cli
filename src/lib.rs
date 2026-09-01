@@ -23,6 +23,7 @@
 pub mod api;
 pub mod apply;
 pub mod config;
+pub mod credentials;
 pub mod model;
 pub mod plan;
 pub mod scan;

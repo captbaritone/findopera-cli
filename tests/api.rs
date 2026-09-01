@@ -52,7 +52,7 @@ fn every_request_says_which_program_and_version_it_is() {
     let server = std::thread::spawn(move || one_request(listener));
 
     let ids = vec!["75".to_string()];
-    let _ = findopera::api::recordings(&endpoint, &ids);
+    let _ = findopera::api::Client::new(&endpoint, None).recordings(&ids);
 
     let headers = server.join().expect("the server thread");
     let agent = headers
@@ -106,7 +106,7 @@ fn ask(payload: &'static [u8]) -> Result<(), String> {
     let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
     let endpoint = format!("http://{}", listener.local_addr().expect("an address"));
     let server = std::thread::spawn(move || respond_with(listener, payload));
-    let result = findopera::api::recordings(&endpoint, &["75".to_string()]);
+    let result = findopera::api::Client::new(&endpoint, None).recordings(&["75".to_string()]);
     server.join().expect("the server thread");
     result.map(|_| ()).map_err(|e| e.to_string())
 }

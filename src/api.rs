@@ -16,54 +16,27 @@ const BATCH: usize = 100;
 /// tell this apart from a browser, and tell one version of it from another.
 pub const USER_AGENT: &str = concat!("findopera-cli/", env!("CARGO_PKG_VERSION"));
 
-/// Start a request to the API.
-///
-/// Every request goes through here, so there is one place that decides what
-/// findopera.com is told about the caller, and no way to add a second request
-/// that quietly says nothing.
-///
-/// A failing status is not treated as an error, because a GraphQL server puts
-/// its reason in the body — including the one reason this client most needs
-/// to hear, that its version is no longer welcome. Turning a 400 into
-/// `ureq::Error::StatusCode` would throw that away and report a bare number.
-fn request(endpoint: &str) -> ureq::RequestBuilder<ureq::typestate::WithBody> {
-    ureq::post(endpoint)
-        .config()
-        .http_status_as_error(false)
-        .build()
-        .header("User-Agent", USER_AGENT)
+#[derive(Debug)]
+pub struct ApiError(String);
+
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
-/// Send a GraphQL document, and hand back the whole response.
+/// Where the schema lives, for a given API endpoint.
 ///
-/// Nothing here judges what came back: a GraphQL server answers a request it
-/// disliked with an ordinary 200 and an `errors` array, and deciding what that
-/// means is the caller's business — see [`refusal`]. This returns `Err` only
-/// when there is no response to judge.
-pub fn post(
-    endpoint: &str,
-    query: &str,
-    variables: Option<serde_json::Value>,
-) -> Result<serde_json::Value, ApiError> {
-    let mut body = serde_json::json!({ "query": query });
-    if let Some(variables) = variables {
-        body["variables"] = variables;
-    }
-
-    let mut response = request(endpoint)
-        .send_json(&body)
-        .map_err(|e| ApiError(format!("cannot reach {endpoint}: {e}")))?;
-
-    let status = response.status();
-    response.body_mut().read_json().map_err(|e| {
-        // A body that is not JSON is usually a proxy or an error page rather
-        // than the API, and the status is the only clue as to which.
-        if status.is_success() {
-            ApiError(format!("the API returned something unreadable: {e}"))
-        } else {
-            ApiError(format!("{endpoint} answered {status}, and not with JSON"))
-        }
-    })
+/// Derived from the endpoint rather than configured separately, so that
+/// pointing this program at a development server moves both together and
+/// there is no second setting to leave behind.
+pub fn schema_url(endpoint: &str) -> String {
+    let scheme = endpoint.find("://").map_or(0, |i| i + 3);
+    let host = match endpoint[scheme..].find('/') {
+        Some(i) => &endpoint[..scheme + i],
+        None => endpoint.trim_end_matches('/'),
+    };
+    format!("{host}/schema.graphql")
 }
 
 /// What the server said was wrong with the request, if it said anything.
@@ -96,92 +69,157 @@ pub fn refusal(payload: &serde_json::Value) -> Option<String> {
     Some(said)
 }
 
-/// Where the schema lives, for a given API endpoint.
+/// A server, and who this program is when it talks to it.
 ///
-/// Derived from the endpoint rather than configured separately, so that
-/// pointing this program at a development server moves both together and
-/// there is no second setting to leave behind.
-pub fn schema_url(endpoint: &str) -> String {
-    let scheme = endpoint.find("://").map_or(0, |i| i + 3);
-    let host = match endpoint[scheme..].find('/') {
-        Some(i) => &endpoint[..scheme + i],
-        None => endpoint.trim_end_matches('/'),
-    };
-    format!("{host}/schema.graphql")
+/// Everything that reaches findopera.com goes through one of these, so there
+/// is a single place deciding what it is told about the caller, and no way to
+/// add a request that quietly says nothing.
+pub struct Client {
+    endpoint: String,
+    token: Option<String>,
 }
 
-/// Fetch the schema, as SDL.
-///
-/// Fetched rather than built in: the server gains fields between releases of
-/// this program, and a schema that is quietly a version behind is worse than
-/// one that takes a moment to arrive.
-pub fn schema(endpoint: &str) -> Result<String, ApiError> {
-    let url = schema_url(endpoint);
-    let mut response = ureq::get(&url)
-        .config()
-        .http_status_as_error(false)
-        .build()
-        .header("User-Agent", USER_AGENT)
-        .call()
-        .map_err(|e| ApiError(format!("cannot reach {url}: {e}")))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        return Err(ApiError(format!("{url} answered {status}")));
-    }
-    response
-        .body_mut()
-        .read_to_string()
-        .map_err(|e| ApiError(format!("the schema could not be read: {e}")))
-}
-
-#[derive(Debug)]
-pub struct ApiError(String);
-
-impl std::fmt::Display for ApiError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-/// Fetch recordings by id.
-///
-/// The API returns a list positionally aligned with the ids it was given, with
-/// `null` for any it does not know, so the returned map simply omits those and
-/// the caller reports them as not found.
-pub fn recordings(endpoint: &str, ids: &[String]) -> Result<BTreeMap<String, Recording>, ApiError> {
-    let mut out = BTreeMap::new();
-    for chunk in ids.chunks(BATCH) {
-        out.extend(fetch_batch(endpoint, chunk)?);
-    }
-    Ok(out)
-}
-
-fn fetch_batch(endpoint: &str, ids: &[String]) -> Result<BTreeMap<String, Recording>, ApiError> {
-    let variables = serde_json::json!({ "ids": ids });
-    let payload = post(endpoint, QUERY, Some(variables))?;
-
-    if let Some(said) = refusal(&payload) {
-        return Err(ApiError(said));
-    }
-
-    let list = payload
-        .get("data")
-        .and_then(|d| d.get("getRecordingByIds"))
-        .and_then(|r| r.as_array())
-        .ok_or_else(|| ApiError("the API returned no recordings".into()))?;
-
-    let mut out = BTreeMap::new();
-    for (id, value) in ids.iter().zip(list) {
-        if value.is_null() {
-            continue; // an id the database does not know
+impl Client {
+    pub fn new(endpoint: impl Into<String>, token: Option<String>) -> Self {
+        Client {
+            endpoint: endpoint.into(),
+            token,
         }
-        let rec: Recording = serde_json::from_value(value.clone()).map_err(|e| {
-            ApiError(format!(
-                "recording {id} did not match the generated model: {e}"
-            ))
-        })?;
-        out.insert(id.clone(), rec);
     }
-    Ok(out)
+
+    pub fn endpoint(&self) -> &str {
+        &self.endpoint
+    }
+
+    /// Whether this client has a token at all.
+    ///
+    /// Only ever the fact, never the value — nothing outside this module has a
+    /// reason to see the token, and the surest way to keep it out of a log is
+    /// to keep it out of reach.
+    pub fn is_identified(&self) -> bool {
+        self.token.is_some()
+    }
+
+    /// Say who we are.
+    ///
+    /// The token goes on every request, not only the ones that change
+    /// something. Reading is what this program mostly does — a library of
+    /// three thousand markers is thirty requests — and a server that cannot
+    /// tell those apart from a stranger's has to treat them like a stranger's.
+    /// Identifying the reads is what earns them a limit of their own.
+    fn identify<Any>(&self, request: ureq::RequestBuilder<Any>) -> ureq::RequestBuilder<Any> {
+        let request = request.header("User-Agent", USER_AGENT);
+        match &self.token {
+            Some(token) => request.header("Authorization", &format!("Bearer {token}")),
+            None => request,
+        }
+    }
+
+    /// Send a GraphQL document, and hand back the whole response.
+    ///
+    /// Nothing here judges what came back: a GraphQL server answers a request
+    /// it disliked with an ordinary 200 and an `errors` array, and deciding
+    /// what that means is the caller's business — see [`refusal`]. This
+    /// returns `Err` only when there is no response to judge.
+    pub fn post(
+        &self,
+        query: &str,
+        variables: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, ApiError> {
+        let mut body = serde_json::json!({ "query": query });
+        if let Some(variables) = variables {
+            body["variables"] = variables;
+        }
+
+        // A failing status is not an error, because a GraphQL server puts its
+        // reason in the body — including the one reason this client most needs
+        // to hear, that its version is no longer welcome. Letting ureq turn a
+        // 400 into `StatusCode` would throw that away and report a number.
+        let request = ureq::post(&self.endpoint)
+            .config()
+            .http_status_as_error(false)
+            .build();
+        let mut response = self
+            .identify(request)
+            .send_json(&body)
+            .map_err(|e| ApiError(format!("cannot reach {}: {e}", self.endpoint)))?;
+
+        let status = response.status();
+        response.body_mut().read_json().map_err(|e| {
+            // A body that is not JSON is usually a proxy or an error page
+            // rather than the API, and the status is the only clue as to which.
+            if status.is_success() {
+                ApiError(format!("the API returned something unreadable: {e}"))
+            } else {
+                ApiError(format!(
+                    "{} answered {status}, and not with JSON",
+                    self.endpoint
+                ))
+            }
+        })
+    }
+
+    /// Fetch the schema, as SDL.
+    ///
+    /// Fetched rather than built in: the server gains fields between releases
+    /// of this program, and a schema that is quietly a version behind is worse
+    /// than one that takes a moment to arrive.
+    pub fn schema(&self) -> Result<String, ApiError> {
+        let url = schema_url(&self.endpoint);
+        let request = ureq::get(&url).config().http_status_as_error(false).build();
+        let mut response = self
+            .identify(request)
+            .call()
+            .map_err(|e| ApiError(format!("cannot reach {url}: {e}")))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            return Err(ApiError(format!("{url} answered {status}")));
+        }
+        response
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| ApiError(format!("the schema could not be read: {e}")))
+    }
+
+    /// Fetch recordings by id.
+    ///
+    /// The API returns a list positionally aligned with the ids it was given,
+    /// with `null` for any it does not know, so the returned map simply omits
+    /// those and the caller reports them as not found.
+    pub fn recordings(&self, ids: &[String]) -> Result<BTreeMap<String, Recording>, ApiError> {
+        let mut out = BTreeMap::new();
+        for chunk in ids.chunks(BATCH) {
+            out.extend(self.fetch_batch(chunk)?);
+        }
+        Ok(out)
+    }
+
+    fn fetch_batch(&self, ids: &[String]) -> Result<BTreeMap<String, Recording>, ApiError> {
+        let payload = self.post(QUERY, Some(serde_json::json!({ "ids": ids })))?;
+
+        if let Some(said) = refusal(&payload) {
+            return Err(ApiError(said));
+        }
+
+        let list = payload
+            .get("data")
+            .and_then(|d| d.get("getRecordingByIds"))
+            .and_then(|r| r.as_array())
+            .ok_or_else(|| ApiError("the API returned no recordings".into()))?;
+
+        let mut out = BTreeMap::new();
+        for (id, value) in ids.iter().zip(list) {
+            if value.is_null() {
+                continue; // an id the database does not know
+            }
+            let rec: Recording = serde_json::from_value(value.clone()).map_err(|e| {
+                ApiError(format!(
+                    "recording {id} did not match the generated model: {e}"
+                ))
+            })?;
+            out.insert(id.clone(), rec);
+        }
+        Ok(out)
+    }
 }

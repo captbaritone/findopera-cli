@@ -2,6 +2,7 @@
 
 use clap::{Args, Parser, Subcommand};
 use findopera::config::{self, Config};
+use findopera::credentials;
 use findopera::model::{Recording, FIELDS};
 use findopera::FieldDoc;
 use findopera::{api, apply, plan, scan, Template};
@@ -154,6 +155,28 @@ Examples:
     )]
     Schema(SchemaArgs),
 
+    /// Store a token, so that requests say who is making them.
+    #[command(long_about = "\
+Read a token from standard input and keep it, so that later runs are made as
+you rather than as nobody.
+
+  findopera login < token.txt
+  pbpaste | findopera login
+
+It is read from standard input rather than taken as an argument so that it
+does not end up in the shell's history, or visible to anyone who can list
+processes on this machine.
+
+It is kept in your own configuration directory — not in findopera.toml, which
+lives inside the library being organized and is walked, linked and synced
+along with it.
+
+For anything unattended, set FINDOPERA_TOKEN instead and store nothing.")]
+    Login,
+
+    /// Forget the stored token.
+    Logout,
+
     /// Write a starter findopera.toml, explaining every setting.
     #[command(long_about = "\
 Write a starter findopera.toml into a directory, with every setting present
@@ -206,6 +229,13 @@ struct OrganizeArgs {
     /// changes. This insists every one of them be named.
     #[arg(long)]
     require_variants: bool,
+    /// Token to identify as. Overrides the environment and the stored one.
+    ///
+    /// Prefer `findopera login`, or the FINDOPERA_TOKEN environment variable:
+    /// a token on the command line is visible to anyone who can list
+    /// processes, and is kept in the shell's history.
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
     /// GraphQL endpoint.
     #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
     endpoint: String,
@@ -225,6 +255,13 @@ struct GraphqlArgs {
     /// Print the response on one line.
     #[arg(long)]
     compact: bool,
+    /// Token to identify as. Overrides the environment and the stored one.
+    ///
+    /// Prefer `findopera login`, or the FINDOPERA_TOKEN environment variable:
+    /// a token on the command line is visible to anyone who can list
+    /// processes, and is kept in the shell's history.
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
     /// GraphQL endpoint.
     #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
     endpoint: String,
@@ -235,6 +272,13 @@ struct SchemaArgs {
     /// Print only this type. Omit for the whole schema.
     #[arg(value_name = "TYPE")]
     name: Option<String>,
+    /// Token to identify as. Overrides the environment and the stored one.
+    ///
+    /// Prefer `findopera login`, or the FINDOPERA_TOKEN environment variable:
+    /// a token on the command line is visible to anyone who can list
+    /// processes, and is kept in the shell's history.
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
     /// GraphQL endpoint. The schema is fetched from the same server.
     #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
     endpoint: String,
@@ -266,18 +310,80 @@ fn run() -> i32 {
         Command::Fields => cmd_fields(),
         Command::Graphql(args) => cmd_graphql(args),
         Command::Schema(args) => cmd_schema(args),
+        Command::Login => cmd_login(),
+        Command::Logout => cmd_logout(),
         Command::Init(args) => cmd_init(args),
     }
 }
 
+/// The client for this run, with whatever identity it has.
+fn client(endpoint: &str, token: Option<&String>) -> Result<api::Client, i32> {
+    match credentials::resolve(token.map(String::as_str)) {
+        Ok(token) => Ok(api::Client::new(endpoint, token)),
+        Err(why) => {
+            eprintln!("findopera: {why}");
+            Err(2)
+        }
+    }
+}
+
+fn cmd_login() -> i32 {
+    let token = match std::io::read_to_string(std::io::stdin()) {
+        Ok(t) => t.trim().to_string(),
+        Err(e) => {
+            eprintln!("findopera: cannot read the token from standard input: {e}");
+            return 2;
+        }
+    };
+    if token.is_empty() {
+        eprintln!("findopera: no token given");
+        eprintln!("  help: findopera login < token.txt");
+        return 2;
+    }
+    match credentials::store(&token) {
+        Ok(path) => {
+            // The path, not the token. Nothing should print the token, and the
+            // path is what someone would want in order to remove it by hand.
+            println!("{}", path.display());
+            eprintln!("findopera: requests will now say who is making them");
+            0
+        }
+        Err(why) => {
+            eprintln!("findopera: {why}");
+            1
+        }
+    }
+}
+
+fn cmd_logout() -> i32 {
+    match credentials::forget() {
+        Ok(true) => {
+            eprintln!("findopera: the stored token is gone");
+            0
+        }
+        Ok(false) => {
+            eprintln!("findopera: there was no stored token");
+            0
+        }
+        Err(why) => {
+            eprintln!("findopera: {why}");
+            1
+        }
+    }
+}
+
 fn cmd_organize(args: OrganizeArgs) -> i32 {
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
     let p = match prepare(
         &args.root,
         args.config.as_ref(),
         args.template.as_ref(),
         args.follow_links,
         args.require_variants,
-        &args.endpoint,
+        &api,
     ) {
         Ok(p) => p,
         Err(code) => return code,
@@ -428,7 +534,11 @@ fn cmd_graphql(args: GraphqlArgs) -> i32 {
         }
     };
 
-    let payload = match api::post(&args.endpoint, &query, variables) {
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let payload = match api.post(&query, variables) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("findopera: {e}");
@@ -450,6 +560,13 @@ fn cmd_graphql(args: GraphqlArgs) -> i32 {
     match api::refusal(&payload) {
         Some(said) => {
             eprintln!("findopera: {said}");
+            // Anonymous is enough to read, so a refusal is where the lack of a
+            // token first shows up — and "Unauthorized" is not obviously about
+            // this program rather than about the account behind it.
+            if !api.is_identified() {
+                eprintln!("  note: this request was anonymous. Changing anything needs a token —");
+                eprintln!("        see `findopera login --help`");
+            }
             3
         }
         None => 0,
@@ -470,7 +587,11 @@ fn read_query(args: &GraphqlArgs) -> Result<String, String> {
 }
 
 fn cmd_schema(args: SchemaArgs) -> i32 {
-    let sdl = match api::schema(&args.endpoint) {
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let sdl = match api.schema() {
         Ok(s) => s,
         Err(e) => {
             eprintln!("findopera: {e}");
@@ -585,7 +706,7 @@ fn prepare(
     template_arg: Option<&String>,
     follow_links_arg: bool,
     require_variants_arg: bool,
-    endpoint: &str,
+    api: &api::Client,
 ) -> Result<Prepared, i32> {
     let config_path = config
         .cloned()
@@ -654,7 +775,7 @@ fn prepare(
     };
 
     let ids: Vec<String> = report.markers.iter().map(|m| m.id.clone()).collect();
-    let recordings = match api::recordings(endpoint, &ids) {
+    let recordings = match api.recordings(&ids) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("findopera: {e}");

@@ -232,6 +232,37 @@ findopera: the server refused the request:
     [CLIENT_TOO_OLD] findopera-cli 0.1.0 is no longer supported. Upgrade to 0.3 or later
 ```
 
+### Saying who you are
+
+Requests are anonymous by default, which is enough to read. A token makes them
+yours:
+
+```bash
+findopera login < token.txt     # kept in your config dir, mode 600
+export FINDOPERA_TOKEN=...      # or this, for anything unattended
+findopera logout
+```
+
+The token is *not* kept in `findopera.toml`. That file lives inside the library
+being organized — the scan walks it, `--write` can link the folder holding it
+into the destination tree, and libraries sit on network shares and in sync
+folders. A secret there leaks by construction. It goes in your own
+configuration directory instead, created mode 600 rather than written and then
+tightened, since between those two there is a moment where it is readable. If
+it is ever found readable by anyone else, the run stops and says so rather than
+carrying on anonymously.
+
+An argument beats the environment, which beats the stored token, so a one-off
+never needs the stored one moved out of the way.
+
+Identity rides on *every* request, not only the ones that change something.
+Reading is most of what this program does — a library of three thousand markers
+is thirty requests — and a server that cannot tell those from a stranger's has
+to treat them like a stranger's. Identifying the reads is what earns them a
+limit of their own. `tests/auth.rs` asserts this on the bytes on the wire,
+including for the query generated into the binary, which no caller passes in
+and is therefore the easiest one to leave anonymous.
+
 ### Asking it anything else
 
 `organize` covers the one question this program exists to answer. For the
