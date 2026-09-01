@@ -1,6 +1,40 @@
 # findopera
 
-A small template language for turning record metadata into path-safe names.
+Render FindOpera recording metadata through a template.
+
+```bash
+$ findopera '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' 10655 75
+Handel/Sosarme, Re di Media (2026)
+Britten/Billy Budd (1967)
+
+$ findopera --fields          # every path a template may use
+```
+
+The id is the number in a findopera.com URL:
+`https://findopera.com/recording/10655` → `10655`. Results go to stdout, one
+line per recording; everything else goes to stderr.
+
+A bad template never costs a network round trip — it is checked against the
+schema first:
+
+```bash
+$ findopera '{{composer.lastName}}/{{year}}' 10655
+findopera: {{year}} can resolve to nothing, and is not inside a group
+  {{composer.lastName}}/{{year}}
+                        ^^^^^^^^
+  help: Add a fallback like {{…|"Unknown"}}, or wrap it in a group so it can be dropped: [{{year}}]
+```
+
+| Exit | |
+|---|---|
+| 0 | every id rendered |
+| 1 | a recording is not in the database, or its render is not a usable path |
+| 2 | the template or the arguments are wrong |
+| 3 | the API was unreachable or errored |
+
+## The template language
+
+A small language for turning record metadata into path-safe names.
 
 ```rust
 let tmpl = Template::parse("{{composer.lastName}}/{{opera.title}}[/{{year}}]", FIELDS)?;
@@ -200,6 +234,8 @@ change that makes every bare `{{that.field}}` stop parsing. See
 schema/       schema.graphql, the query, and fields.mjs
 src/template/ the language: lexer, parser, renderer, and the seam
 src/model/    the recording model, mostly generated
+src/api.rs    the GraphQL client
+src/main.rs   the CLI
 codegen/      derives the model from the schema and the query
 ```
 

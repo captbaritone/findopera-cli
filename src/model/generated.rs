@@ -18,10 +18,7 @@ pub const QUERY: &str = include_str!("../../schema/recording.graphql");
 
 /// Every path a template may reference.
 pub static FIELDS: &[FieldDoc] = &[
-    FieldDoc::non_null(
-        "id",
-        "FindOpera recording id — always present, good for disambiguating",
-    ),
+    FieldDoc::non_null("id", "FindOpera recording id — good for disambiguating"),
     FieldDoc::non_null("url", "Canonical findopera.com URL for the recording"),
     FieldDoc::new("year", "Year recorded. Often absent on older entries"),
     FieldDoc::new("month", "Month recorded, zero-padded (04). Usually absent"),

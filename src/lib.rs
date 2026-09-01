@@ -15,6 +15,7 @@
 //! [`model`] supplies both for FindOpera recordings, generated from the
 //! GraphQL schema by `codegen/generate.mjs`.
 
+pub mod api;
 pub mod model;
 mod template;
 

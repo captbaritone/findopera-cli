@@ -58,7 +58,7 @@ export default {
 
   // The schema documents almost none of the fields a template would use.
   doc: {
-    id: "FindOpera recording id — always present, good for disambiguating",
+    id: "FindOpera recording id — good for disambiguating",
     url: "Canonical findopera.com URL for the recording",
     year: "Year recorded. Often absent on older entries",
     month: "Month recorded, zero-padded (04). Usually absent",
