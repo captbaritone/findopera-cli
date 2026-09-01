@@ -201,6 +201,38 @@ fn symlink_to(target: &Path, at: &Path) -> std::io::Result<()> {
 }
 
 /// Build the tree, or work out what building it would do.
+/// A link on the way down to `at`, if there is one.
+///
+/// Every path operation here follows links — `create_dir_all` makes
+/// directories through one, and `symlink_metadata` on the far end reports on
+/// whatever it lands in — so a link sitting in the destination silently
+/// redirects a build into whatever it points at. For this program that is
+/// nearly always the library being read, which is the one place nothing may be
+/// written.
+///
+/// [`crate::plan`] refuses a plan whose own folders nest, but it can only see
+/// this run. A link left by an earlier one, under a different template, is
+/// still here — so this is checked again at the point of writing.
+fn passes_through_link(destination: &Path, at: &Path) -> Option<PathBuf> {
+    let rest = at.strip_prefix(destination).ok()?;
+    let mut components: Vec<_> = rest.components().collect();
+    // The last is the entry itself; a link there is an ordinary conflict, and
+    // is already reported as one.
+    components.pop();
+
+    let mut here = destination.to_path_buf();
+    for component in components {
+        here.push(component);
+        match std::fs::symlink_metadata(&here) {
+            Ok(meta) if meta.is_symlink() => return Some(here),
+            Ok(_) => {}
+            // Not there yet, so nothing below it can be either.
+            Err(_) => return None,
+        }
+    }
+    None
+}
+
 pub fn apply(plan: &Plan, destination: &Path, link: Link, dry_run: bool) -> Applied {
     let mut out = Applied::default();
     for row in &plan.rows {
@@ -209,9 +241,17 @@ pub fn apply(plan: &Plan, destination: &Path, link: Link, dry_run: bool) -> Appl
             at.push(segment);
         }
         let source = row.marker.directory.clone();
-        let outcome = match link {
-            Link::Symlink => one_symlink(&source, &at, dry_run),
-            Link::Hardlink | Link::Copy => mirror(&source, &at, link, dry_run),
+        let outcome = match passes_through_link(destination, &at) {
+            Some(link_at) => Outcome::Conflict(format!(
+                "{} is a link to somewhere else, so building this inside it would write \
+                 outside {} — most likely into the library itself",
+                link_at.display(),
+                destination.display()
+            )),
+            None => match link {
+                Link::Symlink => one_symlink(&source, &at, dry_run),
+                Link::Hardlink | Link::Copy => mirror(&source, &at, link, dry_run),
+            },
         };
         out.entries.push(Entry {
             source,

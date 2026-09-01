@@ -1,0 +1,18 @@
+A separator inside an optional group renders different depths, so a recording
+that drops the group encloses one that does not. The names differ, so this is
+not a clash — but the two cannot both be built, and building them anyway wrote
+the second *through* the first into the library being read.
+
+--- template
+{{opera.title}}[/{{variant}}]
+--- tree
+rips/plain/findopera-332.txt
+rips/flac/findopera-332 flac.txt
+--- listing
+rips/flac	Don Giovanni/flac
+rips/plain	Don Giovanni
+--- report
+"Don Giovanni/flac" would be built inside "Don Giovanni", which is itself a recording's folder:
+    rips/plain/findopera-332.txt
+    rips/flac/findopera-332 flac.txt
+    ^ they cannot both be built — with links, the second would be written through the first, into the library itself. This comes from a template whose optional group contains a `/`, so a folder that drops it encloses one that does not.

@@ -58,6 +58,19 @@ pub enum Problem<'a> {
         markers: Vec<&'a Marker>,
         cause: Cause,
     },
+    /// One folder's name is a parent of another's.
+    ///
+    /// Not a clash — the two names differ — but they cannot both be built. In
+    /// symlink mode the parent becomes a link to a directory in the library,
+    /// and building the child inside it writes *through* that link, into the
+    /// source. The destination ends up missing a folder and the library ends
+    /// up with one it never asked for.
+    Nested {
+        parent: String,
+        child: String,
+        parent_marker: &'a Marker,
+        child_marker: &'a Marker,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -184,6 +197,15 @@ pub fn plan<'a>(
         out.problems.push(Problem::Numbered { markers: numbered });
     }
 
+    for (parent, child) in nesting(&out.rows) {
+        out.problems.push(Problem::Nested {
+            parent: out.rows[parent].path.clone(),
+            child: out.rows[child].path.clone(),
+            parent_marker: out.rows[parent].marker,
+            child_marker: out.rows[child].marker,
+        });
+    }
+
     for group in clashing(&out.rows) {
         // Why numbering could not separate these matters: either the markers
         // say the same thing, or the template never asks what they say.
@@ -201,6 +223,46 @@ pub fn plan<'a>(
         });
     }
     out
+}
+
+/// Pairs of rows where one's path contains the other's.
+///
+/// A template with a separator inside an optional group renders different
+/// depths — `{{title}}[/{{variant}}]` gives `Tosca` for one recording and
+/// `Tosca/flac` for another — and then one folder is inside another. The names
+/// are not equal, so [`clashing`] does not see it.
+///
+/// Paths are sorted, which puts an ancestor immediately before its
+/// descendants, and a stack keeps the enclosing ones: `Tosca` sorts before
+/// `Tosca 2` before `Tosca/flac`, so looking only at the previous entry would
+/// miss it.
+fn nesting(rows: &[Row]) -> Vec<(usize, usize)> {
+    let mut order: Vec<usize> = (0..rows.len()).collect();
+    order.sort_by(|&a, &b| rows[a].path.cmp(&rows[b].path));
+
+    let mut enclosing: Vec<usize> = Vec::new();
+    let mut found = Vec::new();
+    for i in order {
+        while let Some(&top) = enclosing.last() {
+            if contains(&rows[top].path, &rows[i].path) {
+                break;
+            }
+            enclosing.pop();
+        }
+        if let Some(&top) = enclosing.last() {
+            found.push((top, i));
+        }
+        enclosing.push(i);
+    }
+    found
+}
+
+/// Whether `outer` is a parent directory of `inner`.
+///
+/// The separator has to be there in `inner`, or `Tosca` would look like a
+/// parent of `Tosca 1953`.
+fn contains(outer: &str, inner: &str) -> bool {
+    inner.len() > outer.len() && inner.starts_with(outer) && inner.as_bytes()[outer.len()] == b'/'
 }
 
 /// Indices of rows sharing a rendered path, grouped, in a stable order.
@@ -287,6 +349,29 @@ impl Plan<'_> {
                         ));
                     }
                 }
+                Problem::Nested {
+                    parent,
+                    child,
+                    parent_marker,
+                    child_marker,
+                } => {
+                    out.push(format!(
+                        "{child:?} would be built inside {parent:?}, which is itself a \
+                         recording's folder:"
+                    ));
+                    out.push(format!("    {}", parent_marker.marker_path.display()));
+                    out.push(format!("    {}", child_marker.marker_path.display()));
+                    // Naming the consequence rather than only the rule: the
+                    // reason this is refused is that going ahead would write
+                    // outside the destination altogether.
+                    out.push(
+                        "    ^ they cannot both be built — with links, the second would be \
+                         written through the first, into the library itself. This comes from a \
+                         template whose optional group contains a `/`, so a folder that drops it \
+                         encloses one that does not."
+                            .to_string(),
+                    );
+                }
                 Problem::Clash {
                     path,
                     markers,
@@ -359,4 +444,32 @@ fn suggest_rename(m: &Marker) -> String {
 /// Quote a path for a shell, so a suggested `mv` can be pasted as it stands.
 fn quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::contains;
+
+    #[test]
+    fn a_parent_is_recognised() {
+        assert!(contains("Tosca", "Tosca/flac"));
+        assert!(contains("Puccini", "Puccini/Tosca"));
+        assert!(contains("Puccini/Tosca", "Puccini/Tosca/1953"));
+    }
+
+    #[test]
+    fn a_longer_name_is_not_a_parent_of_a_sibling() {
+        // Without the separator check, `Tosca` would look like a parent of
+        // `Tosca 1953` and every numbered folder would be refused.
+        assert!(!contains("Tosca", "Tosca 1953"));
+        assert!(!contains("Tosca", "Tosca2"));
+        assert!(!contains("Puccini/Tosca", "Puccini/Tosca 1953"));
+    }
+
+    #[test]
+    fn nothing_contains_itself_or_something_shorter() {
+        assert!(!contains("Tosca", "Tosca"));
+        assert!(!contains("Tosca/flac", "Tosca"));
+        assert!(!contains("Tosca", "Bohème"));
+    }
 }

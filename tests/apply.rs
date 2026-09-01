@@ -248,3 +248,52 @@ mod links {
         assert_eq!(a.ino(), b.ino(), "one file, two names");
     }
 }
+
+#[test]
+fn a_link_left_by_an_earlier_run_does_not_become_a_way_into_the_library() {
+    // The danger is specific: every path call here follows links, so a link
+    // sitting in the destination redirects a build into whatever it points at
+    // — and what it points at is the library. `plan` refuses folders that nest
+    // within one run, but a link left by a previous run under a different
+    // template is invisible to it.
+    let f = Fixture::new("through-link");
+    let (report, recs, tmpl) = f.parts(T);
+    let p = plan::plan(&report.markers, &recs, &tmpl);
+    let row = p.rows.first().expect("a row");
+
+    // Stand in for that earlier run: the first path segment is already a link
+    // pointing back into the library.
+    let first = &row.segments[0];
+    fs::create_dir_all(&f.destination).expect("destination");
+    let into_library = f.source.join("rip-a");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&into_library, f.destination.join(first)).expect("the old link");
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir(&into_library, f.destination.join(first))
+        .expect("the old link");
+
+    let done = apply::apply(&p, &f.destination, Link::Symlink, false);
+
+    assert!(
+        done.troubled(),
+        "building through a link must not be a success"
+    );
+    let why = done
+        .entries
+        .iter()
+        .find_map(|e| match &e.outcome {
+            apply::Outcome::Conflict(why) => Some(why.clone()),
+            _ => None,
+        })
+        .expect("a conflict naming the link");
+    assert!(why.contains("link"), "got: {why}");
+
+    // The point of all of it: the library is untouched.
+    let leaked: Vec<_> = fs::read_dir(&into_library)
+        .expect("the library folder")
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|n| n != "01.mp3" && !n.starts_with("findopera-"))
+        .collect();
+    assert!(leaked.is_empty(), "written into the library: {leaked:?}");
+}
