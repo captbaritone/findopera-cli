@@ -83,9 +83,14 @@ struct ApplyArgs {
     /// Settings file. Defaults to findopera.toml beside DIR.
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
-    /// Say what would be built, and build nothing.
+    /// Actually build it.
+    ///
+    /// Without this, nothing is written: the command says what it would do and
+    /// stops. The destination lives in the settings file rather than on the
+    /// command line, so this is the only thing that says out loud that a run
+    /// is going to touch the disk.
     #[arg(long)]
-    dry_run: bool,
+    write: bool,
 }
 
 #[derive(Args)]
@@ -199,6 +204,7 @@ fn cmd_apply(args: ApplyArgs) -> i32 {
 
     // Say where, before doing it. Nothing on the command line names the
     // destination, so this is the only place it is stated.
+    let dry_run = !args.write;
     let what = match settings.link {
         config::Link::Symlink => "a link to each folder",
         config::Link::Hardlink => "a hard link to every file",
@@ -206,16 +212,12 @@ fn cmd_apply(args: ApplyArgs) -> i32 {
     };
     eprintln!(
         "findopera: {} {} in {}",
-        if args.dry_run {
-            "would build"
-        } else {
-            "building"
-        },
+        if dry_run { "would build" } else { "building" },
         what,
         destination.display()
     );
 
-    let done = apply::apply(&plan, destination, settings.link, args.dry_run);
+    let done = apply::apply(&plan, destination, settings.link, dry_run);
     let mut out = std::io::stdout().lock();
     for entry in &done.entries {
         let mark = match &entry.outcome {
@@ -240,9 +242,41 @@ fn cmd_apply(args: ApplyArgs) -> i32 {
     let (made, skipped, trouble) = done.counts();
     eprintln!(
         "findopera: {made} {}, {skipped} already there, {trouble} left alone",
-        if args.dry_run { "to build" } else { "built" }
+        if dry_run { "to build" } else { "built" }
     );
+    // Only worth saying when there is something to write; a run that found
+    // everything already in place has nothing to offer.
+    if dry_run && made > 0 {
+        eprintln!("findopera: nothing was written. To build it, run:");
+        eprintln!("    {}", rerun_with_write(&args));
+    }
     i32::from(done.troubled())
+}
+
+/// The same command again, with `--write` on the end.
+///
+/// Spelled out rather than described, because the arguments that matter may
+/// not be the ones the reader typed most recently.
+fn rerun_with_write(args: &ApplyArgs) -> String {
+    let quote = |p: &Path| {
+        let s = p.display().to_string();
+        if s.contains(' ') {
+            format!("'{}'", s.replace('\'', r"'\''"))
+        } else {
+            s
+        }
+    };
+    let mut parts = vec![
+        "findopera".to_string(),
+        "apply".to_string(),
+        quote(&args.root),
+    ];
+    if let Some(config) = &args.config {
+        parts.push("--config".to_string());
+        parts.push(quote(config));
+    }
+    parts.push("--write".to_string());
+    parts.join(" ")
 }
 
 fn cmd_init(args: InitArgs) -> i32 {

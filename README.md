@@ -86,12 +86,21 @@ destination = "/Volumes/Opera/named"
 link = "symlink"        # or "hardlink" or "copy"
 ```
 
+**Nothing is written unless you say `--write`.** On its own, `apply` says what
+it would do and stops:
+
 ```bash
-$ findopera apply ~/Music --dry-run
+$ findopera apply ~/Music
 findopera: would build a link to each folder in /Volumes/Opera/named
 + /Volumes/Opera/named/Britten/Billy Budd [75]
 findopera: 1 to build, 0 already there, 0 left alone
+findopera: nothing was written. To build it, run:
+    findopera apply ~/Music --write
 ```
+
+The destination lives in the settings file rather than on the command line, so
+`--write` is the only thing that says out loud that a run is about to touch the
+disk.
 
 The three ways of getting there are not spellings of one operation — the
 system forces them apart:

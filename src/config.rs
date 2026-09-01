@@ -191,7 +191,8 @@ require-variants = false
 #              cross a disk, so the destination must be on the same one
 #   copy       every file copied. Takes the space twice over
 #
-# Nothing is ever deleted or overwritten.
+# Nothing is ever deleted or overwritten, and nothing is written at all
+# unless `findopera apply` is given --write.
 link = "symlink"
 
 # Follow symlinks while walking. Off by default: a library built out of
