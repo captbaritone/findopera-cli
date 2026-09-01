@@ -49,6 +49,8 @@ pub struct Extra {
     pub json: &'static str,
     pub required: bool,
     pub about: &'static str,
+    /// For a list of objects, the fields one element has.
+    pub items: &'static [InputField],
 }
 
 /// Every type with a complete set of operations. 20 of them.
@@ -374,10 +376,10 @@ pub const TYPES: &[Type] = &[
         composite: Some(Composite {
             mutation: "addRecordingWithPortrayals",
             extras: &[
-                Extra { name: "portrayalInputs", gql: "[RecordingPortrayalsInput!]!", json: "array", required: true, about: "" },
-                Extra { name: "sourceUrl", gql: "String", json: "string", required: false, about: "If provided, a RecordingURL will be created linking this URL to the new recording." },
-                Extra { name: "spotifyAlbumId", gql: "String", json: "string", required: false, about: "If provided, a SpotifyAlbum record will be created. If `upc` is also provided it will be linked to that UPC." },
-                Extra { name: "upc", gql: "String", json: "string", required: false, about: "If provided, a UPC record will be created and linked to the new recording." },
+                Extra { name: "portrayalInputs", gql: "[RecordingPortrayalsInput!]!", json: "array", required: true, about: "", items: &[InputField { name: "characterId", json: "string", required: true, about: "" }, InputField { name: "noted", json: "boolean", required: true, about: "" }, InputField { name: "singerId", json: "string", required: true, about: "" }] },
+                Extra { name: "sourceUrl", gql: "String", json: "string", required: false, about: "If provided, a RecordingURL will be created linking this URL to the new recording.", items: &[] },
+                Extra { name: "spotifyAlbumId", gql: "String", json: "string", required: false, about: "If provided, a SpotifyAlbum record will be created. If `upc` is also provided it will be linked to that UPC.", items: &[] },
+                Extra { name: "upc", gql: "String", json: "string", required: false, about: "If provided, a UPC record will be created and linked to the new recording.", items: &[] },
             ],
         }),
     },

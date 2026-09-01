@@ -133,6 +133,11 @@ Exactly three roles take top billing, or all of them when a cast is smaller
 than three. That is a rule of this one call rather than a fact about
 recordings, and it is checked before a twelve-role payload is sent.
 
+`noted` is required on a portrayal given to a create, though it is optional on
+one created by itself. `describe recording` shows the shape of a portrayal
+under the field, and `--json` gives it an `items` subschema, so a validator can
+check the cast rather than only that it is a list.
+
 ### Attaching a barcode
 
 A recording and a UPC are joined rather than owned, so they have their own

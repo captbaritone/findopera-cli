@@ -5,7 +5,12 @@
 // that moves; derived from the schema it is one thing that cannot drift, and
 // CI fails when it does.
 
-import { getNamedType, isNonNullType, isListType } from "graphql";
+import {
+  getNamedType,
+  isNonNullType,
+  isListType,
+  isInputObjectType,
+} from "graphql";
 
 /** `RecordingURL` -> `recording-url`, `SpotifyAlbum` -> `spotify-album`. */
 export function kebab(name) {
@@ -37,6 +42,21 @@ function jsonType(type) {
 
 function rustStr(s) {
   return JSON.stringify(s ?? "");
+}
+
+/**
+ * The fields of one element, for a field that holds a list of them.
+ *
+ * Without this a list is described as `{"type": "array"}` and nothing more, so
+ * a schema that promises to validate an input cannot check the one part of it
+ * with any structure. A misspelled key inside a portrayal passed, and was
+ * refused by the server instead.
+ */
+function elementFields(type) {
+  const inner = isNonNullType(type) ? type.ofType : type;
+  if (!isListType(inner)) return [];
+  const element = getNamedType(inner);
+  return isInputObjectType(element) ? fields(element) : [];
 }
 
 function fields(inputType) {
@@ -85,6 +105,7 @@ function composite(schema, mutations, graphql) {
       gql: a.type.toString(),
       required: isNonNullType(a.type),
       about: a.description ?? null,
+      items: elementFields(a.type),
     }))
     .sort((a, b) => {
       if (a.required !== b.required) return a.required ? -1 : 1;
@@ -118,6 +139,23 @@ export function crud(schema, getOperations) {
 
     const inputArg = field.args.find((a) => a.name === "input");
     const updateArg = mutations[`update${graphql}`].args.find((a) => a.name === "input");
+
+    for (const [where, list] of [
+      ["create", inputArg && getNamedType(inputArg.type)],
+      ["edit", updateArg && getNamedType(updateArg.type)],
+    ]) {
+      if (!list) continue;
+      for (const f of Object.values(list.getFields())) {
+        const inner = isNonNullType(f.type) ? f.type.ofType : f.type;
+        if (isListType(inner)) {
+          throw new Error(
+            `${graphql}.${where} field \`${f.name}\` is a list. Lists need an ` +
+              `items subschema or describe --json cannot validate them; that ` +
+              `is handled for composite arguments but not here yet.`,
+          );
+        }
+      }
+    }
 
     types.push({
       name: kebab(graphql),
@@ -191,6 +229,8 @@ export function crud(schema, getOperations) {
   L.push("    pub json: &'static str,");
   L.push("    pub required: bool,");
   L.push("    pub about: &'static str,");
+  L.push("    /// For a list of objects, the fields one element has.");
+  L.push("    pub items: &'static [InputField],");
   L.push("}");
   L.push("");
   L.push(`/// Every type with a complete set of operations. ${types.length} of them.`);
@@ -225,9 +265,21 @@ export function crud(schema, getOperations) {
       L.push(`            mutation: ${rustStr(t.composite.mutation)},`);
       L.push("            extras: &[");
       for (const f of t.composite.extras) {
+        const items = f.items.length
+          ? "&[" +
+            f.items
+              .map(
+                (i) =>
+                  `InputField { name: ${rustStr(i.name)}, json: ${rustStr(i.json)}, ` +
+                  `required: ${i.required}, about: ${rustStr(i.about)} }`,
+              )
+              .join(", ") +
+            "]"
+          : "&[]";
         L.push(
           `                Extra { name: ${rustStr(f.name)}, gql: ${rustStr(f.gql)}, ` +
-            `json: ${rustStr(f.json)}, required: ${f.required}, about: ${rustStr(f.about)} },`,
+            `json: ${rustStr(f.json)}, required: ${f.required}, about: ${rustStr(f.about)}, ` +
+            `items: ${items} },`,
         );
       }
       L.push("            ],");

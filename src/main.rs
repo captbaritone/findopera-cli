@@ -893,6 +893,9 @@ fn cmd_create(args: CreateArgs) -> i32 {
     if let Err(why) = check_input(&input, kind.create, extras, kind.name) {
         return refused(&why, "BAD_INPUT", args.json, 2);
     }
+    if let Err(why) = check_elements(&input, extras) {
+        return refused(&why, "BAD_INPUT", args.json, 2);
+    }
     if let Err(why) = check_cast(&input) {
         return refused(&why, "BAD_INPUT", args.json, 2);
     }
@@ -1141,6 +1144,23 @@ fn cmd_describe(args: DescribeArgs) -> i32 {
         ) {
             break;
         }
+        // What one of them looks like. `noted` in particular is required here
+        // and optional on a portrayal created by itself, which is not
+        // something anyone would guess.
+        for item in e.items {
+            let required = if item.required { "required" } else { "" };
+            if !emit(
+                &mut out,
+                format_args!(
+                    "  {:<w$}  {:<7}  {required}",
+                    item.name,
+                    item.json,
+                    w = width.saturating_sub(2)
+                ),
+            ) {
+                break;
+            }
+        }
     }
     if !extras.is_empty() {
         eprintln!(
@@ -1155,6 +1175,26 @@ fn cmd_describe(args: DescribeArgs) -> i32 {
         kind.name
     );
     0
+}
+
+/// Check the objects inside a list-valued input.
+///
+/// The keys of an input are checked against what the type accepts; without
+/// this the objects inside a list were not checked against anything, so a
+/// misspelling one level down travelled to the server and came back as a
+/// GraphQL error about an input type the caller never named.
+fn check_elements(input: &serde_json::Value, extras: &[crud::Extra]) -> Result<(), String> {
+    for extra in extras.iter().filter(|e| !e.items.is_empty()) {
+        let Some(list) = input.get(extra.name).and_then(|v| v.as_array()) else {
+            continue;
+        };
+        for (i, element) in list.iter().enumerate() {
+            let what = format!("{} {}", extra.name, i + 1);
+            check_input(element, extra.items, &[], &what)
+                .map_err(|why| why.replace(&format!("a {what}"), &what))?;
+        }
+    }
+    Ok(())
 }
 
 /// How many of a cast may be top-billed.
@@ -1193,6 +1233,37 @@ fn check_cast(input: &serde_json::Value) -> Result<(), String> {
     ))
 }
 
+/// The schema of one object, from the fields it has.
+fn object_schema(fields: &[crud::InputField]) -> serde_json::Value {
+    let mut properties = serde_json::Map::new();
+    for f in fields {
+        let mut prop = serde_json::Map::new();
+        prop.insert(
+            "type".into(),
+            if f.required {
+                f.json.into()
+            } else {
+                serde_json::json!([f.json, "null"])
+            },
+        );
+        if !f.about.is_empty() {
+            prop.insert("description".into(), f.about.into());
+        }
+        properties.insert(f.name.to_string(), serde_json::Value::Object(prop));
+    }
+    let required: Vec<&str> = fields
+        .iter()
+        .filter(|f| f.required)
+        .map(|f| f.name)
+        .collect();
+    serde_json::json!({
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": false,
+    })
+}
+
 /// A JSON Schema for what a create takes.
 ///
 /// Draft 2020-12 rather than a shape of our own, because anything that already
@@ -1205,6 +1276,12 @@ fn json_schema(kind: &crud::Type) -> serde_json::Value {
         prop.insert("type".into(), serde_json::json!([e.json, "null"]));
         if !e.about.is_empty() {
             prop.insert("description".into(), e.about.into());
+        }
+        // A list without this says only "array", which is the one thing in an
+        // input with any structure and the one thing a validator could not
+        // check.
+        if !e.items.is_empty() {
+            prop.insert("items".into(), object_schema(e.items));
         }
         properties.insert(e.name.to_string(), serde_json::Value::Object(prop));
     }
@@ -2316,6 +2393,63 @@ mod tests {
         // Case is the likeliest slip, and the server would answer it with a
         // GraphQL error naming an input type the caller never mentioned.
         assert!(why.contains("firstName"), "got: {why}");
+    }
+
+    #[test]
+    fn the_objects_inside_a_list_are_checked_too() {
+        // Without this a list validated as "an array" and nothing more, so a
+        // key misspelled one level down reached the server and came back as an
+        // error about an input type the caller never named.
+        let recording = crud::TYPES.iter().find(|t| t.name == "recording").unwrap();
+        let extras = recording.composite.as_ref().unwrap().extras;
+
+        let why = super::check_elements(
+            &serde_json::json!({ "portrayalInputs": [
+                { "singerid": "133", "characterId": "908", "noted": true }
+            ] }),
+            extras,
+        )
+        .expect_err("a misspelled key inside a portrayal");
+        assert!(why.contains("singerId"), "got: {why}");
+        assert!(why.contains("portrayalInputs 1"), "got: {why}");
+    }
+
+    #[test]
+    fn noted_is_required_on_a_portrayal_given_to_a_create() {
+        // It is optional on a portrayal created by itself and required here,
+        // which is not something anyone would guess, so it is worth failing on
+        // before the request rather than after.
+        let recording = crud::TYPES.iter().find(|t| t.name == "recording").unwrap();
+        let extras = recording.composite.as_ref().unwrap().extras;
+        let cast = extras.iter().find(|e| e.name == "portrayalInputs").unwrap();
+        assert!(cast.items.iter().any(|f| f.name == "noted" && f.required));
+
+        assert!(super::check_elements(
+            &serde_json::json!({ "portrayalInputs": [
+                { "singerId": "133", "characterId": "908" }
+            ] }),
+            extras,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn a_list_is_described_well_enough_to_validate_against() {
+        // `describe --json` says it is a schema in the ordinary sense. A list
+        // with no `items` cannot check the one part of an input with any
+        // structure, which is what made this worth fixing.
+        let recording = crud::TYPES.iter().find(|t| t.name == "recording").unwrap();
+        let schema = super::json_schema(recording);
+        let items = &schema["properties"]["portrayalInputs"]["items"];
+        assert_eq!(items["type"], "object");
+        assert_eq!(items["additionalProperties"], false);
+        let required: Vec<&str> = items["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert!(required.contains(&"noted"), "got: {required:?}");
     }
 
     #[test]
