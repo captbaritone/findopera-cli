@@ -72,9 +72,9 @@ struct InitArgs {
 
 #[derive(Args)]
 struct ScanArgs {
-    /// Directories to walk.
+    /// Directory to walk.
     #[arg(value_name = "DIR", default_value = ".")]
-    roots: Vec<PathBuf>,
+    root: PathBuf,
     /// Settings file. Defaults to findopera.toml beside the first DIR.
     #[arg(long, value_name = "FILE")]
     config: Option<PathBuf>,
@@ -151,7 +151,7 @@ fn cmd_scan(args: ScanArgs) -> i32 {
     let config_path = args
         .config
         .clone()
-        .unwrap_or_else(|| args.roots[0].join(config::FILE_NAME));
+        .unwrap_or_else(|| args.root.join(config::FILE_NAME));
     let settings = match Config::load(&config_path) {
         Ok(c) => Some(c),
         // A template on the command line is reason enough not to need a file.
@@ -173,19 +173,12 @@ fn cmd_scan(args: ScanArgs) -> i32 {
     let require_variants =
         args.require_variants || settings.as_ref().is_some_and(|c| c.require_variants);
 
-    let report = scan::scan(&args.roots, follow_links);
+    let report = scan::scan(&args.root, follow_links);
     for (path, why) in &report.unreadable {
         eprintln!("findopera: {}: {why}", path.display());
     }
     if report.markers.is_empty() {
-        eprintln!(
-            "findopera: no marker files under {}",
-            args.roots
-                .iter()
-                .map(|r| r.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
+        eprintln!("findopera: no marker files under {}", args.root.display());
         return 1;
     }
 

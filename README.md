@@ -39,7 +39,7 @@ findopera scan ~/Music -t '{{opera.title}}'      # or just override the template
 
 ## Scanning
 
-`findopera scan` walks directories for marker files and shows what each folder
+`findopera scan` walks a directory for marker files and shows what each folder
 would be called:
 
 ```bash

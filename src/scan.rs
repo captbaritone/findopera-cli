@@ -137,19 +137,24 @@ fn variant_after(rest: &str) -> Option<String> {
     (!v.is_empty()).then(|| v.to_string())
 }
 
-/// Walk `roots` depth-first, collecting markers.
+/// Walk `root` depth-first, collecting markers.
+///
+/// One root, not several. The settings that decide what a marker means live
+/// beside the library they describe, so a second root would either be read
+/// with the first one's settings or need its own — and there is no reason to
+/// answer that here when running the command twice answers it exactly.
 ///
 /// Symlinks are not followed by default: a library organised with symlinks
 /// would otherwise report the same recording once per link, and a cycle would
 /// not terminate.
-pub fn scan(roots: &[PathBuf], follow_links: bool) -> Report {
+pub fn scan(root: &Path, follow_links: bool) -> Report {
     let mut report = Report::default();
     // The same directory can hold two files naming one recording — a marker
     // and a renamed copy. Report it once, unless they carry different
     // variants, which is the caller saying they are different rips.
     let mut seen: BTreeSet<(PathBuf, String, Option<String>)> = BTreeSet::new();
 
-    for root in roots {
+    {
         for entry in WalkDir::new(root)
             .follow_links(follow_links)
             .sort_by_file_name()

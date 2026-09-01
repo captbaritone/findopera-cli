@@ -28,7 +28,7 @@ impl Tree {
     }
     /// Every (directory, id) pair found, with paths relative to the tree root.
     fn scan(&self) -> Vec<(String, String)> {
-        scan::scan(std::slice::from_ref(&self.0), false)
+        scan::scan(&self.0, false)
             .markers
             .iter()
             .map(|m| {
@@ -155,7 +155,7 @@ fn a_marker_may_be_empty() {
 
 /// Every (directory, id, variant) found.
 fn scan_variants(t: &Tree) -> Vec<(String, String, Option<String>)> {
-    scan::scan(std::slice::from_ref(&t.0), false)
+    scan::scan(&t.0, false)
         .markers
         .iter()
         .map(|m| {

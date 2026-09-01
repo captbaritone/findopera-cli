@@ -74,7 +74,7 @@ fn cases() {
         &["listing", "report"],
         |name, input| {
             let tree = Tree::new(name, input["tree"].lines());
-            let report = scan::scan(std::slice::from_ref(&tree.0), false);
+            let report = scan::scan(&tree.0, false);
 
             let mut schema: Vec<FieldDoc> = FIELDS.to_vec();
             schema.push(scan::VARIANT);
