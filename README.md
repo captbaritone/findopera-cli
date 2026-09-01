@@ -2,6 +2,30 @@
 
 Name a music library from FindOpera metadata, through a template.
 
+## Installing
+
+```bash
+# macOS and Linux
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/captbaritone/findopera-cli/releases/latest/download/findopera-installer.sh | sh
+```
+
+```powershell
+# Windows
+irm https://github.com/captbaritone/findopera-cli/releases/latest/download/findopera-installer.ps1 | iex
+```
+
+Or take a binary from [the releases page](https://github.com/captbaritone/findopera-cli/releases)
+and put it on your PATH. Builds are published for macOS (Apple silicon and
+Intel), Linux (x86-64 and ARM) and Windows.
+
+The Linux builds are statically linked against musl rather than glibc, so they
+run on a NAS as well as on a desktop — which is where a music library usually
+lives.
+
+With a Rust toolchain, `cargo install --git https://github.com/captbaritone/findopera-cli`
+works too.
+
 ## Getting started
 
 ```bash

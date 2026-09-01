@@ -2,7 +2,12 @@
 name = "findopera"
 version = "0.1.0"
 edition = "2021"
-description = "Renders FindOpera recording metadata through a path-safe template language"
+description = "Organize a library of opera recordings using metadata from findopera.com"
+license = "MIT"
+repository = "https://github.com/captbaritone/findopera-cli"
+readme = "README.md"
+keywords = ["opera", "music", "metadata", "cli", "library"]
+categories = ["command-line-utilities"]
 
 [lib]
 name = "findopera"
@@ -23,3 +28,8 @@ ureq = { version = "3", features = ["json"] }
 
 [profile.release]
 strip = true
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
