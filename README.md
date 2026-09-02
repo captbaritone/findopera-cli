@@ -339,7 +339,11 @@ system forces them apart:
 **Nothing in your library is ever touched, and nothing in the destination that
 this program did not put there.** Anything already in place is left
 alone and counted, so running it again after adding one recording does one
-thing. `symlink` cannot merge — a link and a folder cannot share a name, so it
+thing. Symlinks are written relative to where they sit, so a share reachable by more
+than one name — `/volume1/Opera` on a NAS and `/Volumes/Opera` over AFP — reads
+correctly from both, and the whole tree can be moved without breaking.
+
+`symlink` cannot merge — a link and a folder cannot share a name, so it
 stops and says what is there — while the other two fill a folder that already
 exists without writing over anything in it.
 

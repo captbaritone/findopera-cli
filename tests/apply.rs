@@ -218,9 +218,40 @@ mod links {
         assert_eq!(done.counts().0, 2);
         let at = f.destination.join("Britten/Billy Budd [75]");
         assert!(at.symlink_metadata().expect("a link").is_symlink());
+
+        // Where it lands, not how it is spelled. It is written relative so
+        // that a share reachable by two names reads correctly from both.
         assert_eq!(
-            fs::read_link(&at).expect("target"),
+            at.canonicalize().expect("it resolves"),
             f.source.join("rip-a").canonicalize().expect("real source")
+        );
+        assert!(
+            fs::read_link(&at).expect("target").is_relative(),
+            "an absolute target can only name one of a share's names"
+        );
+    }
+
+    #[test]
+    fn a_symlinked_tree_survives_being_moved() {
+        // The other thing relative targets buy: the whole share can be
+        // renamed, or mounted somewhere else, and the links still land.
+        let f = Fixture::new("moved");
+        let parts = f.parts(T);
+        let plan = plan::plan(&parts.0.markers, &parts.1, &parts.2);
+        apply::apply(&plan, &f.destination, Link::Symlink, false);
+
+        let moved = f.root.join("elsewhere");
+        fs::create_dir_all(&moved).expect("somewhere to move to");
+        fs::rename(f.root.join("library"), moved.join("library")).expect("move the library");
+        fs::rename(&f.destination, moved.join("named")).expect("move the tree with it");
+
+        let at = moved.join("named/Britten/Billy Budd [75]");
+        assert!(at.is_dir(), "the link still resolves after the move");
+        assert!(
+            at.canonicalize()
+                .expect("resolves")
+                .starts_with(moved.canonicalize().expect("moved")),
+            "and lands inside the new location rather than the old one"
         );
     }
 
