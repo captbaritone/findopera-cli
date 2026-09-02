@@ -336,7 +336,8 @@ system forces them apart:
 | `hardlink` | every file linked, sharing its contents | no | **no** |
 | `copy` | every file copied | no | yes |
 
-**No file is ever deleted or overwritten.** Anything already in place is left
+**Nothing in your library is ever touched, and nothing in the destination that
+this program did not put there.** Anything already in place is left
 alone and counted, so running it again after adding one recording does one
 thing. `symlink` cannot merge — a link and a folder cannot share a name, so it
 stops and says what is there — while the other two fill a folder that already

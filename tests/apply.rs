@@ -297,3 +297,128 @@ fn a_link_left_by_an_earlier_run_does_not_become_a_way_into_the_library() {
         .collect();
     assert!(leaked.is_empty(), "written into the library: {leaked:?}");
 }
+
+// ---- what a run records, and what it may take away --------------------------
+
+/// Build once, so the destination has a record and a tree.
+fn establish(f: &Fixture, template: &str, link: Link) -> usize {
+    let (report, recs, tmpl) = f.parts(template);
+    let p = plan::plan(&report.markers, &recs, &tmpl);
+    let done = apply::apply(&p, &f.destination, link, false);
+    let built = apply::built(&p, &done, link);
+    findopera::state::save(&f.destination, built).expect("state");
+    p.rows.len()
+}
+
+#[test]
+fn a_destination_with_things_in_it_and_no_record_is_refused() {
+    // Whatever is already there cannot be told from something we made, so
+    // there would be no safe answer later about what may be removed. An empty
+    // folder, or one we wrote the record for, are the only two cases.
+    let f = Fixture::new("occupied");
+    fs::create_dir_all(&f.destination).expect("destination");
+    fs::write(f.destination.join("someone-elses.flac"), "theirs").expect("their file");
+
+    let (report, recs, tmpl) = f.parts(T);
+    let p = plan::plan(&report.markers, &recs, &tmpl);
+    let why = apply::preflight(&p, &f.source, &f.destination, Link::Symlink, false)
+        .expect_err("an unknown destination is refused");
+    assert!(why.contains("already has things in it"), "got: {why}");
+
+    // And the file is still there, since nothing ran.
+    assert!(f.destination.join("someone-elses.flac").exists());
+}
+
+#[test]
+fn a_destination_we_built_before_is_allowed_back_into() {
+    let f = Fixture::new("returning");
+    establish(&f, T, Link::Symlink);
+    let (report, recs, tmpl) = f.parts(T);
+    let p = plan::plan(&report.markers, &recs, &tmpl);
+    apply::preflight(&p, &f.source, &f.destination, Link::Symlink, false)
+        .expect("our own record is what lets us back in");
+}
+
+#[test]
+fn what_the_plan_no_longer_names_is_removed() {
+    let f = Fixture::new("orphan");
+    establish(&f, T, Link::Symlink);
+    let state = findopera::state::load(&f.destination).expect("state");
+
+    // A template that names one of them something else leaves the other
+    // orphaned, which is what removing a recording from the library looks
+    // like from here.
+    let (report, recs, tmpl) = f.parts(r"{{opera.title}}");
+    let p = plan::plan(&report.markers, &recs, &tmpl);
+    let gone = apply::prune(&state, &p, &f.destination, false);
+
+    assert_eq!(
+        gone.removed.len(),
+        state.entries.len(),
+        "every old path moved"
+    );
+    assert!(gone.failed.is_empty(), "{:?}", gone.failed);
+}
+
+#[test]
+fn nothing_outside_the_record_is_ever_removed() {
+    // The whole safety argument. A copied folder is indistinguishable from
+    // one somebody made by hand, so this must not depend on being able to
+    // tell them apart — only on what was written down.
+    let f = Fixture::new("theirs");
+    establish(&f, T, Link::Copy);
+    let state = findopera::state::load(&f.destination).expect("state");
+
+    let mine = f.destination.join("My Own Mixes");
+    fs::create_dir_all(&mine).expect("their folder");
+    fs::write(mine.join("track.flac"), "theirs").expect("their file");
+
+    // A plan naming nothing: every recorded entry is an orphan.
+    let (report, recs, tmpl) = f.parts(r"{{opera.title}} \[{{id}}\] elsewhere");
+    let p = plan::plan(&report.markers, &recs, &tmpl);
+    apply::prune(&state, &p, &f.destination, false);
+
+    assert!(mine.join("track.flac").exists(), "their file was removed");
+}
+
+#[test]
+fn an_entry_that_stopped_looking_like_ours_is_left_alone() {
+    let f = Fixture::new("changed");
+    establish(&f, T, Link::Copy);
+    let state = findopera::state::load(&f.destination).expect("state");
+
+    // Recorded as a copied folder, and now a link. Someone did that, so it is
+    // not ours to remove any more.
+    let entry = f.destination.join(&state.entries[0].path);
+    fs::remove_dir_all(&entry).expect("clear it");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink("/tmp", &entry).expect("their link");
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_dir("C:\\", &entry).expect("their link");
+
+    let (report, recs, tmpl) = f.parts(r"{{opera.title}} \[{{id}}\] elsewhere");
+    let p = plan::plan(&report.markers, &recs, &tmpl);
+    let gone = apply::prune(&state, &p, &f.destination, false);
+
+    assert!(entry.symlink_metadata().is_ok(), "it was removed anyway");
+    assert!(
+        gone.changed.iter().any(|(p, _)| *p == entry),
+        "it should be reported: {:?}",
+        gone.changed
+    );
+}
+
+#[test]
+fn a_dry_run_removes_nothing() {
+    let f = Fixture::new("dry-prune");
+    establish(&f, T, Link::Symlink);
+    let state = findopera::state::load(&f.destination).expect("state");
+    let entry = f.destination.join(&state.entries[0].path);
+
+    let (report, recs, tmpl) = f.parts(r"{{opera.title}} \[{{id}}\] elsewhere");
+    let p = plan::plan(&report.markers, &recs, &tmpl);
+    let gone = apply::prune(&state, &p, &f.destination, true);
+
+    assert!(!gone.removed.is_empty(), "it should say what it would take");
+    assert!(entry.symlink_metadata().is_ok(), "but not take it");
+}

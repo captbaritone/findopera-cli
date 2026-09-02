@@ -21,7 +21,7 @@
 //! scanned, or the one you named with `--config` — so a source can carry
 //! several, one per way of naming it, and which one ran is never a guess.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 /// The file `organize` looks for beside the library it is reading.
@@ -36,7 +36,7 @@ pub const FILE_NAME: &str = "findopera.toml";
 /// the source turns up in the destination without another run. Hard links also
 /// cannot cross a filesystem, which rules them out between a network mount and
 /// a local disk.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Link {
     #[default]
@@ -170,6 +170,16 @@ template = '''
 {{composer.lastName}}/{{opera.title}}/[{{year}} ]{{conductor.lastName}} \[{{id}}\][ - {{variant}}]
 '''
 
+# A fuller one, in use on a real library, if you want more in the name. It
+# gives the composer their first name and dates, the opera its English title
+# where there is one, and the recording its noted singers — each in a group, so
+# any of them being absent drops just that part rather than leaving brackets
+# with nothing in them.
+#
+# template = '''
+# {{composer.lastName}}, {{composer.firstName}}[ ({{composer.dates}})]/{{opera.title}}[ ({{opera.englishTitle}})]/[{{year}} ]{{conductor.lastName}}[ ({{singers.lastNames}})][ \[{{variant}}\]]
+# '''
+
 # The id and the variant are both there on purpose. Two recordings of one
 # opera in one year by one conductor are common, and two rips of a single
 # recording are commoner still; without something to tell them apart, findopera
@@ -202,7 +212,7 @@ require-variants = false
 #              cross a disk, so the destination must be on the same one
 #   copy       every file copied. Takes the space twice over
 #
-# Nothing is ever deleted or overwritten, and nothing is written at all
+# Only folders this program built are ever removed, and nothing is written at all
 # unless `findopera organize` is given --write.
 link = "symlink"
 
