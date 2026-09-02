@@ -304,13 +304,16 @@ fn one_symlink(source: &Path, at: &Path, dry_run: bool) -> Outcome {
     match std::fs::symlink_metadata(at) {
         Ok(meta) if meta.is_symlink() => {
             return match std::fs::read_link(at) {
-                Ok(existing) if existing == target => Outcome::Skipped,
+                // Compared by where it lands rather than by how it is written,
+                // so a tree built by an older version is recognised as already
+                // right instead of being reported as a conflict.
+                Ok(existing) if resolves_to(at, &existing, &target) => Outcome::Skipped,
                 Ok(existing) => Outcome::Conflict(format!(
                     "a link is already there, pointing at {}",
                     existing.display()
                 )),
                 Err(e) => Outcome::Failed(format!("cannot read the link that is there: {e}")),
-            }
+            };
         }
         Ok(meta) => {
             return Outcome::Conflict(format!(
@@ -323,15 +326,89 @@ fn one_symlink(source: &Path, at: &Path, dry_run: bool) -> Outcome {
     if dry_run {
         return Outcome::Created;
     }
-    if let Some(parent) = at.parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            return Outcome::Failed(format!("cannot make {}: {e}", parent.display()));
-        }
+    let Some(parent) = at.parent() else {
+        return Outcome::Failed("there is nowhere to put it".to_string());
+    };
+    if let Err(e) = std::fs::create_dir_all(parent) {
+        return Outcome::Failed(format!("cannot make {}: {e}", parent.display()));
     }
-    match symlink_to(&target, at) {
+
+    // Written relative to where the link sits, not as an absolute path.
+    //
+    // One share can be reached by more than one name — /volume1/Opera on a NAS
+    // and /Volumes/Opera over AFP on a Mac are the same directory — and an
+    // absolute target can only ever name one of them. Built from either end,
+    // the other end reads every folder as empty. A relative target has no
+    // machine's idea of where the share begins in it, so it is correct from
+    // both, and it survives the whole tree being moved.
+    let here = match parent.canonicalize() {
+        Ok(h) => h,
+        Err(e) => return Outcome::Failed(format!("cannot read {}: {e}", parent.display())),
+    };
+    let relative = relative_to(&here, &target);
+
+    match symlink_to(&relative, at) {
         Ok(()) => Outcome::Created,
         Err(e) => Outcome::Failed(explain_io(&e)),
     }
+}
+
+/// The path to `target` as read from inside `here`.
+///
+/// Both are already resolved, so this is arithmetic on components: drop what
+/// they share, step up out of the rest of `here`, then walk down. A target
+/// that shares nothing with `here` — a different volume — comes back
+/// unchanged, since climbing to the root and back down again would be a longer
+/// way of saying the same thing and a more fragile one.
+fn relative_to(here: &Path, target: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut a = here.components().peekable();
+    let mut b = target.components().peekable();
+    let mut shared = 0usize;
+    while let (Some(x), Some(y)) = (a.peek(), b.peek()) {
+        if x != y {
+            break;
+        }
+        shared += 1;
+        a.next();
+        b.next();
+    }
+    // Two absolute paths always share the root, so sharing only that means
+    // sharing nothing — different volumes. Climbing to the root and back down
+    // would resolve the same way today and break the moment either is mounted
+    // somewhere else, so the absolute path is the honest answer there.
+    if shared <= 1 {
+        return target.to_path_buf();
+    }
+    let rest: Vec<Component> = b.collect();
+    let up = a.count();
+    let mut out = PathBuf::new();
+    for _ in 0..up {
+        out.push("..");
+    }
+    for c in rest {
+        out.push(c);
+    }
+    // Identical paths leave nothing at all, which is not a path.
+    if out.as_os_str().is_empty() {
+        out.push(".");
+    }
+    out
+}
+
+/// Whether a link at `at` reading `written` arrives at `target`.
+fn resolves_to(at: &Path, written: &Path, target: &Path) -> bool {
+    if written == target {
+        return true;
+    }
+    let Some(parent) = at.parent() else {
+        return false;
+    };
+    parent
+        .join(written)
+        .canonicalize()
+        .map(|resolved| resolved == *target)
+        .unwrap_or(false)
 }
 
 /// Recreate the folder and treat every file in it separately.
@@ -514,4 +591,70 @@ pub fn built(plan: &Plan, done: &Applied, link: Link) -> Vec<state::Built> {
             link,
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::relative_to;
+    use std::path::{Path, PathBuf};
+
+    fn rel(here: &str, target: &str) -> PathBuf {
+        relative_to(Path::new(here), Path::new(target))
+    }
+
+    #[test]
+    fn a_target_beside_the_link_is_named_directly() {
+        assert_eq!(rel("/share/dest", "/share/dest/thing"), Path::new("thing"));
+    }
+
+    #[test]
+    fn a_target_elsewhere_in_the_share_climbs_out_and_back() {
+        // The shape a real tree makes: dest/<composer>/<opera> pointing at
+        // src/<folder>, two levels up and across.
+        assert_eq!(
+            rel("/share/dest/Handel", "/share/src/a"),
+            Path::new("../../src/a")
+        );
+        assert_eq!(rel("/share/dest", "/share/src/a"), Path::new("../src/a"));
+    }
+
+    #[test]
+    fn nothing_in_common_stays_absolute() {
+        // Two volumes. Climbing to the root and back down would resolve the
+        // same way today and break the moment either is mounted elsewhere, so
+        // the absolute path is the honest answer.
+        let out = rel("/Volumes/Named/dest", "/Users/someone/Music/a");
+        assert_eq!(out, Path::new("/Users/someone/Music/a"));
+    }
+
+    #[test]
+    fn a_link_pointing_at_its_own_folder_is_still_a_path() {
+        // Degenerate, but an empty path is not something that can be written.
+        assert_eq!(rel("/share/dest", "/share/dest"), Path::new("."));
+    }
+
+    #[test]
+    fn the_result_read_from_the_link_lands_on_the_target() {
+        // The property that matters, stated as arithmetic rather than as a
+        // filesystem: joining the answer onto where the link sits, and
+        // removing the `..` steps, gives the target back.
+        for (here, target) in [
+            ("/share/dest/Handel", "/share/src/a"),
+            ("/a/b/c/d", "/a/b/e"),
+            ("/a", "/a/b/c"),
+        ] {
+            let joined = Path::new(here).join(rel(here, target));
+            let mut stack: Vec<std::path::Component> = Vec::new();
+            for c in joined.components() {
+                match c {
+                    std::path::Component::ParentDir => {
+                        stack.pop();
+                    }
+                    other => stack.push(other),
+                }
+            }
+            let resolved: PathBuf = stack.iter().collect();
+            assert_eq!(resolved, Path::new(target), "from {here}");
+        }
+    }
 }
