@@ -27,6 +27,7 @@ pub mod credentials;
 pub mod model;
 pub mod plan;
 pub mod scan;
+pub mod state;
 mod template;
 
 pub use template::{to_path, FieldDoc, Fields, PathError, Span, Template, TemplateError, SYNTAX};

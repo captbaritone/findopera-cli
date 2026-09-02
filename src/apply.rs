@@ -1,6 +1,11 @@
 //! Building the named tree.
 //!
-//! Everything here is additive. **No file is ever deleted or overwritten**,
+//! **Nothing in the library is ever touched, and nothing in the destination
+//! that this program did not put there.** What it built, it records; what it
+//! records, it may remove again when the plan stops naming it. Everything else
+//! is somebody else's and is left where it is.
+//!
+//! Within a folder it built, files are still only added,
 //! so a second run after adding one recording does one thing, and a run that
 //! meets something unexpected describes it rather than deciding on your
 //! behalf.
@@ -20,6 +25,7 @@
 
 use crate::config::Link;
 use crate::plan::Plan;
+use crate::state;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
@@ -137,6 +143,32 @@ pub fn preflight(
             return Err(why);
         }
     }
+    // A destination we have never written to has to be empty, and one we have
+    // is identified by its own record. Between them there is no third case
+    // where something already here might be mistaken for something we made,
+    // which is what lets removal be safe at all.
+    match state::load(destination) {
+        Ok(_) => {}
+        Err(state::StateError::Unreadable(why)) => return Err(why),
+        Err(state::StateError::Absent) => {
+            let occupied = destination
+                .exists()
+                .then(|| state::is_empty_but_ours(destination).map(|empty| !empty))
+                .transpose()
+                .map_err(|e| format!("cannot read {}: {e}", destination.display()))?
+                .unwrap_or(false);
+            if occupied {
+                return Err(format!(
+                    "{} already has things in it, and no record of this program having \
+                     put them there.\n    An empty folder, or one built by an earlier run, \
+                     is what this can work with — otherwise there is no way to tell what \
+                     would be safe to remove later.",
+                    destination.display()
+                ));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -235,6 +267,7 @@ fn passes_through_link(destination: &Path, at: &Path) -> Option<PathBuf> {
 
 pub fn apply(plan: &Plan, destination: &Path, link: Link, dry_run: bool) -> Applied {
     let mut out = Applied::default();
+
     for row in &plan.rows {
         let mut at = destination.to_path_buf();
         for segment in &row.segments {
@@ -364,4 +397,121 @@ fn explain_io(e: &std::io::Error) -> String {
         return format!("{text} — check you can write there");
     }
     text
+}
+
+/// What was removed, and what was left alone.
+#[derive(Debug, Default)]
+pub struct Pruned {
+    pub removed: Vec<PathBuf>,
+    /// Recorded as ours, but no longer looking like it. Left where it is.
+    pub changed: Vec<(PathBuf, String)>,
+    pub failed: Vec<(PathBuf, String)>,
+}
+
+/// Remove what we built that the plan no longer names.
+///
+/// Only entries in the record are ever candidates, so nothing anyone else put
+/// in the destination can be removed however the plan changes. Each is checked
+/// against what it was recorded as before it goes: a folder that has become
+/// something else is somebody's doing, and the safe answer is to leave it and
+/// say so.
+pub fn prune(state: &state::State, plan: &Plan, destination: &Path, dry_run: bool) -> Pruned {
+    let wanted: std::collections::BTreeSet<&str> =
+        plan.rows.iter().map(|r| r.path.as_str()).collect();
+    let mut out = Pruned::default();
+
+    for built in &state.entries {
+        if wanted.contains(built.path.as_str()) {
+            continue;
+        }
+        let at = destination.join(&built.path);
+        if let Err(why) = still_ours(&at, built) {
+            // Missing is not a complaint: someone removing it by hand is the
+            // same outcome we wanted.
+            if at.symlink_metadata().is_ok() {
+                out.changed.push((at, why));
+            }
+            continue;
+        }
+        if dry_run {
+            out.removed.push(at);
+            continue;
+        }
+        let result = if at
+            .symlink_metadata()
+            .map(|m| m.is_symlink())
+            .unwrap_or(false)
+        {
+            std::fs::remove_file(&at)
+        } else {
+            std::fs::remove_dir_all(&at)
+        };
+        match result {
+            Ok(()) => {
+                sweep_empty_parents(&at, destination);
+                out.removed.push(at);
+            }
+            Err(e) => out.failed.push((at, e.to_string())),
+        }
+    }
+    out
+}
+
+/// Whether what is there is still what we recorded making.
+fn still_ours(at: &Path, built: &state::Built) -> Result<(), String> {
+    let meta = at
+        .symlink_metadata()
+        .map_err(|_| "it is not there any more".to_string())?;
+    match built.link {
+        Link::Symlink => {
+            if !meta.is_symlink() {
+                return Err("it was a link and is now a folder".to_string());
+            }
+            Ok(())
+        }
+        Link::Hardlink | Link::Copy => {
+            if meta.is_symlink() {
+                return Err("it was a folder and is now a link".to_string());
+            }
+            if !meta.is_dir() {
+                return Err("it was a folder and is now a file".to_string());
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Take away the folders an entry leaves behind, up to but not including the
+/// destination itself, so a tree does not fill with empty composers.
+fn sweep_empty_parents(from: &Path, destination: &Path) {
+    let mut at = from.parent().map(Path::to_path_buf);
+    while let Some(dir) = at {
+        if dir == destination || !dir.starts_with(destination) {
+            return;
+        }
+        match std::fs::read_dir(&dir).map(|mut d| d.next().is_none()) {
+            Ok(true) => {
+                if std::fs::remove_dir(&dir).is_err() {
+                    return;
+                }
+            }
+            _ => return,
+        }
+        at = dir.parent().map(Path::to_path_buf);
+    }
+}
+
+/// What a run should record as having built.
+pub fn built(plan: &Plan, done: &Applied, link: Link) -> Vec<state::Built> {
+    plan.rows
+        .iter()
+        .zip(&done.entries)
+        .filter(|(_, e)| matches!(e.outcome, Outcome::Created | Outcome::Skipped))
+        .map(|(row, _)| state::Built {
+            path: row.path.clone(),
+            id: row.marker.id.clone(),
+            variant: row.marker.variant.clone(),
+            link,
+        })
+        .collect()
 }

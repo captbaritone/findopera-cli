@@ -91,7 +91,12 @@ A template picks that word up as {{variant}}.
 
 BUILDING
 
-Nothing is written without --write. Nothing is ever deleted or overwritten.
+Nothing is written without --write.
+
+The destination is kept matching the plan, so a folder built for a recording
+that has since left the library is removed again. Only folders this program
+recorded building are ever removed — anything else in there is untouched, and
+a destination it has no record of is refused rather than guessed at.
 
 With no destination set the folders are still worked out and shown, which is
 what you want while you are still settling on a template.",
@@ -1796,7 +1801,34 @@ fn cmd_organize(args: OrganizeArgs) -> i32 {
         destination.display()
     );
 
+    // What an earlier run left. Absent is ordinary — preflight has already
+    // established the destination is empty in that case.
+    let previous = match findopera::state::load(&destination) {
+        Ok(state) => state,
+        Err(findopera::state::StateError::Absent) => Default::default(),
+        Err(findopera::state::StateError::Unreadable(why)) => {
+            eprintln!("findopera: {why}");
+            return 2;
+        }
+    };
+
     let done = apply::apply(&plan, &destination, link, dry_run);
+    let gone = apply::prune(&previous, &plan, &destination, dry_run);
+
+    if !dry_run {
+        // Written after the fact, so a run that died halfway leaves a record
+        // of what was there before rather than what it meant to make.
+        let mut keeping = apply::built(&plan, &done, link);
+        keeping.sort_by(|a, b| a.path.cmp(&b.path));
+        if let Err(why) = findopera::state::save(&destination, keeping) {
+            eprintln!("findopera: {why}");
+            eprintln!(
+                "    The tree is built, but without this record the next run cannot tell \
+                 what it made."
+            );
+            return 1;
+        }
+    }
     let mut out = std::io::stdout().lock();
     if args.json {
         let rows: Vec<serde_json::Value> = plan
@@ -1825,18 +1857,38 @@ fn cmd_organize(args: OrganizeArgs) -> i32 {
             return 0;
         }
     }
+    for path in &gone.removed {
+        if !emit(&mut out, format_args!("- {}", relative(path, &destination))) {
+            return 0;
+        }
+    }
     for entry in &done.entries {
         if let apply::Outcome::Conflict(why) | apply::Outcome::Failed(why) = &entry.outcome {
             eprintln!("findopera: {}", entry.destination.display());
             eprintln!("    {why}");
         }
     }
+    for (path, why) in &gone.changed {
+        eprintln!("findopera: {}", path.display());
+        eprintln!("    {why}, so it was left alone");
+    }
+    for (path, why) in &gone.failed {
+        eprintln!("findopera: cannot remove {}: {why}", path.display());
+    }
     report(&plan, p.require_variants);
 
     let (made, skipped, trouble) = done.counts();
+    let removed = gone.removed.len();
     eprintln!(
-        "findopera: {made} {}, {skipped} already there, {trouble} left alone",
-        if dry_run { "to build" } else { "built" }
+        "findopera: {made} {}, {skipped} already there, {trouble} left alone{}",
+        if dry_run { "to build" } else { "built" },
+        if removed == 0 {
+            String::new()
+        } else if dry_run {
+            format!(", {removed} to remove")
+        } else {
+            format!(", {removed} removed")
+        }
     );
     // Only worth saying when there is something to write; a run that found
     // everything already in place has nothing to offer.
@@ -1845,6 +1897,14 @@ fn cmd_organize(args: OrganizeArgs) -> i32 {
         eprintln!("    {}", rerun_with_write(&args));
     }
     i32::from(done.troubled() || plan.blocked(p.require_variants))
+}
+
+/// A path as it reads inside the destination.
+fn relative(path: &Path, destination: &Path) -> String {
+    path.strip_prefix(destination)
+        .unwrap_or(path)
+        .display()
+        .to_string()
 }
 
 /// Whatever the plan has to say, on stderr, with its indented lines kept.
@@ -2181,9 +2241,16 @@ fn cmd_template() -> i32 {
          them, and findopera will say so if they have neither.\n"
     );
 
+    // The same schema a template is actually checked against: the model's
+    // fields, plus the one that comes from the marker rather than the
+    // recording. Listing only the model's left `variant` out of a command
+    // whose whole job is to say what a template may use.
+    let mut schema: Vec<FieldDoc> = FIELDS.to_vec();
+    schema.push(scan::VARIANT);
+
     let mut out = std::io::stdout().lock();
-    let width = FIELDS.iter().map(|f| f.path.len()).max().unwrap_or(0);
-    for f in FIELDS {
+    let width = schema.iter().map(|f| f.path.len()).max().unwrap_or(0);
+    for f in &schema {
         let always = if f.nullable { "      " } else { "always" };
         if !emit(
             &mut out,
