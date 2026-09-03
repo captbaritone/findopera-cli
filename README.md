@@ -744,3 +744,4 @@ This was a CLI that fetched recordings from [FindOpera](https://findopera.com/)
 and rendered them through these templates. It has been scoped back to the
 templating core; the `full-linking-prototype` branch carries a larger earlier
 version that also built trees of symlinks from marker files.
+
