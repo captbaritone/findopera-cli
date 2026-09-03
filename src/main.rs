@@ -1792,6 +1792,7 @@ fn cmd_organize(args: OrganizeArgs) -> i32 {
     let what = match link {
         config::Link::Symlink => "a link to each folder",
         config::Link::Hardlink => "a hard link to every file",
+        config::Link::Reflink => "a clone of every file",
         config::Link::Copy => "a copy of every file",
     };
     eprintln!(

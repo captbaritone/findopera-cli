@@ -10,4 +10,4 @@ TOML parse error at line 2, column 8
   |
 2 | link = "shortcut"
   |        ^^^^^^^^^^
-unknown variant `shortcut`, expected one of `symlink`, `hardlink`, `copy`
+unknown variant `shortcut`, expected one of `symlink`, `hardlink`, `reflink`, `copy`
