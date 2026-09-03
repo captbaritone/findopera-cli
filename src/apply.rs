@@ -13,7 +13,7 @@
 //! The modes differ in what they can do about a name that is already taken,
 //! and the difference is forced. [`Link::Symlink`] puts one link where a
 //! folder would go, so anything already at that name is in the way and it
-//! stops. The other two build the folder and fill it, so they merge into one
+//! stops. The other three build the folder and fill it, so they merge into one
 //! that is already there — which is exactly what makes a second run cheap —
 //! while still refusing to write over any file inside it.
 //!
@@ -22,6 +22,13 @@
 //! destination inside its own source, a hard link asked to cross a disk. Half
 //! a tree is worse than none, so those are refused up front rather than
 //! discovered a thousand entries in.
+//!
+//! [`Link::Reflink`] is the one case that cannot be settled up front. Whether
+//! two paths can share extents is not a question device ids can answer — on
+//! btrfs every subvolume has its own, and cloning between them works anyway —
+//! so there is nothing cheap to check, and the answer arrives on the first
+//! file. `explain_io` carries that weight instead, and says which of the two
+//! reasons it was.
 
 use crate::config::Link;
 use crate::plan::Plan;
@@ -283,7 +290,7 @@ pub fn apply(plan: &Plan, destination: &Path, link: Link, dry_run: bool) -> Appl
             )),
             None => match link {
                 Link::Symlink => one_symlink(&source, &at, dry_run),
-                Link::Hardlink | Link::Copy => mirror(&source, &at, link, dry_run),
+                Link::Hardlink | Link::Reflink | Link::Copy => mirror(&source, &at, link, dry_run),
             },
         };
         out.entries.push(Entry {
@@ -349,7 +356,7 @@ fn one_symlink(source: &Path, at: &Path, dry_run: bool) -> Outcome {
 
     match symlink_to(&relative, at) {
         Ok(()) => Outcome::Created,
-        Err(e) => Outcome::Failed(explain_io(&e)),
+        Err(e) => Outcome::Failed(explain_io(&e, Link::Symlink)),
     }
 }
 
@@ -447,10 +454,11 @@ fn mirror(source: &Path, at: &Path, link: Link, dry_run: bool) -> Outcome {
         }
         let result = match link {
             Link::Hardlink => std::fs::hard_link(entry.path(), &target),
+            Link::Reflink => reflink_copy::reflink(entry.path(), &target),
             _ => std::fs::copy(entry.path(), &target).map(|_| ()),
         };
         if let Err(e) = result {
-            return Outcome::Failed(format!("{}: {}", relative.display(), explain_io(&e)));
+            return Outcome::Failed(format!("{}: {}", relative.display(), explain_io(&e, link)));
         }
         made += 1;
     }
@@ -462,12 +470,35 @@ fn mirror(source: &Path, at: &Path, link: Link, dry_run: bool) -> Outcome {
 }
 
 /// Say what the system's own wording will not.
-fn explain_io(e: &std::io::Error) -> String {
+fn explain_io(e: &std::io::Error, link: Link) -> String {
     let text = e.to_string();
     if text.contains("cross-device") {
+        return match link {
+            Link::Reflink => format!(
+                "{text} — a clone can be shared between two subvolumes of one \
+                 filesystem, but not between two filesystems. Check that the \
+                 destination really is on the same one; otherwise use \
+                 `link = \"copy\"`."
+            ),
+            _ => format!(
+                "{text} — a hard link cannot span two disks. Use `link = \"symlink\"`, \
+                 `link = \"reflink\"` if both sides are on one filesystem that can \
+                 clone, or `link = \"copy\"`."
+            ),
+        };
+    }
+    // Cloning is the one mode a filesystem can simply not offer, and the
+    // system's own word for that is bare enough to look like a bug.
+    if link == Link::Reflink
+        && (text.contains("not supported")
+            || text.contains("not implemented")
+            || e.raw_os_error() == Some(95)
+            || e.raw_os_error() == Some(88))
+    {
         return format!(
-            "{text} — a hard link cannot span two disks. Use `link = \"symlink\"` or \
-             `link = \"copy\"`."
+            "{text} — this filesystem cannot clone a file. `link = \"reflink\"` needs \
+             btrfs, XFS with reflinks, a recent ZFS, APFS or ReFS. Use \
+             `link = \"hardlink\"` if both sides are on one disk, or `link = \"copy\"`."
         );
     }
     if e.kind() == std::io::ErrorKind::PermissionDenied {
@@ -546,7 +577,7 @@ fn still_ours(at: &Path, built: &state::Built) -> Result<(), String> {
             }
             Ok(())
         }
-        Link::Hardlink | Link::Copy => {
+        Link::Hardlink | Link::Reflink | Link::Copy => {
             if meta.is_symlink() {
                 return Err("it was a folder and is now a link".to_string());
             }

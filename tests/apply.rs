@@ -278,6 +278,75 @@ mod links {
         let b = fs::metadata(f.destination.join("Britten/Billy Budd [75]/01.mp3")).expect("built");
         assert_eq!(a.ino(), b.ino(), "one file, two names");
     }
+
+    #[test]
+    fn a_clone_is_its_own_file_with_the_same_contents() {
+        // The point of reflinking, and what separates it from both neighbours:
+        // a hard link is one file under two names, a copy is two files and two
+        // lots of disk, and a clone is two real files that happen to share
+        // their extents until one of them is written to. So the inode must
+        // differ -- otherwise it linked rather than cloned -- while the bytes
+        // must not.
+        use std::os::unix::fs::MetadataExt;
+        let f = Fixture::new("clone");
+        let parts = f.parts(T);
+        let plan = plan::plan(&parts.0.markers, &parts.1, &parts.2);
+        apply::apply(&plan, &f.destination, Link::Reflink, false);
+
+        let built = f.destination.join("Britten/Billy Budd [75]/01.mp3");
+        if !built.exists() {
+            // Cloning is the one mode a filesystem may simply not offer. On
+            // ext4 or tmpfs there is nothing to assert and nothing wrong.
+            eprintln!("skipping: this filesystem cannot clone a file");
+            return;
+        }
+
+        let a = fs::metadata(f.source.join("rip-a/01.mp3")).expect("source");
+        let b = fs::metadata(&built).expect("built");
+        assert_ne!(
+            a.ino(),
+            b.ino(),
+            "a clone is its own file, not a second name"
+        );
+        assert_eq!(b.nlink(), 1, "and nothing else points at it");
+        assert_eq!(
+            fs::read_to_string(f.source.join("rip-a/01.mp3")).expect("source bytes"),
+            fs::read_to_string(&built).expect("built bytes"),
+            "sharing extents means sharing contents"
+        );
+    }
+
+    #[test]
+    fn writing_to_a_clone_leaves_the_original_alone() {
+        // The half of copy-on-write that matters for a library: the whole
+        // point of not paying for the second copy is that it is still a second
+        // copy. If editing one changed the other this would be a hard link
+        // wearing a different name.
+        let f = Fixture::new("clone-cow");
+        let parts = f.parts(T);
+        let plan = plan::plan(&parts.0.markers, &parts.1, &parts.2);
+        apply::apply(&plan, &f.destination, Link::Reflink, false);
+
+        let built = f.destination.join("Britten/Billy Budd [75]/01.mp3");
+        if !built.exists() {
+            eprintln!("skipping: this filesystem cannot clone a file");
+            return;
+        }
+
+        let source = f.source.join("rip-a/01.mp3");
+        let before = fs::read_to_string(&source).expect("source before");
+        fs::write(&built, "rewritten").expect("write to the clone");
+        assert_eq!(
+            fs::read_to_string(&source).expect("source after"),
+            before,
+            "the original is untouched"
+        );
+        assert_eq!(
+            fs::read_to_string(&built).expect("clone after"),
+            "rewritten",
+            "and the clone kept the write"
+        );
+    }
 }
 
 #[test]

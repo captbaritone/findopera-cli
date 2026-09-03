@@ -29,19 +29,33 @@ pub const FILE_NAME: &str = "findopera.toml";
 
 /// How a recording's folder gets to the destination.
 ///
-/// These are not three spellings of one operation; the system forces them
-/// apart. A directory cannot be hard-linked at all, so `Hardlink` and `Copy`
-/// have to walk the folder and treat each file separately, while `Symlink` is
-/// a single link to the folder itself — which stays live, so a track added to
-/// the source turns up in the destination without another run. Hard links also
-/// cannot cross a filesystem, which rules them out between a network mount and
-/// a local disk.
+/// These are not four spellings of one operation; the system forces them
+/// apart. A directory cannot be hard-linked or cloned at all, so `Hardlink`,
+/// `Reflink` and `Copy` have to walk the folder and treat each file
+/// separately, while `Symlink` is a single link to the folder itself — which
+/// stays live, so a track added to the source turns up in the destination
+/// without another run. Hard links also cannot cross a filesystem, which rules
+/// them out between a network mount and a local disk.
+///
+/// `Reflink` sits between hard-linking and copying, and exists for the case
+/// neither covers. A clone is a real, independent file that happens to share
+/// its contents with the original until one of them is written to, so it costs
+/// nothing to make and nothing to keep. Unlike a hard link it may cross a
+/// boundary that a hard link cannot: on btrfs every share or subvolume reports
+/// its own device id, so `ln` there fails with `Invalid cross-device link`
+/// while a clone succeeds. That is the whole reason to reach for it — a NAS
+/// that puts each share in its own subvolume cannot hard-link a library into a
+/// second share, and copying it would take the space twice.
+///
+/// It needs a filesystem that supports cloning: btrfs, XFS with reflinks, ZFS
+/// on recent versions, APFS, or ReFS. Elsewhere it fails, and says so.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Link {
     #[default]
     Symlink,
     Hardlink,
+    Reflink,
     Copy,
 }
 
@@ -210,6 +224,11 @@ require-variants = false
 #              track added to the original turns up here too
 #   hardlink   every file linked separately, sharing its contents. Cannot
 #              cross a disk, so the destination must be on the same one
+#   reflink    every file cloned. Independent files that share their contents
+#              until one is written to, so they cost nothing — and unlike a
+#              hard link a clone can cross between two shares of one btrfs
+#              filesystem, which is how a Synology keeps them apart. Needs a
+#              filesystem that can clone: btrfs, XFS, ZFS, APFS, ReFS
 #   copy       every file copied. Takes the space twice over
 #
 # Only folders this program built are ever removed, and nothing is written at all
