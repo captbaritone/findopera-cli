@@ -1,9 +1,11 @@
+# A pattern that cannot be matched
+
 Caught when the settings are read, naming the pattern, rather than silently
 matching nothing on every folder in the library.
 
---- toml
+## Toml
+
+```toml
 template = '''{{opera.title}}'''
 ignore = ["["]
---- result
-findopera.toml is not valid:
-`[` is not a pattern that can be matched: error parsing glob '[': unclosed character class; missing ']'
+```

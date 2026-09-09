@@ -1,9 +1,11 @@
-TOML reads `{` as opening an inline table, so its own message never mentions
-quoting. This is the one place its wording does not land, so a hint is added.
+# A template left unquoted
 
---- toml
-template = {{opera.title}}
---- result
+<!-- From 14-a-template-left-unquoted.md. -->
+<!-- Generated. Do not edit; UPDATE_EXPECT=1 cargo test -->
+
+## Result
+
+```
 findopera.toml is not valid:
 TOML parse error at line 1, column 13
   |
@@ -15,3 +17,4 @@ hint: a template has to sit in a `'''` block, on its own lines:
           template = '''
           {{composer.lastName}}/{{opera.title}}
           '''
+```

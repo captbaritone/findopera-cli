@@ -5,7 +5,22 @@ One case is two files:
 - `some-case.md` — what to run. Written by hand, never generated.
 - `some-case.expected.md` — what it produced. Generated, never edited.
 
-A case names its sections, and the sections say what kind of case it is:
+A case names its sections, and the sections say what kind of case it is — not
+the directory it sits in. `## Toml` asks what a settings file parses to;
+`## Run` asks what a command does.
+
+## Settings
+
+| Section | What it is |
+|---|---|
+| `## Toml` | a `findopera.toml`, written to a file and loaded |
+
+What comes back is `Result`: the parsed settings, or the complaint. A settings
+file is the first thing a person meets, and the message it gives when they get
+it slightly wrong is most of what decides whether the format was a good
+choice — so the message is the snapshot.
+
+## Commands
 
 | Section | What it is |
 |---|---|
