@@ -241,16 +241,26 @@ fn words(line: &str) -> Vec<String> {
 
 /// Forward slashes inside the path tokens, whatever this platform writes.
 ///
-/// Only from the start of a token to the next space or tab: a template may
-/// legitimately render a backslash into a folder name, and that is the name,
-/// not a separator.
+/// A token runs from `./library` or `./named` to the next tab, newline or
+/// quote — not to the next space, because a folder may be called `Box Sets`.
+/// Stopping at a quote is what keeps it to one path where a message names two
+/// of them, as the suggestion to rename a marker does.
+///
+/// Nothing else in a run's output holds a backslash: a rendered name cannot,
+/// since anything that would become a separator is neutralised before it gets
+/// there, and the one place a raw backslash appears — a diagnostic echoing
+/// the template it objected to — never shares a line with a path.
 fn slashes_in_paths(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
-    while let Some(i) = rest.find("./library").or_else(|| rest.find("./named")) {
+    while let Some(i) = [rest.find("./library"), rest.find("./named")]
+        .into_iter()
+        .flatten()
+        .min()
+    {
         out.push_str(&rest[..i]);
         let tail = &rest[i..];
-        let end = tail.find([' ', '\t', '\n']).unwrap_or(tail.len());
+        let end = tail.find(['\t', '\n', '\'', '"']).unwrap_or(tail.len());
         out.push_str(&tail[..end].replace('\\', "/"));
         rest = &tail[end..];
     }
@@ -272,10 +282,19 @@ fn normalize(text: &str, sandbox: &Sandbox) -> String {
         (sandbox.destination(), "./named"),
         (sandbox.root.clone(), "."),
     ] {
-        if let Ok(resolved) = std::fs::canonicalize(&path) {
-            normalized = normalized.replace(&*resolved.to_string_lossy(), token);
+        for spelling in [
+            std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone()),
+            path,
+        ] {
+            let spelling = spelling.to_string_lossy().to_string();
+            // With the separator first, so what follows a directory keeps one
+            // — `.` and `\` would otherwise be left as `.\`.
+            normalized = normalized.replace(
+                &format!("{spelling}{}", std::path::MAIN_SEPARATOR),
+                &format!("{token}/"),
+            );
+            normalized = normalized.replace(&spelling, token);
         }
-        normalized = normalized.replace(&*path.to_string_lossy(), token);
     }
     let normalized = normalized.replace(env!("CARGO_PKG_VERSION"), "<version>");
     slashes_in_paths(&normalized)
