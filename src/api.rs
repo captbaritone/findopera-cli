@@ -149,15 +149,122 @@ pub fn schema_url(endpoint: &str) -> String {
     format!("{host}/schema.graphql")
 }
 
-/// How long the server asked us to wait, if it said.
+/// Which verb a request uses. The two this program needs, and no more.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Method {
+    Get,
+    Post,
+}
+
+/// One request, decided entirely by the client.
 ///
-/// `Retry-After` may also carry a date, which this does not read: the servers
-/// this talks to send seconds, and guessing at a date badly would be worse
-/// than falling back to a delay of our own.
-fn retry_after(response: &ureq::http::Response<ureq::Body>) -> Option<Duration> {
-    let value = response.headers().get("retry-after")?.to_str().ok()?;
-    let seconds: u64 = value.trim().parse().ok()?;
-    Some(Duration::from_secs(seconds))
+/// The headers are here rather than inside the transport so that what this
+/// program says about itself — who it is, what it will accept, whose token it
+/// carries — is chosen in one place and can be read back in a test.
+pub struct Request {
+    pub method: Method,
+    pub url: String,
+    pub headers: Vec<(&'static str, String)>,
+    pub body: Option<serde_json::Value>,
+}
+
+/// What came back.
+///
+/// Cloned where a stand-in answers the same way more than once.
+///
+/// Only the headers this program actually reads are kept. A transport is not
+/// asked to preserve the rest, because nothing here would look at them and a
+/// fake would then have to invent them.
+#[derive(Clone)]
+pub struct Reply {
+    pub status: u16,
+    /// `Retry-After`, in seconds, when the server sent one.
+    pub retry_after: Option<Duration>,
+    /// `Content-Disposition`, which is where the notes filename comes from.
+    pub disposition: Option<String>,
+    pub body: String,
+}
+
+impl Reply {
+    pub fn is_success(&self) -> bool {
+        (200..300).contains(&self.status)
+    }
+}
+
+/// Moving the bytes, and nothing else.
+///
+/// Everything that makes a request *mean* something — the retries, the
+/// statuses, the JSON, a GraphQL refusal — stays above this, so that a test
+/// which swaps the transport still exercises all of it. What it swaps out is
+/// the socket.
+pub trait Transport: Send + Sync {
+    /// One round trip. `Err` is a failure to reach the server at all; a
+    /// server that answered badly is a `Reply` with a bad status.
+    fn round_trip(&self, request: &Request) -> Result<Reply, String>;
+}
+
+/// The real one.
+pub struct Http;
+
+impl Transport for Http {
+    fn round_trip(&self, request: &Request) -> Result<Reply, String> {
+        // A failing status is not an error, because a GraphQL server puts its
+        // reason in the body — including the one reason this client most needs
+        // to hear, that its version is no longer welcome. Letting ureq turn a
+        // 400 into `StatusCode` would throw that away and report a number.
+        let response = match request.method {
+            Method::Get => {
+                let mut call = ureq::get(&request.url)
+                    .config()
+                    .http_status_as_error(false)
+                    .build();
+                for (name, value) in &request.headers {
+                    call = call.header(*name, value);
+                }
+                call.call()
+            }
+            Method::Post => {
+                let mut call = ureq::post(&request.url)
+                    .config()
+                    .http_status_as_error(false)
+                    .build();
+                for (name, value) in &request.headers {
+                    call = call.header(*name, value);
+                }
+                match &request.body {
+                    Some(body) => call.send_json(body),
+                    None => call.send_empty(),
+                }
+            }
+        }
+        .map_err(|e| e.to_string())?;
+
+        let header = |name: &str| {
+            response
+                .headers()
+                .get(name)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string)
+        };
+        let status = response.status().as_u16();
+        let retry_after = header("retry-after")
+            .and_then(|v| v.trim().parse::<u64>().ok())
+            .map(Duration::from_secs);
+        let disposition = header("content-disposition");
+
+        let mut response = response;
+        let body = response
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| format!("the body could not be read: {e}"))?;
+
+        Ok(Reply {
+            status,
+            retry_after,
+            disposition,
+            body,
+        })
+    }
 }
 
 /// How long to wait when the server did not say.
@@ -176,6 +283,7 @@ pub fn notes_url(endpoint: &str, id: &str) -> String {
 }
 
 /// A recording's notes, and what findopera.com calls the file.
+#[derive(Debug)]
 pub struct Notes {
     /// The name the server gives it, which is the one that will be recognised
     /// again later. Taken from the server rather than assembled here so that
@@ -270,14 +378,41 @@ fn scalar_path(value: &serde_json::Value) -> String {
 pub struct Client {
     endpoint: String,
     token: Option<String>,
+    transport: Box<dyn Transport>,
+    notice: Box<dyn Fn(&str) + Send + Sync>,
 }
 
 impl Client {
     pub fn new(endpoint: impl Into<String>, token: Option<String>) -> Self {
+        Client::with_transport(endpoint, token, Box::new(Http))
+    }
+
+    /// The same client, sending through something else.
+    ///
+    /// Only the socket is replaced: retries, statuses, JSON and refusals are
+    /// all still this client's, so a test that swaps this still runs them.
+    pub fn with_transport(
+        endpoint: impl Into<String>,
+        token: Option<String>,
+        transport: Box<dyn Transport>,
+    ) -> Self {
         Client {
             endpoint: endpoint.into(),
             token,
+            transport,
+            notice: Box::new(|said| eprintln!("{said}")),
         }
+    }
+
+    /// Where to say things that happen while a request is in flight.
+    ///
+    /// Only waiting, today. It cannot go through the ordinary output because
+    /// the point of it is to arrive *during* the wait, not after — and it is a
+    /// callback rather than a stream so that a test can read it back instead
+    /// of it landing on the process's stderr.
+    pub fn on_notice(mut self, say: impl Fn(&str) + Send + Sync + 'static) -> Self {
+        self.notice = Box::new(say);
+        self
     }
 
     pub fn endpoint(&self) -> &str {
@@ -300,11 +435,21 @@ impl Client {
     /// three thousand markers is thirty requests — and a server that cannot
     /// tell those apart from a stranger's has to treat them like a stranger's.
     /// Identifying the reads is what earns them a limit of their own.
-    fn identify<Any>(&self, request: ureq::RequestBuilder<Any>) -> ureq::RequestBuilder<Any> {
-        let request = request.header("User-Agent", USER_AGENT);
-        match &self.token {
-            Some(token) => request.header("Authorization", &format!("Bearer {token}")),
-            None => request,
+    fn identity(&self) -> Vec<(&'static str, String)> {
+        let mut headers = vec![("User-Agent", USER_AGENT.to_string())];
+        if let Some(token) = &self.token {
+            headers.push(("Authorization", format!("Bearer {token}")));
+        }
+        headers
+    }
+
+    /// A plain GET of one of the site's documents, as us.
+    fn document(&self, url: &str) -> Request {
+        Request {
+            method: Method::Get,
+            url: url.to_string(),
+            headers: self.identity(),
+            body: None,
         }
     }
 
@@ -354,32 +499,28 @@ impl Client {
     }
 
     fn send(&self, body: serde_json::Value) -> Result<serde_json::Value, ApiError> {
-        self.with_retries(&self.endpoint.clone(), |client| {
-            // A failing status is not an error, because a GraphQL server puts
-            // its reason in the body — including the one reason this client
-            // most needs to hear, that its version is no longer welcome.
-            // Letting ureq turn a 400 into `StatusCode` would throw that away
-            // and report a number.
-            let request = ureq::post(&client.endpoint)
-                .config()
-                .http_status_as_error(false)
-                .build();
-            client.identify(request).send_json(&body)
-        })
-        .and_then(|(status, mut response)| {
-            response.body_mut().read_json().map_err(|e| {
-                // A body that is not JSON is usually a proxy or an error page
-                // rather than the API, and the status is the only clue as to
-                // which.
-                if status.is_success() {
-                    ApiError::Unreachable(format!("the API returned something unreadable: {e}"))
-                } else {
-                    ApiError::Unreachable(format!(
-                        "{} answered {status}, and not with JSON",
-                        self.endpoint
-                    ))
-                }
-            })
+        let endpoint = self.endpoint.clone();
+        let reply = self.with_retries(
+            &endpoint,
+            Request {
+                method: Method::Post,
+                url: endpoint.clone(),
+                headers: self.identity(),
+                body: Some(body),
+            },
+        )?;
+        serde_json::from_str(&reply.body).map_err(|e| {
+            // A body that is not JSON is usually a proxy or an error page
+            // rather than the API, and the status is the only clue as to
+            // which.
+            if reply.is_success() {
+                ApiError::Unreachable(format!("the API returned something unreadable: {e}"))
+            } else {
+                ApiError::Unreachable(format!(
+                    "{} answered {}, and not with JSON",
+                    self.endpoint, reply.status
+                ))
+            }
         })
     }
 
@@ -388,20 +529,17 @@ impl Client {
     /// Waiting is announced. A run that has gone quiet for a minute looks
     /// exactly like one that has hung, and someone watching it has no way to
     /// tell the difference unless they are told.
-    fn with_retries(
-        &self,
-        what: &str,
-        send: impl Fn(&Self) -> Result<ureq::http::Response<ureq::Body>, ureq::Error>,
-    ) -> Result<(ureq::http::StatusCode, ureq::http::Response<ureq::Body>), ApiError> {
+    fn with_retries(&self, what: &str, request: Request) -> Result<Reply, ApiError> {
         let mut spent = Duration::ZERO;
 
         for attempt in 0..=RETRIES {
-            let response = send(self)
+            let reply = self
+                .transport
+                .round_trip(&request)
                 .map_err(|e| ApiError::Unreachable(format!("cannot reach {what}: {e}")))?;
-            let status = response.status();
 
-            if status.as_u16() != 429 {
-                return Ok((status, response));
+            if reply.status != 429 {
+                return Ok(reply);
             }
             if attempt == RETRIES {
                 return Err(ApiError::Unreachable(format!(
@@ -417,7 +555,7 @@ impl Client {
                 )));
             }
 
-            let wait = retry_after(&response).unwrap_or_else(|| backoff(attempt));
+            let wait = reply.retry_after.unwrap_or_else(|| backoff(attempt));
             if spent + wait > PATIENCE {
                 return Err(ApiError::Unreachable(format!(
                     "{what} asked to be left alone for another {}s, which is longer than this \
@@ -425,12 +563,12 @@ impl Client {
                     wait.as_secs()
                 )));
             }
-            eprintln!(
+            (self.notice)(&format!(
                 "findopera: {what} is asking for less traffic — waiting {}s ({} of {})",
                 wait.as_secs(),
                 attempt + 1,
                 RETRIES
-            );
+            ));
             std::thread::sleep(wait);
             spent += wait;
         }
@@ -444,18 +582,15 @@ impl Client {
     /// than one that takes a moment to arrive.
     pub fn schema(&self) -> Result<String, ApiError> {
         let url = schema_url(&self.endpoint);
-        let (status, mut response) = self.with_retries(&url, |client| {
-            let request = ureq::get(&url).config().http_status_as_error(false).build();
-            client.identify(request).call()
-        })?;
+        let reply = self.with_retries(&url, self.document(&url))?;
 
-        if !status.is_success() {
-            return Err(ApiError::Unreachable(format!("{url} answered {status}")));
+        if !reply.is_success() {
+            return Err(ApiError::Unreachable(format!(
+                "{url} answered {}",
+                reply.status
+            )));
         }
-        response
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| ApiError::Unreachable(format!("the schema could not be read: {e}")))
+        Ok(reply.body)
     }
 
     /// Fetch a recording's notes, and the name to keep them under.
@@ -466,36 +601,33 @@ impl Client {
     /// drift.
     pub fn notes(&self, id: &str) -> Result<Notes, ApiError> {
         let url = notes_url(&self.endpoint, id);
-        let (status, mut response) = self.with_retries(&url, |client| {
-            let request = ureq::get(&url).config().http_status_as_error(false).build();
-            client.identify(request).call()
-        })?;
+        let reply = self.with_retries(&url, self.document(&url))?;
 
-        if status.as_u16() == 404 {
+        if reply.status == 404 {
             return Err(ApiError::Unreachable(format!(
                 "findopera.com has no recording {id}"
             )));
         }
-        if !status.is_success() {
-            return Err(ApiError::Unreachable(format!("{url} answered {status}")));
+        if !reply.is_success() {
+            return Err(ApiError::Unreachable(format!(
+                "{url} answered {}",
+                reply.status
+            )));
         }
 
         // The name comes from the header rather than from the URL: the URL is
         // whatever was asked for, and the header is what the server says the
         // file should be called.
-        let filename = response
-            .headers()
-            .get("content-disposition")
-            .and_then(|v| v.to_str().ok())
+        let filename = reply
+            .disposition
+            .as_deref()
             .and_then(disposition_filename)
             .unwrap_or_else(|| format!("findopera-{id}.txt"));
 
-        let body = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| ApiError::Unreachable(format!("the notes could not be read: {e}")))?;
-
-        Ok(Notes { filename, body })
+        Ok(Notes {
+            filename,
+            body: reply.body,
+        })
     }
 
     /// Fetch recordings by id.
