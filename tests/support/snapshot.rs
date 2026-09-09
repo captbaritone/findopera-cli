@@ -170,6 +170,19 @@ fn step(sandbox: &Sandbox, argv: &[String], out: &mut Vec<u8>) -> bool {
             existing.push_str(&text);
             std::fs::write(&file, existing).expect("a file this case writes");
         }
+        // A link somebody else left, or an earlier run under another
+        // template. Only a case that declares `unix` may ask for one.
+        "link" => {
+            let target = path(1);
+            let file = path(2);
+            if let Some(parent) = file.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&target, &file).expect("a link this case makes");
+            #[cfg(windows)]
+            let _ = (&target, &file);
+        }
         "rm" => {
             let file = path(1);
             if file.is_dir() && !file.is_symlink() {
@@ -317,9 +330,16 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
     // given, for a case whose subject *is* the settings file — filling
     // anything in would be changing what is under test. `## Config` is the
     // convenience for every other case, which only wants somewhere to build.
+    // A case that is *about* where the destination is has to be able to say
+    // where, and only the run knows. These stand for the two directories.
+    let fill = |text: &str| {
+        text.replace("{library}", &sandbox.library().to_string_lossy())
+            .replace("{destination}", &sandbox.destination().to_string_lossy())
+            .replace("{root}", &sandbox.root.to_string_lossy())
+    };
     let config = case
         .body("Toml")
-        .map(str::to_string)
+        .map(&fill)
         .or_else(|| {
             case.body("Config").map(|c| {
                 let mut config = c.trim().to_string();

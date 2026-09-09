@@ -44,6 +44,7 @@ A step in `## Run` is either the program or something done to the disk:
 | `write <path> <text>` | put a file there |
 | `append <path> <text>` | add to one |
 | `rm <path>` | take one away |
+| `link <target> <path>` | leave a symlink, as an earlier run might have |
 | `show <path>` | read one back, onto stdout |
 
 Paths start `./library/` or `./named/`, and want quoting where they contain a
