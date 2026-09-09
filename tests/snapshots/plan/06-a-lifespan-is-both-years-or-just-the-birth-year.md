@@ -1,16 +1,20 @@
+# A lifespan is both years or just the birth year
+
 Handel has both years; John Adams is alive, so only a birth year is known. The
 conductors have neither, and the group takes the whole clause away — which is
 why a lone death year is left out rather than spelled somehow: there is
 nowhere in a filename for a question mark, and `-1602` reads as a negative
 number.
 
---- template
-{{composer.lastName}}[ ({{composer.dates}})]/{{opera.title}}[ - {{conductor.lastName}} ({{conductor.dates}})]
---- tree
+## Library
+
+```tree
 sosarme/findopera-10655.txt
 nixon/findopera-9154.txt
---- listing
-nixon	Adams (b1947)/Nixon in China
-sosarme	Handel (1685-1759)/Sosarme, Re di Media
---- report
-(empty)
+```
+
+## Run
+
+```console
+$ findopera organize ./library --tabs -t '{{composer.lastName}}[ ({{composer.dates}})]/{{opera.title}}[ - {{conductor.lastName}} ({{conductor.dates}})]'
+```

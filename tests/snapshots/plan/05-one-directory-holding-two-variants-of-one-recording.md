@@ -1,3 +1,5 @@
+# One directory holding two variants of one recording
+
 The same two markers, but each says which rip it is. They are different
 statements, so both are kept and the directory is offered under both names.
 
@@ -6,13 +8,15 @@ how a box set works (case 02), and a library built out of symlinks takes each
 name as another link to the same place. A folder holding a FLAC and an MP3 of
 one recording is a thing people have, so it gets a name for each.
 
---- template
-{{opera.title}} \[{{id}}\][ ({{variant}})]
---- tree
+## Library
+
+```tree
 rips/only/findopera-332 flac.txt
 rips/only/findopera-332 mp3.txt
---- listing
-rips/only	Don Giovanni [332] (flac)
-rips/only	Don Giovanni [332] (mp3)
---- report
-(empty)
+```
+
+## Run
+
+```console
+$ findopera organize ./library --tabs -t '{{opera.title}} \[{{id}}\][ ({{variant}})]'
+```

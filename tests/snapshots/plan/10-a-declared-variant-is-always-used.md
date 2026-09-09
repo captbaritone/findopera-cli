@@ -1,12 +1,17 @@
+# A declared variant is always used
+
 Nothing clashes here, and the variant is still honoured: a word the marker
 carries is a statement about the rip, not a tiebreaker to be used only when
 one is needed.
 
---- template
-{{opera.title}} \[{{id}}\][ ({{variant}})]
---- tree
+## Library
+
+```tree
 rips/flac/findopera-332 flac.txt
---- listing
-rips/flac	Don Giovanni [332] (flac)
---- report
-(empty)
+```
+
+## Run
+
+```console
+$ findopera organize ./library --tabs -t '{{opera.title}} \[{{id}}\][ ({{variant}})]'
+```

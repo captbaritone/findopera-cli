@@ -1,0 +1,35 @@
+# One directory naming a recording twice is listed once
+
+<!-- From 04-one-directory-naming-a-recording-twice-is-listed-once.md. -->
+<!-- Generated. Do not edit; UPDATE_EXPECT=1 cargo test -->
+
+## stdout
+
+```
+./library/rips/only	Don Giovanni [332]
+```
+
+## stderr
+
+```
+findopera: no destination set, so these are only the folder names. Add one to build it:
+    destination = "/path/to/named"
+```
+
+## Destination
+
+```tree
+```
+
+## Requests
+
+```
+Recordings
+  {"ids":["332"]}
+```
+
+## Exit
+
+```
+0
+```
