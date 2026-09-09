@@ -164,6 +164,19 @@ fn outputs_for(path: &Path, text: &str) -> Vec<Section> {
         build_tree(&sandbox.library(), tree);
     }
 
+    // A destination that already holds something, with no record saying this
+    // program put it there. That is the one starting state a prior run cannot
+    // produce, and the whole reason the guard on an occupied destination
+    // exists — so it is declared rather than built.
+    //
+    // A destination this program *did* build is not declared here. A case
+    // gets one by running `organize --write` first, which is the only way to
+    // be sure the tree and the record of it agree; writing the record by hand
+    // would let a case assert against a state that could never occur.
+    if let Some(tree) = case.body("Destination") {
+        build_tree(&sandbox.destination(), tree);
+    }
+
     // Canned answers, keyed by the operation each one belongs to.
     let mut script = Scripted::new();
 
