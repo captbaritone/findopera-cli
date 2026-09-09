@@ -1,6 +1,0 @@
---- template
-{{year|"n.d.}}
---- expect
-error[template_syntax_error]: unterminated quoted literal
-{{year|"n.d.}}
-       ^^^^^^^

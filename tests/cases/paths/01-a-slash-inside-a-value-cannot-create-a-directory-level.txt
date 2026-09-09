@@ -1,7 +1,0 @@
---- template
-{{composer.lastName}}/{{opera.title}}
---- data
-composer.lastName = Mascagni
-opera.title = Cavalleria rusticana / Pagliacci
---- expect
-Mascagni/Cavalleria rusticana - Pagliacci

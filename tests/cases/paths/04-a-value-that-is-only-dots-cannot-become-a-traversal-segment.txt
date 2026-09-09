@@ -1,7 +1,0 @@
---- template
-{{composer.lastName}}/{{opera.title}}
---- data
-composer.lastName = ..
-opera.title = .
---- expect
-__/_

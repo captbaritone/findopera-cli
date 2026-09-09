@@ -1,4 +1,0 @@
---- template
-{{opera.englishTitle|opera.librettist|"Unknown"}}
---- expect
-Unknown

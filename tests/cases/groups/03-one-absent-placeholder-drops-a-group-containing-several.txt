@@ -1,7 +1,0 @@
---- template
-{{opera.title}}[ - {{conductor.lastName}}, {{orchestra}}]
---- data
-opera.title = Salome
-conductor.lastName = Solti
---- expect
-Salome

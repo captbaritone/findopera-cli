@@ -1,7 +1,0 @@
---- template
-{{composer.lastName}} — {{opera.title}}
---- data
-composer.lastName = Dvořák
-opera.title = Rusalka
---- expect
-Dvořák — Rusalka

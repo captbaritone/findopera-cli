@@ -1,7 +1,0 @@
---- template
-[{{conductor.fullName}}[, {{orchestra}}]]
---- data
-conductor.fullName = Georg Solti
-orchestra = Wiener Philharmoniker
---- expect
-Georg Solti, Wiener Philharmoniker

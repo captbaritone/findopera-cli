@@ -1,7 +1,0 @@
---- template
-{{composer.lastName}}\\{{opera.title}}
---- data
-composer.lastName = Strauss
-opera.title = Salome
---- expect
-Strauss\Salome

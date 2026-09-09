@@ -1,0 +1,50 @@
+# A trailing separator from an omitted group is dropped
+
+## Recording 1
+
+```json
+{
+  "id": 1,
+  "url": "https://findopera.com/recording/1",
+  "year": null,
+  "month": null,
+  "day": null,
+  "orchestra": null,
+  "chorus": null,
+  "conductor": {
+    "fullName": "«conductor»",
+    "firstName": "«conductor-first»",
+    "lastName": "«conductor-last»",
+    "born": null,
+    "died": null
+  },
+  "notedSingers": [],
+  "upcs": [],
+  "opera": {
+    "title": "Billy Budd",
+    "englishTitle": null,
+    "librettist": null,
+    "url": "https://findopera.com/opera/1",
+    "language": null,
+    "composer": {
+      "fullName": "«composer»",
+      "firstName": "«composer-first»",
+      "lastName": "Britten",
+      "born": null,
+      "died": null
+    }
+  }
+}
+```
+
+## Library
+
+```tree
+one/findopera-1.txt
+```
+
+## Run
+
+```console
+$ findopera organize ./library --tabs -t '{{composer.lastName}}/{{opera.title}}[/{{year}}]'
+```

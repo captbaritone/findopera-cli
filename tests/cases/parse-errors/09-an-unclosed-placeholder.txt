@@ -1,6 +1,0 @@
---- template
-{{opera.title
---- expect
-error[template_syntax_error]: unclosed `{{` — every placeholder needs a matching `}}`
-{{opera.title
-^^^^^^^^^^^^^

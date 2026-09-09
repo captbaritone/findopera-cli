@@ -5,7 +5,7 @@
 
 use findopera::scan;
 
-mod fixture;
+mod support;
 use std::fs;
 use std::path::PathBuf;
 
@@ -33,7 +33,7 @@ impl Tree {
             .iter()
             .map(|m| {
                 let dir = m.directory.strip_prefix(&self.0).unwrap_or(&m.directory);
-                (fixture::slashes(&dir.display().to_string()), m.id.clone())
+                (support::slashes(&dir.display().to_string()), m.id.clone())
             })
             .collect()
     }
@@ -161,7 +161,7 @@ fn scan_variants(t: &Tree) -> Vec<(String, String, Option<String>)> {
         .map(|m| {
             let dir = m.directory.strip_prefix(&t.0).unwrap_or(&m.directory);
             (
-                fixture::slashes(&dir.display().to_string()),
+                support::slashes(&dir.display().to_string()),
                 m.id.clone(),
                 m.variant.clone(),
             )
@@ -227,7 +227,7 @@ fn scan_ignoring(t: &Tree, patterns: &[&str]) -> Vec<(String, String)> {
         .iter()
         .map(|m| {
             let dir = m.directory.strip_prefix(&t.0).unwrap_or(&m.directory);
-            (fixture::slashes(&dir.display().to_string()), m.id.clone())
+            (support::slashes(&dir.display().to_string()), m.id.clone())
         })
         .collect()
 }

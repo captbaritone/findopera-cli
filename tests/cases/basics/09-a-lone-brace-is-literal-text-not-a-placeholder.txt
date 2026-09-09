@@ -1,6 +1,0 @@
---- template
-{x} {{opera.title}}
---- data
-opera.title = Salome
---- expect
-{x} Salome

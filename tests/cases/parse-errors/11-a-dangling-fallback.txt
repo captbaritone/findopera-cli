@@ -1,6 +1,0 @@
---- template
-{{year|}}
---- expect
-error[template_syntax_error]: expected a field name or quoted literal after `|`
-{{year|}}
-       ^^

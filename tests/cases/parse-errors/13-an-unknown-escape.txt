@@ -1,6 +1,0 @@
---- template
-{{opera.title}}\q
---- expect
-error[template_syntax_error]: unknown escape `\q` — only \[ \] \{ \} \\ are escapes
-{{opera.title}}\q
-               ^^

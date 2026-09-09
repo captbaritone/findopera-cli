@@ -15,3 +15,8 @@ pub mod markdown;
 pub mod scripted;
 pub mod server;
 pub mod snapshot;
+
+/// A path as a test writes it, whichever separator this platform uses.
+pub fn slashes(s: &str) -> String {
+    s.replace(std::path::MAIN_SEPARATOR, "/")
+}

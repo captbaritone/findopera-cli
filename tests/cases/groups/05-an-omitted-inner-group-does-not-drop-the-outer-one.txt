@@ -1,6 +1,0 @@
---- template
-[{{conductor.fullName}}[, {{orchestra}}]]
---- data
-conductor.fullName = Georg Solti
---- expect
-Georg Solti

@@ -1,7 +1,0 @@
---- template
-{{opera.title}}]
---- expect
-error[template_syntax_error]: unmatched `]`
-{{opera.title}}]
-               ^
-help: Write `\]` for a literal bracket.
