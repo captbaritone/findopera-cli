@@ -1,94 +1,10 @@
-//! What a merge actually sends, and which types may be sent one.
+//! Which types the schema says may be merged.
 //!
-//! Merging is the one mutation that destroys a record without being called
-//! `delete`, and the losing id is an argument rather than the subject of the
-//! sentence. Getting `id` and `intoId` the wrong way round would merge the
-//! survivor into the duplicate — a mistake nothing downstream could notice —
-//! so the request itself is what these assert on.
-//!
-//! No socket: the seam under the client replaces only the transport, so these
-//! still run the real document building, variables and refusal handling.
-
-mod support;
+//! What a merge sends, and what it says, are cases under
+//! `tests/snapshots/merge/`. This is the one part no command reports: the
+//! table codegen derived, checked against the schema it was derived from.
 
 use findopera::model::crud;
-use support::scripted::Scripted;
-
-fn kind(name: &str) -> &'static crud::Type {
-    crud::TYPES
-        .iter()
-        .find(|t| t.name == name)
-        .expect("a type by that name")
-}
-
-#[test]
-fn the_loser_is_the_subject_and_the_survivor_is_into_id() {
-    let script = Scripted::new().answers("Merge", 200, r#"{"data":{"mergeSinger":{"id":"456"}}}"#);
-    let api = script.client("https://example.invalid/g", Some("a-token".into()));
-
-    let survivor = api
-        .merge(kind("singer"), "133", "456", "same person, two spellings")
-        .expect("the merge is accepted");
-
-    let sent = script.sent();
-    let variables = sent[0].variables.as_ref().expect("variables");
-    assert_eq!(variables["id"], "133", "the losing id");
-    assert_eq!(variables["intoId"], "456", "the surviving id");
-    assert_eq!(variables["justification"], "same person, two spellings");
-    assert!(
-        sent[0].query.as_ref().unwrap().contains("mergeSinger"),
-        "got: {:?}",
-        sent[0].query
-    );
-
-    // The survivor is what comes back, not the id that was passed in: an id
-    // handed to another command has to be one that still resolves.
-    assert_eq!(survivor, "456");
-}
-
-#[test]
-fn each_type_is_merged_by_its_own_mutation() {
-    // One mutation per type rather than a general one, so a table that drifted
-    // would send `mergeSinger` for an opera and be refused in terms naming
-    // neither.
-    let script = Scripted::new().answers("Merge", 200, r#"{"data":{"mergeOpera":{"id":"34"}}}"#);
-    let api = script.client("https://example.invalid/g", None);
-    let _ = api.merge(kind("opera"), "12", "34", "https://...");
-
-    assert!(
-        script.sent()[0]
-            .query
-            .as_ref()
-            .unwrap()
-            .contains("mergeOpera"),
-        "got: {:?}",
-        script.sent()[0].query
-    );
-}
-
-#[test]
-fn a_type_the_server_cannot_merge_is_refused_without_asking() {
-    // Nothing is scripted, so any request at all would fail the test by
-    // itself: an unmergeable type must be settled before one is built, or the
-    // reply is a GraphQL error about a field that does not exist rather than
-    // an answer about the type in hand.
-    let script = Scripted::new();
-    let api = script.client("https://example.invalid/g", None);
-
-    let error = api
-        .merge(kind("upc"), "1", "2", "a reason")
-        .expect_err("a upc cannot be merged");
-
-    assert!(
-        matches!(error, findopera::api::ApiError::Refused(_)),
-        "a refusal rather than an unreachable server, got: {error}"
-    );
-    assert!(
-        error.to_string().contains("cannot be merged"),
-        "got: {error}"
-    );
-    assert!(script.sent().is_empty(), "nothing should have been sent");
-}
 
 #[test]
 fn merge_is_offered_for_exactly_the_types_the_schema_merges() {
