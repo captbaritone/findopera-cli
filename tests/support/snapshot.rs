@@ -239,15 +239,38 @@ fn words(line: &str) -> Vec<String> {
     out
 }
 
+/// Forward slashes inside the path tokens, whatever this platform writes.
+///
+/// Only from the start of a token to the next space or tab: a template may
+/// legitimately render a backslash into a folder name, and that is the name,
+/// not a separator.
+fn slashes_in_paths(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find("./library").or_else(|| rest.find("./named")) {
+        out.push_str(&rest[..i]);
+        let tail = &rest[i..];
+        let end = tail
+            .find(|c: char| c == ' ' || c == '\t' || c == '\n')
+            .unwrap_or(tail.len());
+        out.push_str(&tail[..end].replace('\\', "/"));
+        rest = &tail[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Replace anything that changes between runs.
 fn normalize(text: &str, sandbox: &Sandbox) -> String {
     let library = sandbox.library().to_string_lossy().to_string();
     let destination = sandbox.destination().to_string_lossy().to_string();
     let root = sandbox.root.to_string_lossy().to_string();
-    text.replace(&library, "./library")
+    let normalized = text
+        .replace(&library, "./library")
         .replace(&destination, "./named")
         .replace(&root, ".")
-        .replace(env!("CARGO_PKG_VERSION"), "<version>")
+        .replace(env!("CARGO_PKG_VERSION"), "<version>");
+    slashes_in_paths(&normalized)
 }
 
 /// Run one case file and return the sections it produced.
@@ -333,9 +356,12 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
     // A case that is *about* where the destination is has to be able to say
     // where, and only the run knows. These stand for the two directories.
     let fill = |text: &str| {
-        text.replace("{library}", &sandbox.library().to_string_lossy())
-            .replace("{destination}", &sandbox.destination().to_string_lossy())
-            .replace("{root}", &sandbox.root.to_string_lossy())
+        // Into a TOML basic string, where a backslash starts an escape — and
+        // a Windows path is mostly backslashes.
+        let quoted = |p: std::path::PathBuf| p.to_string_lossy().replace('\\', "\\\\");
+        text.replace("{library}", &quoted(sandbox.library()))
+            .replace("{destination}", &quoted(sandbox.destination()))
+            .replace("{root}", &quoted(sandbox.root.clone()))
     };
     let config = case
         .body("Toml")
@@ -363,7 +389,8 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
         .find(|l| l.trim_start().starts_with("destination"))
     {
         if let Some(named) = line.split('=').nth(1) {
-            let named = named.trim().trim_matches('"');
+            let named = named.trim().trim_matches('"').replace("\\\\", "\\");
+            let named = named.as_str();
             assert!(
                 !named.starts_with('/') || named.starts_with(&*sandbox.root.to_string_lossy()),
                 "this case builds into {named}, which is outside the sandbox — what happens \
