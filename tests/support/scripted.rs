@@ -159,6 +159,23 @@ impl Transport for Scripted {
             variables: body.and_then(|b| b.get("variables")).cloned(),
         });
 
+        if let Some(name) = &named {
+            let mut replies = self.0.replies.lock().unwrap();
+            if let Some(queue) = replies.get_mut(name) {
+                // The last answer stays: a server does not stop knowing
+                // something because it was asked twice. A case that wants a
+                // different second answer scripts two.
+                if queue.len() > 1 {
+                    return Ok(queue.remove(0));
+                }
+                if let Some(last) = queue.first() {
+                    return Ok(last.clone());
+                }
+            }
+        }
+        // After the scripted answers, not before: a case that writes one
+        // out means it, and the corpus is only the convenience for every
+        // case that does not care.
         if named.as_deref() == Some("Recordings") {
             if let Some(all) = self.0.corpus.lock().unwrap().as_ref() {
                 let asked = body
@@ -183,20 +200,6 @@ impl Transport for Scripted {
             }
         }
 
-        if let Some(name) = &named {
-            let mut replies = self.0.replies.lock().unwrap();
-            if let Some(queue) = replies.get_mut(name) {
-                // The last answer stays: a server does not stop knowing
-                // something because it was asked twice. A case that wants a
-                // different second answer scripts two.
-                if queue.len() > 1 {
-                    return Ok(queue.remove(0));
-                }
-                if let Some(last) = queue.first() {
-                    return Ok(last.clone());
-                }
-            }
-        }
         let mut fallback = self.0.fallback.lock().unwrap();
         if fallback.is_empty() {
             return Err(format!(

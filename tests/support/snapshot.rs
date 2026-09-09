@@ -47,6 +47,21 @@ impl Drop for Sandbox {
     }
 }
 
+/// Fold one JSON object into another, key by key.
+fn merge(base: &mut serde_json::Value, over: &serde_json::Value) {
+    match (base, over) {
+        (serde_json::Value::Object(b), serde_json::Value::Object(o)) => {
+            for (key, value) in o {
+                merge(
+                    b.entry(key.clone()).or_insert(serde_json::Value::Null),
+                    value,
+                );
+            }
+        }
+        (b, o) => *b = o.clone(),
+    }
+}
+
 /// Lay out a source library from a `tree` block.
 ///
 /// One path per line. A line ending in `/` is a directory; anything else is a
@@ -190,8 +205,34 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
     // back null, which is what a missing recording looks like.
     if case.section("Recordings").is_some() || case.section("Library").is_some() {
         let raw = include_str!("../fixtures/plan-recordings.json");
-        let all: Vec<serde_json::Value> = serde_json::from_str(raw).expect("the captured corpus");
-        script = script.serving_corpus(all);
+        let mut all: Vec<serde_json::Value> =
+            serde_json::from_str(raw).expect("the captured corpus");
+
+        // `## Recording <id>` says a recording by how it differs from a real
+        // one. Written out in full it would have to satisfy the whole
+        // generated model — twenty fields to say that a title is "Salome" —
+        // and a hand-written one that drifts from the schema is a fixture
+        // describing a server that does not exist. Folded over a captured
+        // record instead, a case says only what it is about.
+        let base = all.first().cloned().expect("the corpus is not empty");
+        let mut declared = Vec::new();
+        for section in &case.inputs {
+            let Some(id) = section.name.strip_prefix("Recording ") else {
+                continue;
+            };
+            let over: serde_json::Value =
+                serde_json::from_str(section.body.trim()).expect("a recording is JSON");
+            let mut record = base.clone();
+            merge(&mut record, &over);
+            record["id"] = match id.trim().parse::<i64>() {
+                Ok(n) => n.into(),
+                Err(_) => id.trim().into(),
+            };
+            declared.push(record);
+        }
+        // Declared first, so one with the same id as a captured recording wins.
+        declared.append(&mut all);
+        script = script.serving_corpus(declared);
     }
 
     for section in &case.inputs {
