@@ -353,6 +353,25 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
             })
         })
         .unwrap_or_default();
+    // A destination outside the sandbox makes the case depend on the machine
+    // running it. One did, and passed here and failed in CI: `/Volumes/...`
+    // is a separate disk on a Mac and a path that does not exist on Linux, so
+    // the same settings drew a cross-device refusal in one place and a plan in
+    // the other. Use `{destination}`.
+    if let Some(line) = config
+        .lines()
+        .find(|l| l.trim_start().starts_with("destination"))
+    {
+        if let Some(named) = line.split('=').nth(1) {
+            let named = named.trim().trim_matches('"');
+            assert!(
+                !named.starts_with('/') || named.starts_with(&*sandbox.root.to_string_lossy()),
+                "this case builds into {named}, which is outside the sandbox — what happens \
+                 there depends on the machine running the case. Use {{destination}}."
+            );
+        }
+    }
+
     let config_path = sandbox.root.join("findopera.toml");
     if case.section("Config").is_some() || case.section("Toml").is_some() {
         std::fs::write(&config_path, &config).expect("a config");

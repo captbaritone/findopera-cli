@@ -6,12 +6,16 @@
 ## stdout
 
 ```
++ ./library/DonGiovanni	Don Giovanni
 ```
 
 ## stderr
 
 ```
-findopera: `link = "hardlink"` cannot reach from ./library to /Volumes/Opera: they are on different disks, and a hard link is a second name for a file on the disk it already lives on. Use `link = "symlink"` to point at it instead, or `link = "copy"` to have two of it.
+findopera: would build a hard link to every file in ./named
+findopera: 1 to build, 0 already there, 0 left alone
+findopera: nothing was written. To build it, run:
+    findopera organize ./library --config ./findopera.toml --write
 ```
 
 ## Destination
@@ -29,5 +33,5 @@ Recordings
 ## Exit
 
 ```
-2
+0
 ```

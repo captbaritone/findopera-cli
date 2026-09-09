@@ -48,7 +48,10 @@ A step in `## Run` is either the program or something done to the disk:
 | `show <path>` | read one back, onto stdout |
 
 Paths start `./library/` or `./named/`, and want quoting where they contain a
-space.
+space. In settings, `{library}`, `{destination}` and `{root}` stand for the
+directories a case cannot know the names of — and a destination anywhere else
+is refused, because what happens outside the sandbox depends on the machine
+the case is running on.
 
 Those exist because a hard link, a clone and a copy all look identical in a
 listing, and their inode numbers are not what anybody cares about. What
