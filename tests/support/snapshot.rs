@@ -399,9 +399,15 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
                 if !config.contains("template") {
                     config.insert_str(0, "template = \"{{opera.title}}\"\n");
                 }
+                // Escaped for the same reason a filled-in one is: this goes
+                // into a TOML basic string, and a Windows path is mostly
+                // backslashes.
                 format!(
                     "{config}\ndestination = \"{}\"\n",
-                    sandbox.destination().display()
+                    sandbox
+                        .destination()
+                        .to_string_lossy()
+                        .replace('\\', "\\\\")
                 )
             })
         })
