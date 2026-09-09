@@ -16,7 +16,8 @@ A case names its sections, and they say what it needs:
 | `## Recordings` | serve the captured corpus, by whatever ids are asked for |
 | `## Recording <id>` | one recording, said by how it differs from a real one |
 | `## Answer <Operation>` | a canned reply for one GraphQL operation, written out |
-| `## Run` | one `$ findopera …` line per command, run in order |
+| `## Run` | one `$ …` line per step, run in order |
+| `## Requires` | what the platform must offer — `unix`, so far |
 
 `## Destination` appears on both sides: as an input it is what was there
 before, and in the generated file it is what is there after. It declares only
@@ -34,6 +35,31 @@ replaces the reply entirely, for the cases whose subject is an answer nothing
 real would give: a refusal, a rate limit, a record that is not there.
 
 An `## Answer` beats the corpus. A case that writes one out means it.
+
+A step in `## Run` is either the program or something done to the disk:
+
+| Step | What it does |
+|---|---|
+| `findopera …` | run the command |
+| `write <path> <text>` | put a file there |
+| `append <path> <text>` | add to one |
+| `rm <path>` | take one away |
+| `show <path>` | read one back, onto stdout |
+
+Paths start `./library/` or `./named/`, and want quoting where they contain a
+space.
+
+Those exist because a hard link, a clone and a copy all look identical in a
+listing, and their inode numbers are not what anybody cares about. What
+differs is what happens next — writing through one changes the original, or
+does not; a track added later shows up through a folder link, or does not. So
+a case changes a file and reads another, and the difference is what it reads
+back.
+
+A clone has no case of its own for exactly this reason: it behaves like a
+copy in every way a person can observe, which is the point of it. What
+separates it lives in `tests/apply.rs`, where an inode is the only thing left
+to look at.
 
 Every case runs a command and is judged on what a person would see. A
 behaviour that cannot change anything visible is not a case: it can neither

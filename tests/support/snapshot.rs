@@ -129,6 +129,74 @@ fn describe_tree(at: &Path) -> String {
     lines.join("\n")
 }
 
+/// Where a step's path points, inside the sandbox.
+fn at(sandbox: &Sandbox, path: &str) -> PathBuf {
+    match path
+        .strip_prefix("./library/")
+        .or(path.strip_prefix("library/"))
+    {
+        Some(rest) => sandbox.library().join(rest),
+        None => match path
+            .strip_prefix("./named/")
+            .or(path.strip_prefix("named/"))
+        {
+            Some(rest) => sandbox.destination().join(rest),
+            None => sandbox.root.join(path.trim_start_matches("./")),
+        },
+    }
+}
+
+/// A step that is not a command: something done to the disk, or read off it.
+///
+/// A hard link, a clone and a copy all look the same in a listing, and their
+/// inode numbers are not what anybody cares about. What differs is what
+/// happens next — whether writing through one changes the original, whether a
+/// track added later shows up. So a case can change a file and look at
+/// another, and the difference is in what it reads back.
+fn step(sandbox: &Sandbox, argv: &[String], out: &mut Vec<u8>) -> bool {
+    let path = |i: usize| at(sandbox, &argv[i]);
+    match argv[0].as_str() {
+        "write" | "append" => {
+            let file = path(1);
+            if let Some(parent) = file.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let text = argv[2..].join(" ");
+            let mut existing = if argv[0] == "append" {
+                std::fs::read_to_string(&file).unwrap_or_default()
+            } else {
+                String::new()
+            };
+            existing.push_str(&text);
+            std::fs::write(&file, existing).expect("a file this case writes");
+        }
+        "rm" => {
+            let file = path(1);
+            if file.is_dir() && !file.is_symlink() {
+                let _ = std::fs::remove_dir_all(&file);
+            } else {
+                let _ = std::fs::remove_file(&file);
+            }
+        }
+        "show" => {
+            let file = path(1);
+            match std::fs::read_to_string(&file) {
+                Ok(text) => {
+                    let _ = writeln!(out, "{}", text.trim_end());
+                }
+                // Reading through a link whose target has gone is the whole
+                // point of some of these, so it is an answer rather than a
+                // failure.
+                Err(e) => {
+                    let _ = writeln!(out, "<cannot read {}: {}>", argv[1], e.kind());
+                }
+            }
+        }
+        _ => return false,
+    }
+    true
+}
+
 /// Split a command line the way a shell would, so a template can be quoted.
 fn words(line: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -291,7 +359,10 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
                 *word = sandbox.library().to_string_lossy().to_string();
             }
         }
-        if (case.section("Config").is_some() || case.section("Toml").is_some())
+        // The settings file belongs to the program, not to a step that only
+        // touches the disk.
+        if argv.first().is_some_and(|a| a == "findopera")
+            && (case.section("Config").is_some() || case.section("Toml").is_some())
             && !argv.iter().any(|a| a == "--config")
         {
             argv.push("--config".to_string());
@@ -300,6 +371,18 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
 
         if commands.len() > 1 {
             let _ = writeln!(out, "$ {command}");
+        }
+        // Anything that is not the program itself is something done to the
+        // disk between runs.
+        if argv.first().is_some_and(|a| a != "findopera") {
+            assert!(
+                step(&sandbox, &argv, &mut out),
+                "no step called `{}`; the steps are write, append, rm and show",
+                argv[0]
+            );
+            continue;
+        }
+        if commands.len() > 1 {
             let _ = writeln!(err, "$ {command}");
         }
         let for_client = script.clone();
@@ -387,6 +470,19 @@ pub fn run_all(dir: &Path) {
 
     for path in &cases {
         let text = std::fs::read_to_string(path).expect("a case");
+
+        // A case may need something this platform does not have. Symlinks are
+        // the one so far: Windows asks for a privilege that CI does not grant,
+        // which is why the older suite gated them the same way.
+        if let Some(needs) = markdown::parse(&text).body("Requires") {
+            let unmet = needs
+                .split_whitespace()
+                .any(|need| need == "unix" && !cfg!(unix));
+            if unmet {
+                continue;
+            }
+        }
+
         let source = path
             .file_name()
             .unwrap_or_default()
