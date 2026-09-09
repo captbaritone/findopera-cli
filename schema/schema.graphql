@@ -1580,6 +1580,13 @@ type Query {
   of all — is done by asking for its history, which never redirects.
   """
   getCharacterById(id: String!): Character
+  """
+  Look up Characters by id, following any merge.
+  
+  An id belonging to a record that has since been merged into another yields
+  the surviving record, so a stored list of ids keeps working. Positions are
+  preserved: the nth answer is for the nth id, whether or not it moved.
+  """
   getCharacterByIds(ids: [String!]!): [Character] @semanticNonNull
   """Gets all UPCs that are associated with more than one opera recording."""
   getCollectionUpcs: [Upc!] @semanticNonNull
@@ -1592,7 +1599,22 @@ type Query {
   of all — is done by asking for its history, which never redirects.
   """
   getComposerById(id: String!): Composer
+  """
+  Look up Composers by id, following any merge.
+  
+  An id belonging to a record that has since been merged into another yields
+  the surviving record, so a stored list of ids keeps working. Positions are
+  preserved: the nth answer is for the nth id, whether or not it moved.
+  """
   getComposerByIds(ids: [String!]!): [Composer] @semanticNonNull
+  """
+  Look up a Composer by its operaclassId.
+  
+  At most one live Composer holds any given operaclassId;
+  where a record predating that rule still shares one, the lowest id wins,
+  so the answer is at least stable.
+  """
+  getComposerByOperaclassId(operaclassId: Int!): Composer
   """
   Look up a Conductor by id, following any merge.
   
@@ -1602,7 +1624,22 @@ type Query {
   of all — is done by asking for its history, which never redirects.
   """
   getConductorById(id: String!): Conductor
+  """
+  Look up Conductors by id, following any merge.
+  
+  An id belonging to a record that has since been merged into another yields
+  the surviving record, so a stored list of ids keeps working. Positions are
+  preserved: the nth answer is for the nth id, whether or not it moved.
+  """
   getConductorByIds(ids: [String!]!): [Conductor] @semanticNonNull
+  """
+  Look up a Conductor by its operaclassId.
+  
+  At most one live Conductor holds any given operaclassId;
+  where a record predating that rule still shares one, the lowest id wins,
+  so the answer is at least stable.
+  """
+  getConductorByOperaclassId(operaclassId: Int!): Conductor
   """A single edit, by id."""
   getEditById(id: Int!): Edit
   """
@@ -1614,6 +1651,13 @@ type Query {
   of all — is done by asking for its history, which never redirects.
   """
   getLanguageById(id: String!): Language
+  """
+  Look up Languages by id, following any merge.
+  
+  An id belonging to a record that has since been merged into another yields
+  the surviving record, so a stored list of ids keeps working. Positions are
+  preserved: the nth answer is for the nth id, whether or not it moved.
+  """
   getLanguageByIds(ids: [String!]!): [Language] @semanticNonNull
   getMusicBrainzReleaseById(id: String!): MusicBrainzRelease
   getMusicBrainzReleaseByIds(ids: [String!]!): [MusicBrainzRelease] @semanticNonNull
@@ -1630,7 +1674,22 @@ type Query {
   of all — is done by asking for its history, which never redirects.
   """
   getOperaById(id: String!): Opera
+  """
+  Look up Operas by id, following any merge.
+  
+  An id belonging to a record that has since been merged into another yields
+  the surviving record, so a stored list of ids keeps working. Positions are
+  preserved: the nth answer is for the nth id, whether or not it moved.
+  """
   getOperaByIds(ids: [String!]!): [Opera] @semanticNonNull
+  """
+  Look up a Opera by its operaclassId.
+  
+  At most one live Opera holds any given operaclassId;
+  where a record predating that rule still shares one, the lowest id wins,
+  so the answer is at least stable.
+  """
+  getOperaByOperaclassId(operaclassId: Int!): Opera
   getPortrayalById(id: String!): Portrayal
   getPortrayalByIds(ids: [String!]!): [Portrayal] @semanticNonNull
   getPrestoMusicAlbumById(id: String!): PrestoMusicAlbum
@@ -1644,7 +1703,22 @@ type Query {
   of all — is done by asking for its history, which never redirects.
   """
   getRecordingById(id: String!): Recording
+  """
+  Look up Recordings by id, following any merge.
+  
+  An id belonging to a record that has since been merged into another yields
+  the surviving record, so a stored list of ids keeps working. Positions are
+  preserved: the nth answer is for the nth id, whether or not it moved.
+  """
   getRecordingByIds(ids: [String!]!): [Recording] @semanticNonNull
+  """
+  Look up a Recording by its operaclassId.
+  
+  At most one live Recording holds any given operaclassId;
+  where a record predating that rule still shares one, the lowest id wins,
+  so the answer is at least stable.
+  """
+  getRecordingByOperaclassId(operaclassId: Int!): Recording
   getRecordingURLById(id: String!): RecordingURL
   getRecordingURLByIds(ids: [String!]!): [RecordingURL] @semanticNonNull
   """
@@ -1656,7 +1730,22 @@ type Query {
   of all — is done by asking for its history, which never redirects.
   """
   getSingerById(id: String!): Singer
+  """
+  Look up Singers by id, following any merge.
+  
+  An id belonging to a record that has since been merged into another yields
+  the surviving record, so a stored list of ids keeps working. Positions are
+  preserved: the nth answer is for the nth id, whether or not it moved.
+  """
   getSingerByIds(ids: [String!]!): [Singer] @semanticNonNull
+  """
+  Look up a Singer by its operaclassId.
+  
+  At most one live Singer holds any given operaclassId;
+  where a record predating that rule still shares one, the lowest id wins,
+  so the answer is at least stable.
+  """
+  getSingerByOperaclassId(operaclassId: Int!): Singer
   getSpotifyAlbumById(id: String!): SpotifyAlbum
   getSpotifyAlbumByIds(ids: [String!]!): [SpotifyAlbum] @semanticNonNull
   getSpotifyTrackById(id: String!): SpotifyTrack
