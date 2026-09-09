@@ -522,3 +522,76 @@ fn a_dry_run_removes_nothing() {
     assert!(!gone.removed.is_empty(), "it should say what it would take");
     assert!(entry.symlink_metadata().is_ok(), "but not take it");
 }
+
+// ---- removals before builds -----------------------------------------------
+
+/// A recorded path that is the *parent* of a planned one.
+///
+/// This is what a template does when it turns a folder into a folder of
+/// variants: `…/Faust/1953 Cluytens` stops being wanted and `…/1953
+/// Cluytens/ape` starts. Reported from a 6,000-folder library where a run
+/// said it had built 2,584 folders and 118 of them were not there afterwards.
+#[test]
+fn a_removal_that_is_the_parent_of_a_build_does_not_take_it_with_it() {
+    let f = Fixture::new("nesting");
+    // Built flat, one folder per recording.
+    establish(&f, r"{{opera.title}}", Link::Copy);
+    let state = findopera::state::load(&f.destination).expect("state");
+
+    // Now the same folder becomes a parent, with the rip one level down.
+    let (report, recs, tmpl) = f.parts(r"{{opera.title}}/audio");
+    let p = plan::plan(&report.markers, &recs, &tmpl);
+    let (gone, done) = apply::reconcile(&state, &p, &f.destination, Link::Copy, false);
+
+    assert!(!gone.removed.is_empty(), "the flat folders are orphaned");
+    assert!(gone.failed.is_empty(), "{:?}", gone.failed);
+    assert!(!done.troubled(), "nothing should have gone wrong building");
+
+    // The point: every path the run says it built is actually there. Building
+    // first and removing second left these inside a directory that was then
+    // recursively deleted, and the run still counted them as built.
+    for row in &p.rows {
+        let mut at = f.destination.clone();
+        for segment in &row.segments {
+            at.push(segment);
+        }
+        assert!(
+            at.exists(),
+            "{} was reported built but is not on disk",
+            at.display()
+        );
+    }
+}
+
+#[test]
+fn what_a_run_says_it_built_is_what_a_second_run_finds() {
+    // The reporter's own check, and the one that caught this: a --write
+    // followed immediately by a dry run should have nothing left to do. A
+    // count of attempts rather than of survivors is a summary that cannot be
+    // trusted, which is worse than the missing folders it hides.
+    let f = Fixture::new("agrees");
+    establish(&f, r"{{opera.title}}", Link::Copy);
+    let state = findopera::state::load(&f.destination).expect("state");
+
+    let (report, recs, tmpl) = f.parts(r"{{opera.title}}/audio");
+    let p = plan::plan(&report.markers, &recs, &tmpl);
+    let (_, done) = apply::reconcile(&state, &p, &f.destination, Link::Copy, false);
+    let (made, _, _) = done.counts();
+    // As the CLI does: the record of what was built is written before the
+    // next run reads it. Passing the stale one here would make this a test of
+    // something else.
+    let built = apply::built(&p, &done, Link::Copy);
+    findopera::state::save(&f.destination, built).expect("state");
+    let state = findopera::state::load(&f.destination).expect("state");
+
+    // A second pass over the same plan finds everything already in place.
+    let (_, again) = apply::reconcile(&state, &p, &f.destination, Link::Copy, false);
+    let (made_again, already, _) = again.counts();
+
+    assert!(made > 0, "the first run built something");
+    assert_eq!(made_again, 0, "the second run should have nothing to build");
+    assert_eq!(
+        already, made,
+        "what the first run built is what the second finds"
+    );
+}

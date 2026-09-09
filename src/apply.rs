@@ -565,6 +565,33 @@ pub fn prune(state: &state::State, plan: &Plan, destination: &Path, dry_run: boo
     out
 }
 
+/// Bring the destination to match the plan: removals first, then builds.
+///
+/// The order is the whole point, which is why the two passes are called from
+/// here rather than one after the other at the call site.
+///
+/// A removal is a recursive delete of a folder this program built, and a path
+/// being removed can be the *parent* of one being built. A template that
+/// turns a folder into a folder of variants does exactly that: `D` is no
+/// longer wanted, `D/ape` and `D/mp3` are. Building first put them inside `D`
+/// and the removal of `D` then took them with it — and because the builds had
+/// already been counted, the run reported a tree that was not there.
+///
+/// Removing first also makes the count true, which matters more than the
+/// deletion: a wrong tree is fixed by running again, but a run that says it
+/// built something it did not is a reason never to look.
+pub fn reconcile(
+    previous: &state::State,
+    plan: &Plan,
+    destination: &Path,
+    link: Link,
+    dry_run: bool,
+) -> (Pruned, Applied) {
+    let gone = prune(previous, plan, destination, dry_run);
+    let done = apply(plan, destination, link, dry_run);
+    (gone, done)
+}
+
 /// Whether what is there is still what we recorded making.
 fn still_ours(at: &Path, built: &state::Built) -> Result<(), String> {
     let meta = at

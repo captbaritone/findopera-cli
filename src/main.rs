@@ -2085,8 +2085,7 @@ fn cmd_organize(args: OrganizeArgs) -> i32 {
         }
     };
 
-    let done = apply::apply(&plan, &destination, link, dry_run);
-    let gone = apply::prune(&previous, &plan, &destination, dry_run);
+    let (gone, done) = apply::reconcile(&previous, &plan, &destination, link, dry_run);
 
     if !dry_run {
         // Written after the fact, so a run that died halfway leaves a record
