@@ -4,56 +4,15 @@
 //! `delete`, and the losing id is an argument rather than the subject of the
 //! sentence. Getting `id` and `intoId` the wrong way round would merge the
 //! survivor into the duplicate — a mistake nothing downstream could notice —
-//! so the bytes on the wire are pinned here rather than assumed.
+//! so the request itself is what these assert on.
+//!
+//! No socket: the seam under the client replaces only the transport, so these
+//! still run the real document building, variables and refusal handling.
+
+mod support;
 
 use findopera::model::crud;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::TcpListener;
-use std::sync::mpsc;
-
-/// A server that answers one mutation and reports the body it was sent.
-fn serve(reply: &'static str) -> (String, mpsc::Receiver<String>) {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("a port");
-    let endpoint = format!("http://{}/api/graphql", listener.local_addr().unwrap());
-    let (tx, rx) = mpsc::channel();
-
-    std::thread::spawn(move || {
-        let Ok((stream, _)) = listener.accept() else {
-            return;
-        };
-        let mut reader = BufReader::new(&stream);
-        let mut line = String::new();
-        reader.read_line(&mut line).unwrap();
-
-        let mut length = 0usize;
-        loop {
-            let mut header = String::new();
-            reader.read_line(&mut header).unwrap();
-            let header = header.trim_end().to_string();
-            if header.is_empty() {
-                break;
-            }
-            if let Some(v) = header.to_ascii_lowercase().strip_prefix("content-length:") {
-                length = v.trim().parse().unwrap_or(0);
-            }
-        }
-        let mut body = vec![0u8; length];
-        reader.read_exact(&mut body).ok();
-
-        let mut stream = &stream;
-        write!(
-            stream,
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
-            reply.len()
-        )
-        .unwrap();
-        let _ = stream.flush();
-
-        tx.send(String::from_utf8_lossy(&body).into_owned())
-            .unwrap();
-    });
-    (endpoint, rx)
-}
+use support::scripted::Scripted;
 
 fn kind(name: &str) -> &'static crud::Type {
     crud::TYPES
@@ -64,25 +23,23 @@ fn kind(name: &str) -> &'static crud::Type {
 
 #[test]
 fn the_loser_is_the_subject_and_the_survivor_is_into_id() {
-    let (endpoint, asked) = serve(r#"{"data":{"mergeSinger":{"id":"456"}}}"#);
-    let api = findopera::api::Client::new(&endpoint, Some("a-token".to_string()));
+    let script = Scripted::new().answers("Merge", 200, r#"{"data":{"mergeSinger":{"id":"456"}}}"#);
+    let api = script.client("https://example.invalid/g", Some("a-token".into()));
 
     let survivor = api
         .merge(kind("singer"), "133", "456", "same person, two spellings")
         .expect("the merge is accepted");
 
-    let body: serde_json::Value =
-        serde_json::from_str(&asked.recv().expect("the server was asked something"))
-            .expect("the request body is JSON");
-
-    assert_eq!(body["variables"]["id"], "133", "the losing id");
-    assert_eq!(body["variables"]["intoId"], "456", "the surviving id");
-    assert_eq!(
-        body["variables"]["justification"],
-        "same person, two spellings"
+    let sent = script.sent();
+    let variables = sent[0].variables.as_ref().expect("variables");
+    assert_eq!(variables["id"], "133", "the losing id");
+    assert_eq!(variables["intoId"], "456", "the surviving id");
+    assert_eq!(variables["justification"], "same person, two spellings");
+    assert!(
+        sent[0].query.as_ref().unwrap().contains("mergeSinger"),
+        "got: {:?}",
+        sent[0].query
     );
-    let query = body["query"].as_str().expect("a query");
-    assert!(query.contains("mergeSinger"), "got: {query}");
 
     // The survivor is what comes back, not the id that was passed in: an id
     // handed to another command has to be one that still resolves.
@@ -94,20 +51,30 @@ fn each_type_is_merged_by_its_own_mutation() {
     // One mutation per type rather than a general one, so a table that drifted
     // would send `mergeSinger` for an opera and be refused in terms naming
     // neither.
-    let (endpoint, asked) = serve(r#"{"data":{"mergeOpera":{"id":"34"}}}"#);
-    let api = findopera::api::Client::new(&endpoint, None);
+    let script = Scripted::new().answers("Merge", 200, r#"{"data":{"mergeOpera":{"id":"34"}}}"#);
+    let api = script.client("https://example.invalid/g", None);
     let _ = api.merge(kind("opera"), "12", "34", "https://...");
 
-    let body = asked.recv().expect("the server was asked something");
-    assert!(body.contains("mergeOpera"), "got: {body}");
+    assert!(
+        script.sent()[0]
+            .query
+            .as_ref()
+            .unwrap()
+            .contains("mergeOpera"),
+        "got: {:?}",
+        script.sent()[0].query
+    );
 }
 
 #[test]
 fn a_type_the_server_cannot_merge_is_refused_without_asking() {
-    // No server here at all: an unmergeable type must be settled before a
-    // request is built, or the reply is a GraphQL error about a field that
-    // does not exist rather than an answer about the type in hand.
-    let api = findopera::api::Client::new("http://127.0.0.1:1", None);
+    // Nothing is scripted, so any request at all would fail the test by
+    // itself: an unmergeable type must be settled before one is built, or the
+    // reply is a GraphQL error about a field that does not exist rather than
+    // an answer about the type in hand.
+    let script = Scripted::new();
+    let api = script.client("https://example.invalid/g", None);
+
     let error = api
         .merge(kind("upc"), "1", "2", "a reason")
         .expect_err("a upc cannot be merged");
@@ -120,6 +87,7 @@ fn a_type_the_server_cannot_merge_is_refused_without_asking() {
         error.to_string().contains("cannot be merged"),
         "got: {error}"
     );
+    assert!(script.sent().is_empty(), "nothing should have been sent");
 }
 
 #[test]
