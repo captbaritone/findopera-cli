@@ -287,12 +287,34 @@ fn outputs_for(path: &Path, text: &str) -> Vec<Section> {
     sections
 }
 
+/// Where a case's expectations live.
+fn expected_path(case: &Path) -> PathBuf {
+    let stem = case.file_stem().unwrap_or_default().to_string_lossy();
+    case.with_file_name(format!("{stem}.expected.md"))
+}
+
 /// Run every case under `dir`, blessing when asked.
 pub fn run_all(dir: &Path) {
     let mut cases: Vec<PathBuf> = Vec::new();
-    collect(dir, &mut cases);
+    let mut expected: Vec<PathBuf> = Vec::new();
+    collect(dir, &mut cases, &mut expected);
     cases.sort();
     assert!(!cases.is_empty(), "no cases under {}", dir.display());
+
+    // An expectation whose case is gone would otherwise sit there for ever,
+    // read as though something still produced it.
+    let wanted: std::collections::BTreeSet<PathBuf> =
+        cases.iter().map(|c| expected_path(c)).collect();
+    let orphans: Vec<&PathBuf> = expected.iter().filter(|e| !wanted.contains(*e)).collect();
+    assert!(
+        orphans.is_empty(),
+        "expectations with no case:\n{}",
+        orphans
+            .iter()
+            .map(|p| format!("  {}", p.display()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
 
     let blessing = std::env::var("UPDATE_EXPECT").is_ok();
     let mut rewritten = Vec::new();
@@ -300,15 +322,24 @@ pub fn run_all(dir: &Path) {
 
     for path in &cases {
         let text = std::fs::read_to_string(path).expect("a case");
-        let produced = markdown::render(&text, &outputs_for(path, &text));
-        if produced == text {
+        let source = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        let produced =
+            markdown::render(&markdown::title(&text), &source, &outputs_for(path, &text));
+
+        let at = expected_path(path);
+        let before = std::fs::read_to_string(&at).unwrap_or_default();
+        if produced == before {
             continue;
         }
         if blessing {
-            std::fs::write(path, &produced).expect("blessing");
-            rewritten.push(path.clone());
+            std::fs::write(&at, &produced).expect("blessing");
+            rewritten.push(at);
         } else {
-            wrong.push((path.clone(), text, produced));
+            wrong.push((at, before, produced));
         }
     }
 
@@ -331,7 +362,7 @@ pub fn run_all(dir: &Path) {
     // to mean the expectations on disk are the ones that ran.
     assert!(
         rewritten.is_empty(),
-        "rewrote {} case(s):\n{}\nRun again to confirm, after reading the diff.",
+        "rewrote {} expectation(s):\n{}\nRun again to confirm, after reading the diff.",
         rewritten.len(),
         rewritten
             .iter()
@@ -341,16 +372,25 @@ pub fn run_all(dir: &Path) {
     );
 }
 
-fn collect(dir: &Path, into: &mut Vec<PathBuf>) {
+/// Cases and expectations, told apart by name.
+fn collect(dir: &Path, cases: &mut Vec<PathBuf>, expected: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            collect(&path, into);
-        } else if path.extension().is_some_and(|e| e == "md") {
-            into.push(path);
+            collect(&path, cases, expected);
+        } else if path.to_string_lossy().ends_with(".expected.md") {
+            expected.push(path);
+        } else if path.extension().is_some_and(|e| e == "md")
+            && !path
+                .file_name()
+                .is_some_and(|n| n.eq_ignore_ascii_case("README.md"))
+        {
+            // A directory says what its cases are for, the way the other
+            // fixture directories already do. That note is not itself a case.
+            cases.push(path);
         }
     }
 }

@@ -7,13 +7,16 @@
 //! syntax highlighting of whatever it holds, and nothing else in the toolchain
 //! tries to lint or format the contents.
 //!
-//! Everything below the generated marker is output, rewritten by blessing.
-//! Everything above it is input, and never touched.
+//! Inputs and outputs are separate files: `some-case.md` is written by hand
+//! and never touched, `some-case.expected.md` is generated whole. Splicing
+//! generated content into the file that describes the case meant a marker
+//! line whose loss would silently turn old output into input, and it made a
+//! clean regeneration of everything impossible.
 
 use std::fmt::Write as _;
 
-/// The line that separates what a case says from what it found.
-pub const GENERATED: &str = "<!-- Everything below is generated. UPDATE_EXPECT=1 cargo test -->";
+/// Said at the top of every generated file, so nobody edits one by hand.
+pub const GENERATED: &str = "<!-- Generated. Do not edit; UPDATE_EXPECT=1 cargo test -->";
 
 /// One `##` section of a case.
 #[derive(Debug, Clone)]
@@ -44,12 +47,9 @@ impl Case {
     }
 }
 
-/// Read the input half of a case: everything above the generated marker.
+/// Read a case: its title, its prose, and its sections.
 pub fn parse(text: &str) -> Case {
-    let inputs_text = match text.split_once(GENERATED) {
-        Some((before, _)) => before,
-        None => text,
-    };
+    let inputs_text = text;
 
     let mut preamble = String::new();
     let mut sections: Vec<Section> = Vec::new();
@@ -110,18 +110,25 @@ pub fn parse(text: &str) -> Case {
     }
 }
 
-/// Write a case back out: its inputs verbatim, then what it found.
-pub fn render(text: &str, outputs: &[Section]) -> String {
-    let inputs = match text.split_once(GENERATED) {
-        Some((before, _)) => before.trim_end(),
-        None => text.trim_end(),
-    };
+/// The case's title, for the head of the generated file.
+///
+/// Repeated there so that a diff of expectations alone still says which case
+/// it belongs to — a reviewer reading a behaviour change should not have to
+/// open a second file to learn what was supposed to happen.
+pub fn title(text: &str) -> String {
+    text.lines()
+        .find_map(|l| l.strip_prefix("# "))
+        .unwrap_or("A case")
+        .trim()
+        .to_string()
+}
 
+/// Write what a case found, as a document of its own.
+pub fn render(title: &str, source: &str, outputs: &[Section]) -> String {
     let mut out = String::new();
-    out.push_str(inputs);
-    out.push_str("\n\n");
-    out.push_str(GENERATED);
-    out.push('\n');
+    let _ = writeln!(out, "# {title}\n");
+    let _ = writeln!(out, "<!-- From {source}. -->");
+    let _ = writeln!(out, "{GENERATED}");
 
     for section in outputs {
         let _ = write!(out, "\n## {}\n\n", section.name);
