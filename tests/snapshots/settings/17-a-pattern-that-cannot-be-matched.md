@@ -9,3 +9,15 @@ matching nothing on every folder in the library.
 template = '''{{opera.title}}'''
 ignore = ["["]
 ```
+
+## Library
+
+```tree
+DonGiovanni/findopera-332.txt
+```
+
+## Run
+
+```console
+$ findopera organize ./library
+```

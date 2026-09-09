@@ -11,3 +11,15 @@ with no final newline would.
 template = '''
 {{opera.title}}
 ```
+
+## Library
+
+```tree
+DonGiovanni/findopera-332.txt
+```
+
+## Run
+
+```console
+$ findopera organize ./library
+```

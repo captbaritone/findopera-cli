@@ -155,54 +155,8 @@ fn normalize(text: &str, sandbox: &Sandbox) -> String {
 }
 
 /// Run one case file and return the sections it produced.
-///
-/// What kind of case it is comes from the sections it declares, not from
-/// which directory it sits in: a case with `## Toml` is asking what a
-/// settings file parses to, one with `## Run` is asking what a command does.
 fn outputs_for(path: &Path, text: &str) -> Vec<Section> {
-    let case = markdown::parse(text);
-    if case.section("Toml").is_some() {
-        return settings_outputs(&case);
-    }
-    command_outputs(path, &case)
-}
-
-/// What a settings file parses to, or the complaint it draws.
-///
-/// A settings file is the first thing a person meets, and the message it
-/// gives when they get it slightly wrong is most of what decides whether the
-/// format was a good choice — so the message is the snapshot.
-fn settings_outputs(case: &markdown::Case) -> Vec<Section> {
-    let dir = std::env::temp_dir().join(format!("findopera-settings-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("a temporary directory");
-    let path = dir.join("findopera.toml");
-    std::fs::write(&path, case.body("Toml").unwrap_or_default()).expect("the settings");
-
-    let result = match findopera::config::Config::load(&path) {
-        Ok(c) => format!(
-            "template = {:?}\ndestination = {:?}\nlink = {:?}\n\
-             require-variants = {}\nfollow-links = {}\nignore = {:?}",
-            c.template.trim_end_matches('\n'),
-            c.destination,
-            c.link,
-            c.require_variants,
-            c.follow_links,
-            c.ignore
-        ),
-        // The temporary directory is different every run; the message is the
-        // thing under test, not where the file happened to be.
-        Err(e) => e
-            .to_string()
-            .replace(&path.display().to_string(), "findopera.toml"),
-    };
-    let _ = std::fs::remove_dir_all(&dir);
-
-    vec![Section {
-        name: "Result".to_string(),
-        language: String::new(),
-        body: result,
-    }]
+    command_outputs(path, &markdown::parse(text))
 }
 
 /// What a whole command did.
@@ -250,23 +204,28 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
     }
 
     // The config names the destination, which only exists at run time.
-    // The destination only exists at run time, and a config must name a
-    // template even where the case overrides it per run with -t.
+    // Two ways for a case to have settings. `## Toml` is written exactly as
+    // given, for a case whose subject *is* the settings file — filling
+    // anything in would be changing what is under test. `## Config` is the
+    // convenience for every other case, which only wants somewhere to build.
     let config = case
-        .body("Config")
-        .map(|c| {
-            let mut config = c.trim().to_string();
-            if !config.contains("template") {
-                config.insert_str(0, "template = \"{{opera.title}}\"\n");
-            }
-            format!(
-                "{config}\ndestination = \"{}\"\n",
-                sandbox.destination().display()
-            )
+        .body("Toml")
+        .map(str::to_string)
+        .or_else(|| {
+            case.body("Config").map(|c| {
+                let mut config = c.trim().to_string();
+                if !config.contains("template") {
+                    config.insert_str(0, "template = \"{{opera.title}}\"\n");
+                }
+                format!(
+                    "{config}\ndestination = \"{}\"\n",
+                    sandbox.destination().display()
+                )
+            })
         })
         .unwrap_or_default();
     let config_path = sandbox.root.join("findopera.toml");
-    if case.section("Config").is_some() {
+    if case.section("Config").is_some() || case.section("Toml").is_some() {
         std::fs::write(&config_path, &config).expect("a config");
     }
 
@@ -291,7 +250,9 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
                 *word = sandbox.library().to_string_lossy().to_string();
             }
         }
-        if case.section("Config").is_some() && !argv.iter().any(|a| a == "--config") {
+        if (case.section("Config").is_some() || case.section("Toml").is_some())
+            && !argv.iter().any(|a| a == "--config")
+        {
             argv.push("--config".to_string());
             argv.push(config_path.to_string_lossy().to_string());
         }

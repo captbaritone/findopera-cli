@@ -8,3 +8,15 @@ The likeliest typo of all, since Rust and Python both spell it the other way.
 template = '''{{opera.title}}'''
 require_variants = true
 ```
+
+## Library
+
+```tree
+DonGiovanni/findopera-332.txt
+```
+
+## Run
+
+```console
+$ findopera organize ./library
+```

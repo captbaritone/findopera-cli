@@ -5,28 +5,14 @@ One case is two files:
 - `some-case.md` — what to run. Written by hand, never generated.
 - `some-case.expected.md` — what it produced. Generated, never edited.
 
-A case names its sections, and the sections say what kind of case it is — not
-the directory it sits in. `## Toml` asks what a settings file parses to;
-`## Run` asks what a command does.
-
-## Settings
-
-| Section | What it is |
-|---|---|
-| `## Toml` | a `findopera.toml`, written to a file and loaded |
-
-What comes back is `Result`: the parsed settings, or the complaint. A settings
-file is the first thing a person meets, and the message it gives when they get
-it slightly wrong is most of what decides whether the format was a good
-choice — so the message is the snapshot.
-
-## Commands
+A case names its sections, and they say what it needs:
 
 | Section | What it is |
 |---|---|
 | `## Library` | a `tree` block laid out as the source library |
 | `## Destination` | files already there that this program did *not* build |
-| `## Config` | the `findopera.toml`; the destination is filled in |
+| `## Config` | settings, with the destination filled in for you |
+| `## Toml` | settings written exactly as given, for a case about the file itself |
 | `## Recordings` | serve the captured corpus, by whatever ids are asked for |
 | `## Answer <Operation>` | a canned reply for one GraphQL operation |
 | `## Run` | one `$ findopera …` line per command, run in order |
@@ -36,6 +22,12 @@ before, and in the generated file it is what is there after. It declares only
 files nobody claims, which is the one starting state a run cannot produce —
 for a destination this program built, run `organize --write` first, so the
 tree and the record of it agree.
+
+Every case runs a command and is judged on what a person would see. A
+behaviour that cannot change anything visible is not a case: it can neither
+break anybody nor be noticed doing so — which is why the settings cases show
+the folder a template renders, or the refusal a contradiction draws, rather
+than the fields a file parsed into.
 
 What comes back is `stdout`, `stderr`, `Destination`, `Requests` and `Exit`
 — all of them, every time. The failures worth catching live *between* those:

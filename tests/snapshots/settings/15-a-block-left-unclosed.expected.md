@@ -3,13 +3,34 @@
 <!-- From 15-a-block-left-unclosed.md. -->
 <!-- Generated. Do not edit; UPDATE_EXPECT=1 cargo test -->
 
-## Result
+## stdout
 
 ```
-findopera.toml is not valid:
+```
+
+## stderr
+
+```
+findopera: ./findopera.toml is not valid:
 TOML parse error at line 2, column 17
   |
 2 | {{opera.title}}
   |                 ^
 invalid multi-line literal string, expected `'`
+```
+
+## Destination
+
+```tree
+```
+
+## Requests
+
+```
+```
+
+## Exit
+
+```
+2
 ```

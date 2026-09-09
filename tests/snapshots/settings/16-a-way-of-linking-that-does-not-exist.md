@@ -9,3 +9,15 @@ rather than guessed at.
 template = '''{{opera.title}}'''
 link = "shortcut"
 ```
+
+## Library
+
+```tree
+DonGiovanni/findopera-332.txt
+```
+
+## Run
+
+```console
+$ findopera organize ./library
+```

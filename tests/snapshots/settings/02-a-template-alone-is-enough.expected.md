@@ -1,12 +1,12 @@
-# A template in a block is taken as written
+# A template alone is enough
 
-<!-- From 01-a-template-in-a-block-is-taken-as-written.md. -->
+<!-- From 02-a-template-alone-is-enough.md. -->
 <!-- Generated. Do not edit; UPDATE_EXPECT=1 cargo test -->
 
 ## stdout
 
 ```
-./library/DonGiovanni	L'inconnu [332]
+./library/DonGiovanni	Don Giovanni
 ```
 
 ## stderr

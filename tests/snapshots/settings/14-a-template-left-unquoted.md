@@ -8,3 +8,15 @@ quoting. This is the one place its wording does not land, so a hint is added.
 ```toml
 template = {{opera.title}}
 ```
+
+## Library
+
+```tree
+DonGiovanni/findopera-332.txt
+```
+
+## Run
+
+```console
+$ findopera organize ./library
+```
