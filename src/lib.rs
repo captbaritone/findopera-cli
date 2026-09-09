@@ -26,6 +26,7 @@ pub mod config;
 pub mod credentials;
 pub mod model;
 pub mod plan;
+pub mod release;
 pub mod scan;
 pub mod state;
 mod template;

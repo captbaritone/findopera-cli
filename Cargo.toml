@@ -26,6 +26,7 @@ globset = "0.4"
 ignore = "0.4"
 ureq = { version = "3", features = ["json"] }
 reflink-copy = "0.1"
+semver = "1.0.28"
 
 [profile.release]
 strip = true

@@ -5,7 +5,7 @@ use findopera::config::{self, Config};
 use findopera::credentials;
 use findopera::model::{crud, Recording, FIELDS};
 use findopera::FieldDoc;
-use findopera::{api, apply, plan, scan, Template};
+use findopera::{api, apply, plan, release, scan, Template};
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -22,6 +22,8 @@ The id in its name is also how this program recognises the folder later, which
 is what everything else here is built on.
 
 Start with `findopera init`, then `findopera organize --help`.
+
+`findopera self update` says whether a newer one has been released.
 
 Exit codes:
   0  nothing to report
@@ -413,6 +415,18 @@ something you are doing turns out to be blocked, and is not published.")]
     /// Forget the stored token.
     Logout,
 
+    /// This program itself: whether it is the current version.
+    #[command(
+        name = "self",
+        long_about = "\
+Things about this program rather than about a library or a record.
+
+  findopera self update    is there a newer one?",
+        subcommand_required = true,
+        arg_required_else_help = true
+    )]
+    Zelf(SelfArgs),
+
     /// Write a starter findopera.toml, explaining every setting.
     #[command(long_about = "\
 Write a starter findopera.toml into a directory, with every setting present
@@ -652,6 +666,46 @@ struct LinkArgs {
     what: Joining,
 }
 
+#[derive(Subcommand)]
+enum Selfing {
+    /// Say whether a newer version has been released.
+    #[command(long_about = "\
+Ask GitHub whether a newer findopera has been published, and say how to get
+it if so.
+
+  findopera self update
+
+It does not replace this binary. Whatever put it where it is — an installer,
+a package manager, or you with `scp` — is what knows where it lives and what
+is expected alongside it, and is the thing that should replace it. On the
+machines this is usually run on the binary may not even be writable by
+whoever is running it.
+
+So this reports, and names the command to run. Which command that is depends
+on how this copy looks to have been installed, which is guessed from where it
+sits and said as a guess.
+
+The check is one anonymous request to GitHub's releases API, which allows a
+limited number of those an hour from one address.")]
+    Update(SelfUpdateArgs),
+}
+
+#[derive(Args)]
+struct SelfArgs {
+    #[command(subcommand)]
+    what: Selfing,
+}
+
+#[derive(Args)]
+struct SelfUpdateArgs {
+    /// Print the result as JSON.
+    #[arg(long)]
+    json: bool,
+    /// Where to ask. For testing against something other than GitHub.
+    #[arg(long, hide = true, default_value = release::RELEASES_API, value_name = "URL")]
+    releases_url: String,
+}
+
 #[derive(Args)]
 struct DescribeArgs {
     /// The type. Omit to list them all.
@@ -855,6 +909,9 @@ fn run() -> i32 {
         Command::Feedback(args) => cmd_feedback(args),
         Command::Login(args) => cmd_login(args),
         Command::Logout => cmd_logout(),
+        Command::Zelf(args) => match args.what {
+            Selfing::Update(a) => cmd_self_update(a),
+        },
         Command::Init(args) => cmd_init(args),
     }
 }
@@ -1208,6 +1265,74 @@ fn cmd_link(args: LinkArgs, on: bool) -> i32 {
         }
         Err(e) => failed(&e, a.json),
     }
+}
+
+fn cmd_self_update(args: SelfUpdateArgs) -> i32 {
+    // Where this binary sits is what the advice is built from. If the path
+    // cannot be had — which is possible, and not worth failing over — the
+    // installer is the documented route and so the better guess.
+    let exe = std::env::current_exe().ok();
+    let check = match release::check(&args.releases_url, exe.as_deref()) {
+        Ok(c) => c,
+        Err(e) => {
+            if args.json {
+                let body = serde_json::json!({
+                    "errors": [{ "message": e.to_string(), "code": "UNREACHABLE" }]
+                });
+                eprintln!(
+                    "{}",
+                    serde_json::to_string_pretty(&body).unwrap_or_default()
+                );
+            } else {
+                eprintln!("findopera: {e}");
+            }
+            return 3;
+        }
+    };
+
+    let mut out = std::io::stdout().lock();
+    if args.json {
+        emit(
+            &mut out,
+            format_args!(
+                "{}",
+                serde_json::json!({
+                    "current": check.current.to_string(),
+                    "latest": check.latest.to_string(),
+                    "update_available": check.newer_available(),
+                    "how": check.how.command(),
+                })
+            ),
+        );
+        return 0;
+    }
+
+    if !check.newer_available() {
+        // Ahead of the latest release is what a build from a checkout looks
+        // like, and saying "up to date" there would be a small lie.
+        if check.current > check.latest {
+            eprintln!(
+                "findopera: this is {}, which is ahead of the latest release ({}).",
+                check.current, check.latest
+            );
+        } else {
+            eprintln!("findopera: {} is the latest release.", check.current);
+        }
+        return 0;
+    }
+
+    emit(&mut out, format_args!("{}", check.latest));
+    eprintln!(
+        "findopera: {} has been released; this is {}.\n\n  {}\n",
+        check.latest,
+        check.current,
+        check.how.command()
+    );
+    eprintln!(
+        "That is a guess from where this binary sits. If you installed it some \
+         other way, update it that way — this does not replace itself."
+    );
+    0
 }
 
 fn cmd_describe(args: DescribeArgs) -> i32 {

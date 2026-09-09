@@ -26,6 +26,27 @@ lives.
 With a Rust toolchain, `cargo install --git https://github.com/captbaritone/findopera-cli`
 works too.
 
+### Staying current
+
+```bash
+$ findopera self update
+findopera: 0.9.0 has been released; this is 0.7.2.
+
+  curl --proto '=https' --tlsv1.2 -LsSf \
+    https://github.com/captbaritone/findopera-cli/releases/latest/download/findopera-installer.sh | sh
+```
+
+It asks GitHub what the latest release is and says how to get it. It does not
+replace the binary. Whatever put it where it is — one of the installers above,
+Cargo, or you with `scp` — is what knows where it lives and what is expected
+alongside it, and overwriting it from underneath leaves that thing's record of
+the world wrong. On a NAS the binary may not even be writable by whoever is
+running it.
+
+Which command it names is a guess from where the binary sits, and is said as
+one. `--json` gives `current`, `latest`, `update_available` and `how`, for
+anything that would rather decide for itself.
+
 ## Getting started
 
 ```bash
