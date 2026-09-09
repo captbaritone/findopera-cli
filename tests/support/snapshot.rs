@@ -250,9 +250,7 @@ fn slashes_in_paths(text: &str) -> String {
     while let Some(i) = rest.find("./library").or_else(|| rest.find("./named")) {
         out.push_str(&rest[..i]);
         let tail = &rest[i..];
-        let end = tail
-            .find(|c: char| c == ' ' || c == '\t' || c == '\n')
-            .unwrap_or(tail.len());
+        let end = tail.find([' ', '\t', '\n']).unwrap_or(tail.len());
         out.push_str(&tail[..end].replace('\\', "/"));
         rest = &tail[end..];
     }
@@ -261,15 +259,25 @@ fn slashes_in_paths(text: &str) -> String {
 }
 
 /// Replace anything that changes between runs.
+///
+/// Both spellings of each directory: what a case was handed, and what the
+/// program made of it. Resolving a path on Windows yields the extended-length
+/// form — `\\?\C:\…` — which shares no prefix with the one it started as, so
+/// a message quoting the resolved path would otherwise carry a temporary
+/// directory into the expectations.
 fn normalize(text: &str, sandbox: &Sandbox) -> String {
-    let library = sandbox.library().to_string_lossy().to_string();
-    let destination = sandbox.destination().to_string_lossy().to_string();
-    let root = sandbox.root.to_string_lossy().to_string();
-    let normalized = text
-        .replace(&library, "./library")
-        .replace(&destination, "./named")
-        .replace(&root, ".")
-        .replace(env!("CARGO_PKG_VERSION"), "<version>");
+    let mut normalized = text.to_string();
+    for (path, token) in [
+        (sandbox.library(), "./library"),
+        (sandbox.destination(), "./named"),
+        (sandbox.root.clone(), "."),
+    ] {
+        if let Ok(resolved) = std::fs::canonicalize(&path) {
+            normalized = normalized.replace(&*resolved.to_string_lossy(), token);
+        }
+        normalized = normalized.replace(&*path.to_string_lossy(), token);
+    }
+    let normalized = normalized.replace(env!("CARGO_PKG_VERSION"), "<version>");
     slashes_in_paths(&normalized)
 }
 
