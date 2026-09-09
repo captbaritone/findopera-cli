@@ -585,7 +585,13 @@ pub fn run_all(dir: &Path) {
             markdown::render(&markdown::title(&text), &source, &outputs_for(path, &text));
 
         let at = expected_path(path);
-        let before = std::fs::read_to_string(&at).unwrap_or_default();
+        // Read as it was written, whatever the checkout did to the newlines.
+        // Git can be told to leave them alone, and is, but a comparison that
+        // depends on that setting fails for a reason nobody can see: the two
+        // differ in bytes that a difference of lines does not show.
+        let before = std::fs::read_to_string(&at)
+            .unwrap_or_default()
+            .replace("\r\n", "\n");
         if produced == before {
             continue;
         }
@@ -654,6 +660,15 @@ fn difference(was: &str, now: &str) -> String {
     let old: Vec<&str> = was.lines().collect();
     let new: Vec<&str> = now.lines().collect();
     let mut out = String::new();
+    if old == new {
+        // Which happens when the two differ in bytes a line does not carry —
+        // a trailing newline, or the newlines themselves.
+        return format!(
+            "the lines are identical; the bytes are not ({} against {})",
+            was.len(),
+            now.len()
+        );
+    }
     for i in 0..old.len().max(new.len()) {
         match (old.get(i), new.get(i)) {
             (Some(a), Some(b)) if a == b => {}

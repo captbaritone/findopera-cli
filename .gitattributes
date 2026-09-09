@@ -1,0 +1,9 @@
+# Snapshot expectations are compared byte for byte, and are generated with
+# newlines. Checking them out with CRLF on Windows makes every one of them
+# differ from what the run produces, invisibly — the difference is in bytes
+# the comparison of lines cannot see.
+*.md text eol=lf
+*.txt text eol=lf
+*.rs text eol=lf
+*.graphql text eol=lf
+*.toml text eol=lf
