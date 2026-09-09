@@ -1058,6 +1058,38 @@ impl Client {
         identifier(&payload["data"][kind.update], kind)
     }
 
+    /// Merge one record into another, and hand back the surviving id.
+    ///
+    /// The server refuses while anything still points at the losing record,
+    /// which is the whole reason this is safe to offer: the alternative to
+    /// being refused is a merge that silently decides what happens to those
+    /// references.
+    pub fn merge(
+        &self,
+        kind: &Type,
+        id: &str,
+        into: &str,
+        justification: &str,
+    ) -> Result<String, ApiError> {
+        let Some(mutation) = kind.merge else {
+            return Err(ApiError::Refused(Refusal(vec![Complaint {
+                message: format!("{} records cannot be merged", kind.name),
+                code: Some("NOT_MERGEABLE".to_string()),
+                path: Vec::new(),
+            }])));
+        };
+        let document = format!(
+            "mutation Merge($id: String!, $intoId: String!, $justification: String!) {{\n  \
+             {mutation}(id: $id, intoId: $intoId, justification: $justification) {{ id }}\n}}"
+        );
+        let payload = self.query_named(
+            &document,
+            "Merge",
+            serde_json::json!({ "id": id, "intoId": into, "justification": justification }),
+        )?;
+        identifier(&payload["data"][mutation], kind)
+    }
+
     /// Remove a record.
     pub fn delete(&self, kind: &Type, id: &str, justification: &str) -> Result<(), ApiError> {
         let document = format!(

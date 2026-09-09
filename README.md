@@ -78,7 +78,8 @@ $ findopera organize '{{composer.lastName}}/{{opera.title}}[ ({{year}})]' ~/Musi
 
 ## Reading and changing records
 
-Every type in the database can be read, added to, changed and removed:
+Every type in the database can be read, added to, changed and removed, and
+some of them merged:
 
 ```bash
 $ findopera get recording 264
@@ -91,6 +92,7 @@ $ echo '{"firstName":"Maria","lastName":"Callas"}' \
     | findopera create singer -m 'https://en.wikipedia.org/wiki/Maria_Callas'
 $ echo '{"died":1977}' | findopera edit singer 133 -m 'https://...'
 $ findopera delete singer 133 -m '...' --yes
+$ findopera merge singer 133 --into 456 -m '...' --yes
 ```
 
 `findopera describe` lists the twenty types. Input is JSON on stdin or from a
@@ -137,6 +139,36 @@ recordings, and it is checked before a twelve-role payload is sent.
 one created by itself. `describe recording` shows the shape of a portrayal
 under the field, and `--json` gives it an `items` subschema, so a validator can
 check the cast rather than only that it is a list.
+
+### Two records of one thing
+
+Duplicates happen: the same singer entered twice under two spellings, one
+opera catalogued from two sources. `merge` folds one into the other rather
+than deleting it, which is the difference that matters — the losing id keeps
+resolving, to the survivor:
+
+```bash
+$ findopera merge singer 133 --into 456 -m 'same person, two spellings' --yes
+456
+```
+
+The first id loses and the one after `--into` survives. That asymmetry is
+worth reading twice, so it is spelled with a flag rather than left to the
+order of two bare numbers, and `--yes` is required as it is for `delete`.
+
+What comes back is the surviving id, not the one that was asked for, so it can
+be handed straight to another command. Where the survivor has itself been
+merged since, those differ.
+
+A merge is refused while anything still points at the losing record — the
+recordings filed against a duplicate singer, say. Move them across first, so
+that what became of them is a decision somebody made rather than a side
+effect. The server decides this and names what is in the way.
+
+Only some types can be merged: character, composer, conductor, language,
+opera, recording and singer. Which ones is read off the schema by codegen
+rather than listed by hand here, and `findopera describe <type>` says whether
+a given one can.
 
 ### Attaching a barcode
 

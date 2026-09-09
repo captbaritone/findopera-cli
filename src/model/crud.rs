@@ -12,7 +12,7 @@ pub struct InputField {
     pub about: &'static str,
 }
 
-/// A type, and the four things that can be done to it.
+/// A type, and what can be done to it.
 pub struct Type {
     /// What it is called on the command line.
     pub name: &'static str,
@@ -23,6 +23,8 @@ pub struct Type {
     pub add: &'static str,
     pub update: &'static str,
     pub remove: &'static str,
+    /// The mutation that merges one of these away, where there is one.
+    pub merge: Option<&'static str>,
     /// The GraphQL input object a create takes.
     pub create_input: &'static str,
     /// The same for an edit, where every field is optional.
@@ -63,6 +65,7 @@ pub const TYPES: &[Type] = &[
         add: "addAlbumCoverArt",
         update: "updateAlbumCoverArt",
         remove: "deleteAlbumCoverArt",
+        merge: None,
         create_input: "CreateAlbumCoverArtInput",
         edit_input: "UpdateAlbumCoverArtInput",
         create: &[
@@ -85,6 +88,7 @@ pub const TYPES: &[Type] = &[
         add: "addAppleMusicAlbum",
         update: "updateAppleMusicAlbum",
         remove: "deleteAppleMusicAlbum",
+        merge: None,
         create_input: "CreateAppleMusicAlbumInput",
         edit_input: "UpdateAppleMusicAlbumInput",
         create: &[
@@ -105,6 +109,7 @@ pub const TYPES: &[Type] = &[
         add: "addCharacter",
         update: "updateCharacter",
         remove: "deleteCharacter",
+        merge: Some("mergeCharacter"),
         create_input: "CreateCharacterInput",
         edit_input: "UpdateCharacterInput",
         create: &[
@@ -127,6 +132,7 @@ pub const TYPES: &[Type] = &[
         add: "addComposer",
         update: "updateComposer",
         remove: "deleteComposer",
+        merge: Some("mergeComposer"),
         create_input: "CreateComposerInput",
         edit_input: "UpdateComposerInput",
         create: &[
@@ -159,6 +165,7 @@ pub const TYPES: &[Type] = &[
         add: "addConductor",
         update: "updateConductor",
         remove: "deleteConductor",
+        merge: Some("mergeConductor"),
         create_input: "CreateConductorInput",
         edit_input: "UpdateConductorInput",
         create: &[
@@ -191,6 +198,7 @@ pub const TYPES: &[Type] = &[
         add: "addLanguage",
         update: "updateLanguage",
         remove: "deleteLanguage",
+        merge: Some("mergeLanguage"),
         create_input: "CreateLanguageInput",
         edit_input: "UpdateLanguageInput",
         create: &[
@@ -213,6 +221,7 @@ pub const TYPES: &[Type] = &[
         add: "addMusicBrainzRelease",
         update: "updateMusicBrainzRelease",
         remove: "deleteMusicBrainzRelease",
+        merge: None,
         create_input: "CreateMusicBrainzReleaseInput",
         edit_input: "UpdateMusicBrainzReleaseInput",
         create: &[
@@ -233,6 +242,7 @@ pub const TYPES: &[Type] = &[
         add: "addMusicBrainzReleaseGroup",
         update: "updateMusicBrainzReleaseGroup",
         remove: "deleteMusicBrainzReleaseGroup",
+        merge: None,
         create_input: "CreateMusicBrainzReleaseGroupInput",
         edit_input: "UpdateMusicBrainzReleaseGroupInput",
         create: &[
@@ -253,6 +263,7 @@ pub const TYPES: &[Type] = &[
         add: "addNaxosAlbum",
         update: "updateNaxosAlbum",
         remove: "deleteNaxosAlbum",
+        merge: None,
         create_input: "CreateNaxosAlbumInput",
         edit_input: "UpdateNaxosAlbumInput",
         create: &[
@@ -273,6 +284,7 @@ pub const TYPES: &[Type] = &[
         add: "addOpera",
         update: "updateOpera",
         remove: "deleteOpera",
+        merge: Some("mergeOpera"),
         create_input: "CreateOperaInput",
         edit_input: "UpdateOperaInput",
         create: &[
@@ -305,6 +317,7 @@ pub const TYPES: &[Type] = &[
         add: "addPortrayal",
         update: "updatePortrayal",
         remove: "deletePortrayal",
+        merge: None,
         create_input: "CreatePortrayalInput",
         edit_input: "UpdatePortrayalInput",
         create: &[
@@ -329,6 +342,7 @@ pub const TYPES: &[Type] = &[
         add: "addPrestoMusicAlbum",
         update: "updatePrestoMusicAlbum",
         remove: "deletePrestoMusicAlbum",
+        merge: None,
         create_input: "CreatePrestoMusicAlbumInput",
         edit_input: "UpdatePrestoMusicAlbumInput",
         create: &[
@@ -351,6 +365,7 @@ pub const TYPES: &[Type] = &[
         add: "addRecording",
         update: "updateRecording",
         remove: "deleteRecording",
+        merge: Some("mergeRecording"),
         create_input: "CreateRecordingInput",
         edit_input: "UpdateRecordingInput",
         create: &[
@@ -391,6 +406,7 @@ pub const TYPES: &[Type] = &[
         add: "addRecordingURL",
         update: "updateRecordingURL",
         remove: "deleteRecordingURL",
+        merge: None,
         create_input: "CreateRecordingURLInput",
         edit_input: "UpdateRecordingURLInput",
         create: &[
@@ -411,6 +427,7 @@ pub const TYPES: &[Type] = &[
         add: "addSinger",
         update: "updateSinger",
         remove: "deleteSinger",
+        merge: Some("mergeSinger"),
         create_input: "CreateSingerInput",
         edit_input: "UpdateSingerInput",
         create: &[
@@ -443,6 +460,7 @@ pub const TYPES: &[Type] = &[
         add: "addSpotifyAlbum",
         update: "updateSpotifyAlbum",
         remove: "deleteSpotifyAlbum",
+        merge: None,
         create_input: "CreateSpotifyAlbumInput",
         edit_input: "UpdateSpotifyAlbumInput",
         create: &[
@@ -465,6 +483,7 @@ pub const TYPES: &[Type] = &[
         add: "addSpotifyTrack",
         update: "updateSpotifyTrack",
         remove: "deleteSpotifyTrack",
+        merge: None,
         create_input: "CreateSpotifyTrackInput",
         edit_input: "UpdateSpotifyTrackInput",
         create: &[
@@ -495,6 +514,7 @@ pub const TYPES: &[Type] = &[
         add: "addTidalAlbum",
         update: "updateTidalAlbum",
         remove: "deleteTidalAlbum",
+        merge: None,
         create_input: "CreateTidalAlbumInput",
         edit_input: "UpdateTidalAlbumInput",
         create: &[
@@ -515,6 +535,7 @@ pub const TYPES: &[Type] = &[
         add: "addUpc",
         update: "updateUpc",
         remove: "deleteUpc",
+        merge: None,
         create_input: "CreateUpcInput",
         edit_input: "UpdateUpcInput",
         create: &[
@@ -533,6 +554,7 @@ pub const TYPES: &[Type] = &[
         add: "addWikipediaImage",
         update: "updateWikipediaImage",
         remove: "deleteWikipediaImage",
+        merge: None,
         create_input: "CreateWikipediaImageInput",
         edit_input: "UpdateWikipediaImageInput",
         create: &[

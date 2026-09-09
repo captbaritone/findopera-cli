@@ -151,6 +151,16 @@ enum WikipediaImageSortBy {
   LAST_EDITED
 }
 
+"""
+Anything an edit can have touched.
+
+Records here are immutable and append-only, so a record reached this way is
+the record as it stands *now*, not as that edit left it. Following an edit
+to a singer tells you which singer was changed, not what the change said —
+for that, read the versions.
+"""
+union EditableRecord = AlbumCoverArt | AppleMusicAlbum | Character | Composer | Conductor | Language | MusicBrainzRelease | MusicBrainzReleaseGroup | NaxosAlbum | Opera | Portrayal | PrestoMusicAlbum | Recording | RecordingURL | Singer | SpotifyAlbum | SpotifyTrack | TidalAlbum | Upc | WikipediaImage
+
 input CreateAlbumCoverArtInput {
   imageUrl: String
   source: String
@@ -569,7 +579,17 @@ Edit model captures metadata about the edit, such as when it was made, who
 made it, and the justification for the edit.
 """
 type Edit {
-  editor: String
+  """
+  Where this edit stands: the verdict of its newest review.
+  
+  Null means nobody has reviewed it — which is a different thing from being
+  rejected, and the state a reviewer looks for. An approval is what takes an
+  edit out of that queue, which is why an approval is worth being sure
+  about: it is the last time anything will prompt somebody to look.
+  """
+  approved: Boolean
+  """Who made the edit."""
+  editor: String @deprecated(reason: "Returns an internal account id, which names nothing a caller\ncan look up. Kept because it is public API; there is nothing to replace it\nwith yet, since who edits is not published.")
   id: Int @semanticNonNull
   """
   The rational for the edit which was provided by the editor at the time of
@@ -579,8 +599,211 @@ type Edit {
   was added/changed, or an explanation of why information was removed.
   """
   justification: String
+  """The most recent review, or null if nobody has reviewed this edit."""
+  latestReview: EditReview
+  """
+  How many records this edit touched, including any `records` did not
+  return.
+  
+  Most edits touch one. The imports that seeded this database are edits too,
+  and the largest wrote over sixty thousand rows — so this is what tells a
+  caller that an edit is a bulk import rather than a change to be read.
+  """
+  recordCount: Int @semanticNonNull
+  """
+  What this edit touched: every record it wrote a new version of.
+  
+  Read from `edit_records`, which the versioned tables fill in by trigger.
+  Before that table this meant asking all twenty-one versioned tables in
+  turn, because a versioned row names its edit but nothing named the
+  reverse.
+  
+  Ordered so that an edit reads the way it happened: by table, then by
+  record.
+  
+  Bounded, and worth bounding even though the reads are cheap — five hundred
+  of these resolve in two queries and four milliseconds, because `getById`
+  batches through the request's dataloaders. What costs is what happens
+  afterwards: five hundred rendered rows is half a megabyte of HTML, and
+  that is the difference between a page that answers in a tenth of a second
+  and one that takes three. `recordCount` is how a caller knows there is
+  more.
+  """
+  records(
+    """At most this many records."""
+    first: Int! = 100
+  ): [EditedRecord!] @semanticNonNull
+  """
+  Every verdict recorded on this edit, oldest first.
+  
+  More than one is normal and is not a conflict: reviews are append-only, so
+  a reviewer who changes their mind, or a person overruling an agent, adds a
+  review rather than replacing one. `approved` is the one that counts.
+  """
+  reviews: [EditReview!] @semanticNonNull
   """Date/time at which the edit was made"""
   timestamp: DateTime @semanticNonNull
+  """A stable address for this edit."""
+  url: String @semanticNonNull
+}
+
+"""
+A verdict on one edit.
+
+Records here are immutable and anybody may become an editor, so nothing
+stands between a wrong edit and the database except somebody looking
+afterwards and saying so. This is that saying so.
+
+Reviews are append-only. A reviewer who changes their mind, or a second
+reviewer who disagrees, adds a review; the newest one is the edit's
+standing, and the older ones remain as the record of how it was reached.
+"""
+type EditReview {
+  """Whether the edit holds up against the source it cited."""
+  approved: Boolean @semanticNonNull
+  """
+  Why. On a rejection this is the case against the edit, and it is the only
+  thing whoever made it has to learn from.
+  """
+  comment: String
+  """
+  The edit that put this one right — a revert, or a correction.
+  
+  Only meaningful on a rejection, and optional even there: an edit can be
+  wrong before anyone has worked out what it should have said. Naming it is
+  what makes a rejection a repair rather than a complaint, and it is the
+  link that lets the wrong value and the right one be read together.
+  """
+  correction: Edit
+  """The edit being judged."""
+  edit: Edit
+  id: Int @semanticNonNull
+  """When the verdict was recorded."""
+  timestamp: DateTime @semanticNonNull
+}
+
+"""
+One record an edit touched.
+
+Records here are immutable: an edit does not change a row, it writes a new
+version of one. So this names the record and the version this edit produced,
+`changes` says what that version did, and `record` reaches the record itself
+as it stands today.
+"""
+type EditedRecord {
+  """
+  What this edit did to this record, field by field.
+  
+  The one thing a reviewer cannot get anywhere else. `record` below returns
+  the record as it stands today, which says which opera was changed but not
+  what the change said, and the old values live only in the versioned
+  tables. So this reads the version this edit wrote and the version before
+  it, and returns the fields that differ — nothing about the fields the edit
+  left alone.
+  
+  On a record this edit created, every field it set, with `before` null.
+  
+  A deletion writes a new version with the columns unchanged and a flag set,
+  so it is reported as a change to `isDeleted` — otherwise removing a record
+  would read as having changed nothing. `isDeleted` is not a field anything
+  can write; deleting is its own mutation, and there is no undoing one.
+  
+  Empty for a table added since this was generated, and for the odd row
+  whose previous version is missing — the historical imports wrote versioned
+  rows directly, and a few did not start at 1.
+  """
+  changes: [FieldChange!] @semanticNonNull
+  """True if this edit created the record rather than changing one."""
+  isNew: Boolean @semanticNonNull
+  """
+  The model this record belongs to, e.g. `Recording`.
+  
+  Null for a raw join table, which has no model of its own — linking a
+  recording to a barcode is an edit like any other, but there is no type to
+  name.
+  """
+  modelName: String
+  """
+  The record itself, **as it stands now** — not as this edit left it.
+  
+  Following an edit here tells you which singer was changed, not what the
+  change said. The models read the latest version of a row, and their
+  relationships resolve against today's data, so there is no honest way to
+  hand back the record as of an old version without version-aware traversal
+  through every relationship. `changes` is what the change said.
+  
+  Null when the record has no model of its own (a join table), or when it
+  has since been deleted.
+  """
+  record: EditableRecord
+  """
+  Identifies the record within its table. A join table has no single key, so
+  its parts are joined with a colon.
+  """
+  recordId: String @semanticNonNull
+  """
+  The table the record lives in, e.g. `recordings`. Always present, even
+  when there is no model.
+  """
+  tableName: String @semanticNonNull
+  """
+  Which version of the record this edit produced. Version 1 is the record's
+  creation.
+  """
+  version: Int @semanticNonNull
+}
+
+"""
+One field an edit changed, and what it changed it from.
+
+Values are rendered as text. The columns behind them are a mix of numbers,
+strings and flags, and a reviewer is reading them rather than computing with
+them — so `year` arrives as `"1953"` and `noted` as `"true"`, which is what
+they would have to type to write the value back. Null is kept as null, so
+that a column that held nothing is distinguishable from one that held the
+word "null" or an empty string.
+
+A foreign key is the exception that needs more than rendering: `"13282"` is
+true and useless. `beforeLabel` and `afterLabel` say who that is.
+"""
+type FieldChange {
+  """What this edit made it. Null means the edit cleared the field."""
+  after: String
+  """
+  Who `after` names, when this field is a foreign key. Null on the same
+  terms as `beforeLabel`.
+  """
+  afterLabel: String
+  """
+  What the field held before this edit. Null means the column held NULL, and
+  on a record this edit created, means there was nothing there at all.
+  """
+  before: String
+  """
+  Who `before` names, when this field is a foreign key — `"Elena Suliotis"`
+  for a `singerId` of `"13282"`.
+  
+  Null when the field is not a foreign key, when the value was null, when
+  the record it pointed at has since been deleted, and when the record is
+  its own name: a UPC is its barcode, and repeating it would explain
+  nothing.
+  
+  Resolved on request rather than alongside the diff, because a review that
+  only wants to see which fields moved should not pay to name them. Within a
+  request these batch through the dataloaders, so a whole cast costs two
+  queries rather than one per singer.
+  
+  The record is read as it stands today, the same caveat `record` carries.
+  """
+  beforeLabel: String
+  """
+  The field's name in the API — `languageId`, not `language_id` — because
+  somebody reading a diff is usually on their way to writing the correction.
+  
+  A join table has no model and so no public names; its columns are named as
+  SQLite has them.
+  """
+  field: String @semanticNonNull
 }
 
 type Language {
@@ -588,6 +811,7 @@ type Language {
   history: [Edit!] @semanticNonNull
   id: Int @semanticNonNull
   name: String @semanticNonNull
+  operas: [Opera!] @semanticNonNull
   wikipediaCategory: String @semanticNonNull
 }
 
@@ -952,6 +1176,148 @@ type Mutation {
     justification: String!
   ): Boolean @semanticNonNull
   """
+  Merge one Character into another, in favour of the second.
+  
+  Use when two records turn out to describe the same thing. The losing record
+  is deleted and keeps its history; anyone arriving with its id is sent to
+  the surviving record instead.
+  
+  Refused while anything still references the losing record — move or remove
+  those first, so that what happens to them is a decision somebody made.
+  """
+  mergeCharacter(
+    id: String!
+    intoId: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Character @semanticNonNull
+  """
+  Merge one Composer into another, in favour of the second.
+  
+  Use when two records turn out to describe the same thing. The losing record
+  is deleted and keeps its history; anyone arriving with its id is sent to
+  the surviving record instead.
+  
+  Refused while anything still references the losing record — move or remove
+  those first, so that what happens to them is a decision somebody made.
+  """
+  mergeComposer(
+    id: String!
+    intoId: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Composer @semanticNonNull
+  """
+  Merge one Conductor into another, in favour of the second.
+  
+  Use when two records turn out to describe the same thing. The losing record
+  is deleted and keeps its history; anyone arriving with its id is sent to
+  the surviving record instead.
+  
+  Refused while anything still references the losing record — move or remove
+  those first, so that what happens to them is a decision somebody made.
+  """
+  mergeConductor(
+    id: String!
+    intoId: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Conductor @semanticNonNull
+  """
+  Merge one Language into another, in favour of the second.
+  
+  Use when two records turn out to describe the same thing. The losing record
+  is deleted and keeps its history; anyone arriving with its id is sent to
+  the surviving record instead.
+  
+  Refused while anything still references the losing record — move or remove
+  those first, so that what happens to them is a decision somebody made.
+  """
+  mergeLanguage(
+    id: String!
+    intoId: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Language @semanticNonNull
+  """
+  Merge one Opera into another, in favour of the second.
+  
+  Use when two records turn out to describe the same thing. The losing record
+  is deleted and keeps its history; anyone arriving with its id is sent to
+  the surviving record instead.
+  
+  Refused while anything still references the losing record — move or remove
+  those first, so that what happens to them is a decision somebody made.
+  """
+  mergeOpera(
+    id: String!
+    intoId: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Opera @semanticNonNull
+  """
+  Merge one Recording into another, in favour of the second.
+  
+  Use when two records turn out to describe the same thing. The losing record
+  is deleted and keeps its history; anyone arriving with its id is sent to
+  the surviving record instead.
+  
+  Refused while anything still references the losing record — move or remove
+  those first, so that what happens to them is a decision somebody made.
+  """
+  mergeRecording(
+    id: String!
+    intoId: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Recording @semanticNonNull
+  """
+  Merge one Singer into another, in favour of the second.
+  
+  Use when two records turn out to describe the same thing. The losing record
+  is deleted and keeps its history; anyone arriving with its id is sent to
+  the surviving record instead.
+  
+  Refused while anything still references the losing record — move or remove
+  those first, so that what happens to them is a decision somebody made.
+  """
+  mergeSinger(
+    id: String!
+    intoId: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Singer @semanticNonNull
+  """
+  Record a verdict on an edit.
+  
+  Records here are immutable and anybody may become an editor, so nothing
+  stands between a wrong edit and the database except somebody looking
+  afterwards. This is how that looking gets written down.
+  
+  Reviewing an already-reviewed edit is allowed and is not an error: it is how
+  a second reviewer disagrees, and how a person overrules an agent. The newest
+  review is the edit's standing.
+  
+  Requires the `reviewer` role, which is granted by hand rather than handed
+  out by `createAccessToken`.
+  """
+  reviewEdit(
+    """Whether the edit holds up against the source it cited"""
+    approved: Boolean!
+    """
+    Why. On a rejection, say what is wrong and what the source actually
+    supports — it is the only thing whoever made the edit has to learn from.
+    """
+    comment: String
+    """
+    Optional, and only meaningful on a rejection: the edit that reverted or
+    corrected this one. Make the correcting edit first, then cite its id here.
+    """
+    correctionEditId: Int
+    """The edit being judged"""
+    editId: Int!
+  ): EditReview @semanticNonNull
+  """
   Say something to whoever maintains this.
   
   The website has had a way to do this since long before there was an API. A
@@ -1205,14 +1571,48 @@ type Query {
   getAlbumCoverArtByIds(ids: [String!]!): [AlbumCoverArt] @semanticNonNull
   getAppleMusicAlbumById(id: String!): AppleMusicAlbum
   getAppleMusicAlbumByIds(ids: [String!]!): [AppleMusicAlbum] @semanticNonNull
+  """
+  Look up a Character by id, following any merge.
+  
+  If this id belongs to a record that has since been merged into another,
+  the surviving record is returned, so that a link made before the merge
+  keeps working. Reading a merged-away record itself — its `history`, most
+  of all — is done by asking for its history, which never redirects.
+  """
   getCharacterById(id: String!): Character
   getCharacterByIds(ids: [String!]!): [Character] @semanticNonNull
   """Gets all UPCs that are associated with more than one opera recording."""
   getCollectionUpcs: [Upc!] @semanticNonNull
+  """
+  Look up a Composer by id, following any merge.
+  
+  If this id belongs to a record that has since been merged into another,
+  the surviving record is returned, so that a link made before the merge
+  keeps working. Reading a merged-away record itself — its `history`, most
+  of all — is done by asking for its history, which never redirects.
+  """
   getComposerById(id: String!): Composer
   getComposerByIds(ids: [String!]!): [Composer] @semanticNonNull
+  """
+  Look up a Conductor by id, following any merge.
+  
+  If this id belongs to a record that has since been merged into another,
+  the surviving record is returned, so that a link made before the merge
+  keeps working. Reading a merged-away record itself — its `history`, most
+  of all — is done by asking for its history, which never redirects.
+  """
   getConductorById(id: String!): Conductor
   getConductorByIds(ids: [String!]!): [Conductor] @semanticNonNull
+  """A single edit, by id."""
+  getEditById(id: Int!): Edit
+  """
+  Look up a Language by id, following any merge.
+  
+  If this id belongs to a record that has since been merged into another,
+  the surviving record is returned, so that a link made before the merge
+  keeps working. Reading a merged-away record itself — its `history`, most
+  of all — is done by asking for its history, which never redirects.
+  """
   getLanguageById(id: String!): Language
   getLanguageByIds(ids: [String!]!): [Language] @semanticNonNull
   getMusicBrainzReleaseById(id: String!): MusicBrainzRelease
@@ -1221,16 +1621,40 @@ type Query {
   getMusicBrainzReleaseGroupByIds(ids: [String!]!): [MusicBrainzReleaseGroup] @semanticNonNull
   getNaxosAlbumById(id: String!): NaxosAlbum
   getNaxosAlbumByIds(ids: [String!]!): [NaxosAlbum] @semanticNonNull
+  """
+  Look up a Opera by id, following any merge.
+  
+  If this id belongs to a record that has since been merged into another,
+  the surviving record is returned, so that a link made before the merge
+  keeps working. Reading a merged-away record itself — its `history`, most
+  of all — is done by asking for its history, which never redirects.
+  """
   getOperaById(id: String!): Opera
   getOperaByIds(ids: [String!]!): [Opera] @semanticNonNull
   getPortrayalById(id: String!): Portrayal
   getPortrayalByIds(ids: [String!]!): [Portrayal] @semanticNonNull
   getPrestoMusicAlbumById(id: String!): PrestoMusicAlbum
   getPrestoMusicAlbumByIds(ids: [String!]!): [PrestoMusicAlbum] @semanticNonNull
+  """
+  Look up a Recording by id, following any merge.
+  
+  If this id belongs to a record that has since been merged into another,
+  the surviving record is returned, so that a link made before the merge
+  keeps working. Reading a merged-away record itself — its `history`, most
+  of all — is done by asking for its history, which never redirects.
+  """
   getRecordingById(id: String!): Recording
   getRecordingByIds(ids: [String!]!): [Recording] @semanticNonNull
   getRecordingURLById(id: String!): RecordingURL
   getRecordingURLByIds(ids: [String!]!): [RecordingURL] @semanticNonNull
+  """
+  Look up a Singer by id, following any merge.
+  
+  If this id belongs to a record that has since been merged into another,
+  the surviving record is returned, so that a link made before the merge
+  keeps working. Reading a merged-away record itself — its `history`, most
+  of all — is done by asking for its history, which never redirects.
+  """
   getSingerById(id: String!): Singer
   getSingerByIds(ids: [String!]!): [Singer] @semanticNonNull
   getSpotifyAlbumById(id: String!): SpotifyAlbum
@@ -1269,6 +1693,32 @@ type Query {
   searchOperas(first: Int! = 5, query: String!): [Opera!] @semanticNonNull
   searchSingers(first: Int! = 5, query: String!): [Singer!] @semanticNonNull
   searchUpcs(first: Int! = 5, query: String!): [Upc!] @semanticNonNull
+  """
+  Edits nobody has reviewed yet, oldest first by default.
+  
+  The reviewer's work queue. Oldest first so that somebody working through
+  the backlog makes progress rather than being handed whatever is newest.
+  
+  That is the right default and the wrong one for the other job this queue
+  gets asked to do. There are well over a hundred thousand unreviewed edits,
+  most of them years of scraper runs, so somebody auditing what was changed
+  this week cannot reach it from the oldest end — and `afterId` is no help
+  when finding the newest id is the problem. `DESC` is for that.
+  """
+  unreviewedEdits(
+    """
+    Page by passing the last id you saw. Read in whichever direction `order`
+    names: ascending it means edits after this one, descending, before it.
+    Zero starts at whichever end `order` begins from.
+    """
+    afterId: Int! = 0
+    first: Int! = 50
+    """
+    `ASC`, the default, works the backlog from the oldest unreviewed edit.
+    `DESC` reviews what just happened.
+    """
+    order: SortOrder
+  ): [Edit!] @semanticNonNull
 }
 
 type Recording {

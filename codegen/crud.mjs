@@ -165,6 +165,11 @@ export function crud(schema, getOperations) {
       add: name,
       update: `update${graphql}`,
       remove: `delete${graphql}`,
+      // Only some types can be merged, so this is looked for rather than
+      // assumed. A type without one is not a gap to be filled in later: the
+      // server merges the things two records can turn out to be the same of,
+      // and a cover-art row is not one of them.
+      merge: mutations[`merge${graphql}`] ? `merge${graphql}` : null,
       // The input object names, taken from the schema rather than assembled
       // from the type name, so a server that ever spells one differently is
       // followed instead of guessed at.
@@ -192,7 +197,7 @@ export function crud(schema, getOperations) {
   L.push("    pub about: &'static str,");
   L.push("}");
   L.push("");
-  L.push("/// A type, and the four things that can be done to it.");
+  L.push("/// A type, and what can be done to it.");
   L.push("pub struct Type {");
   L.push("    /// What it is called on the command line.");
   L.push("    pub name: &'static str,");
@@ -203,6 +208,8 @@ export function crud(schema, getOperations) {
   L.push("    pub add: &'static str,");
   L.push("    pub update: &'static str,");
   L.push("    pub remove: &'static str,");
+  L.push("    /// The mutation that merges one of these away, where there is one.");
+  L.push("    pub merge: Option<&'static str>,");
   L.push("    /// The GraphQL input object a create takes.");
   L.push("    pub create_input: &'static str,");
   L.push("    /// The same for an edit, where every field is optional.");
@@ -244,6 +251,9 @@ export function crud(schema, getOperations) {
     L.push(`        add: ${rustStr(t.add)},`);
     L.push(`        update: ${rustStr(t.update)},`);
     L.push(`        remove: ${rustStr(t.remove)},`);
+    L.push(
+      `        merge: ${t.merge ? `Some(${rustStr(t.merge)})` : "None"},`,
+    );
     L.push(`        create_input: ${rustStr(t.createInput)},`);
     L.push(`        edit_input: ${rustStr(t.editInput)},`);
     for (const [key, list] of [["create", t.create], ["edit", t.edit]]) {

@@ -173,9 +173,38 @@ connection between the two goes.
 Remove a record.
 
 Nothing here is really destroyed — every change is versioned and can be
-reverted — but this is still the only command that takes something away, so it
-asks for --yes as well as a reason.")]
+reverted — but this takes something away, so it asks for --yes as well as a
+reason. `findopera merge` is the other one that does, and asks the same.
+
+Where a record is going because something else says the same thing, prefer
+merge: it leaves the old id pointing at the survivor, and this does not.")]
     Delete(DeleteArgs),
+
+    /// Fold one record into another that turns out to be the same thing.
+    #[command(
+        long_about = "\
+Merge a record into another, in favour of the second, for when two of them
+turn out to describe the same singer, opera or performance.
+
+  findopera merge singer 133 --into 456 -m 'https://... — same person, two spellings'
+
+The first id loses. Its record goes, keeping its history, and anyone arriving
+with that id afterwards is sent to the survivor instead, so a link written
+down before the merge still works.
+
+It is refused while anything still points at the losing record — recordings
+against a duplicate singer, say. Move those over first, so that what became
+of them is a decision somebody made rather than a side effect of this. The
+refusal comes from the server, and names what is still in the way.
+
+Not every type can be merged. `findopera describe <type>` says whether one
+can, and like `delete` this asks for --yes as well as a reason.",
+        after_help = "\
+Examples:
+  findopera merge singer 133 --into 456 -m 'same person, two spellings' --yes
+  findopera merge opera 12 --into 34 -m 'https://...' --yes --json"
+    )]
+    Merge(MergeArgs),
 
     /// List the types, or say what one holds.
     #[command(long_about = "\
@@ -560,6 +589,32 @@ struct DeleteArgs {
     token: Option<String>,
 }
 
+#[derive(Args)]
+struct MergeArgs {
+    /// What kind of record.
+    #[arg(value_name = "TYPE")]
+    kind: String,
+    /// The id that loses, and goes.
+    #[arg(value_name = "ID")]
+    id: String,
+    /// The id that survives, and keeps its own fields.
+    #[arg(long, value_name = "ID")]
+    into: String,
+    /// Source and context for this change, for the record's history.
+    #[arg(long, short = 'm', value_name = "TEXT")]
+    message: String,
+    /// Say so out loud. Nothing is merged without it.
+    #[arg(long)]
+    yes: bool,
+    /// Print the result as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
 /// What a relationship command joins.
 ///
 /// A subcommand rather than a value, as `search` is, so that each side can
@@ -790,6 +845,7 @@ fn run() -> i32 {
         Command::Link(args) => cmd_link(args, true),
         Command::Unlink(args) => cmd_link(args, false),
         Command::Delete(args) => cmd_delete(args),
+        Command::Merge(args) => cmd_merge(args),
         Command::Describe(args) => cmd_describe(args),
         Command::Search(args) => cmd_search(args),
         Command::Annotate(args) => cmd_annotate(args),
@@ -1020,6 +1076,90 @@ fn cmd_delete(args: DeleteArgs) -> i32 {
     }
 }
 
+fn cmd_merge(args: MergeArgs) -> i32 {
+    let kind = match kind_named(&args.kind) {
+        Ok(k) => k,
+        Err(code) => return code,
+    };
+    // Answered here rather than by the server, because the useful reply is the
+    // list of types that *can* be merged, and the server can only say that
+    // this mutation does not exist.
+    if kind.merge.is_none() {
+        let mergeable: Vec<&str> = crud::TYPES
+            .iter()
+            .filter(|t| t.merge.is_some())
+            .map(|t| t.name)
+            .collect();
+        return refused(
+            &format!(
+                "{} records cannot be merged. These can be: {}",
+                kind.name,
+                mergeable.join(", ")
+            ),
+            "NOT_MERGEABLE",
+            args.json,
+            2,
+        );
+    }
+    if args.message.trim().is_empty() {
+        return refused(
+            "-m needs a source and some context; it goes into the record's history",
+            "NO_JUSTIFICATION",
+            args.json,
+            2,
+        );
+    }
+    // A record merged into itself would either do nothing or destroy the only
+    // copy, depending on what the server makes of it. Neither is worth finding
+    // out by trying.
+    if args.id == args.into {
+        return refused(
+            &format!("{} {} is already itself", kind.name, args.id),
+            "BAD_INPUT",
+            args.json,
+            2,
+        );
+    }
+    if !args.yes {
+        return refused(
+            &format!(
+                "this would fold {} {} into {} and remove it. Pass --yes to do it.",
+                kind.name, args.id, args.into
+            ),
+            "NEEDS_CONFIRMATION",
+            args.json,
+            2,
+        );
+    }
+
+    let api = match client(&args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match api.merge(kind, &args.id, &args.into, &args.message) {
+        Ok(id) => {
+            let mut out = std::io::stdout().lock();
+            if args.json {
+                emit(
+                    &mut out,
+                    format_args!("{}", serde_json::json!({ "merged": args.id, "into": id })),
+                );
+            } else {
+                // The surviving id, so this composes with everything else that
+                // takes one — including where it is not the id that was asked
+                // for, the survivor having itself been merged since.
+                emit(&mut out, format_args!("{id}"));
+                eprintln!(
+                    "findopera: {} {} is now {} {id}",
+                    kind.name, args.id, kind.name
+                );
+            }
+            0
+        }
+        Err(e) => failed(&e, args.json),
+    }
+}
+
 fn cmd_link(args: LinkArgs, on: bool) -> i32 {
     let Joining::Recording(a) = args.what;
     if a.message.trim().is_empty() {
@@ -1179,6 +1319,13 @@ fn cmd_describe(args: DescribeArgs) -> i32 {
          extras. `findopera describe {} --json` gives this as a JSON Schema.",
         kind.name
     );
+    if kind.merge.is_some() {
+        eprintln!(
+            "\nTwo of these can turn out to be the same thing: `findopera merge {} \
+             <id> --into <id>` folds one into the other.",
+            kind.name
+        );
+    }
     0
 }
 
