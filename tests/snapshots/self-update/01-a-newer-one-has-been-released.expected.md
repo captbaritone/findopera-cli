@@ -12,9 +12,9 @@
 ## stderr
 
 ```
-findopera: 99.0.0 has been released; this is <version>. To get it:
+findopera: 99.0.0 has been released; you have <version>. Run this to install it:
     curl --proto '=https' --tlsv1.2 -LsSf https://findopera.com/install.sh | sh
-    installed another way? https://findopera.com/cli lists the rest — this never replaces itself
+    installed another way? https://findopera.com/cli lists the others
 ```
 
 ## Destination

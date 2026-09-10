@@ -11,7 +11,7 @@
 ## stderr
 
 ```
-findopera: this is <version>, which is ahead of the latest release (0.0.1).
+findopera: you have <version>, which is ahead of the latest release (0.0.1).
 ```
 
 ## Destination

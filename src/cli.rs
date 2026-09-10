@@ -1440,7 +1440,7 @@ fn cmd_self_update(ui: &mut Session, args: SelfUpdateArgs) -> i32 {
         if check.current > check.latest {
             note!(
                 ui,
-                "findopera: this is {}, which is ahead of the latest release ({}).",
+                "findopera: you have {}, which is ahead of the latest release ({}).",
                 check.current,
                 check.latest
             );
@@ -1451,17 +1451,19 @@ fn cmd_self_update(ui: &mut Session, args: SelfUpdateArgs) -> i32 {
     }
 
     emit(ui, format_args!("{}", check.latest));
+    // Imperative, because `self update` sounds like a command that updates
+    // and this one only says so. "Run this" answers who does the work, which
+    // is the whole of what a disclaimer afterwards was trying to say.
     note!(
         ui,
-        "findopera: {} has been released; this is {}. To get it:",
+        "findopera: {} has been released; you have {}. Run this to install it:",
         check.latest,
         check.current
     );
     note!(ui, "    {}", release::install_command());
     note!(
         ui,
-        "    installed another way? {} lists the rest — this never replaces \
-         itself",
+        "    installed another way? {} lists the others",
         release::INSTRUCTIONS
     );
     0
