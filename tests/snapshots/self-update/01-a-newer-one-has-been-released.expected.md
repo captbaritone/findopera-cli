@@ -13,7 +13,7 @@
 
 ```
 findopera: 99.0.0 has been released; you have <version>. Run this to install it:
-    curl --proto '=https' --tlsv1.2 -LsSf https://findopera.com/install.sh | sh
+    <install command>
     installed another way? https://findopera.com/cli lists the others
 ```
 

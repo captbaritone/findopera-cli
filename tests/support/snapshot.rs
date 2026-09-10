@@ -323,6 +323,10 @@ fn normalize(text: &str, sandbox: &Sandbox) -> String {
         }
     }
     let normalized = normalized.replace(env!("CARGO_PKG_VERSION"), "<version>");
+    // Which installer command a run names depends on the system running it,
+    // and the cases are about what the message says rather than which of the
+    // two it picked. Both texts are pinned in `release`, on every platform.
+    let normalized = normalized.replace(findopera::release::install_command(), "<install command>");
     // A list may carry the day it was written, which would otherwise make
     // every case holding one wrong tomorrow.
     let normalized = replace_dates(&normalized);

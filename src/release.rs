@@ -45,11 +45,15 @@ impl Check {
 /// nothing about what put the binary in it. Reading it that way sent somebody
 /// to `cargo install`, which refused, because Cargo had no record of an
 /// install it had not done.
+pub const INSTALL_UNIX: &str =
+    "curl --proto '=https' --tlsv1.2 -LsSf https://findopera.com/install.sh | sh";
+pub const INSTALL_WINDOWS: &str = "irm https://findopera.com/install.ps1 | iex";
+
 pub fn install_command() -> &'static str {
     if cfg!(windows) {
-        "irm https://findopera.com/install.ps1 | iex"
+        INSTALL_WINDOWS
     } else {
-        "curl --proto '=https' --tlsv1.2 -LsSf https://findopera.com/install.sh | sh"
+        INSTALL_UNIX
     }
 }
 
@@ -139,6 +143,31 @@ pub fn check(transport: &dyn crate::api::Transport, url: &str) -> Result<Check, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn both_install_commands_are_the_ones_the_site_gives() {
+        // Pinned here rather than in a case: which one a run prints depends on
+        // the system it is running on, and a case that captured one would be
+        // wrong on the other. Both are checked everywhere instead.
+        assert!(
+            INSTALL_UNIX.contains("findopera.com/install.sh"),
+            "{INSTALL_UNIX}"
+        );
+        assert!(INSTALL_UNIX.starts_with("curl "), "{INSTALL_UNIX}");
+        assert!(
+            INSTALL_WINDOWS.contains("findopera.com/install.ps1"),
+            "{INSTALL_WINDOWS}"
+        );
+        assert!(INSTALL_WINDOWS.starts_with("irm "), "{INSTALL_WINDOWS}");
+        assert_eq!(
+            install_command(),
+            if cfg!(windows) {
+                INSTALL_WINDOWS
+            } else {
+                INSTALL_UNIX
+            }
+        );
+    }
 
     #[test]
     fn a_tag_is_read_without_its_v() {

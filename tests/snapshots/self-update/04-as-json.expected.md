@@ -6,7 +6,7 @@
 ## stdout
 
 ```
-{"current":"<version>","install":"curl --proto '=https' --tlsv1.2 -LsSf https://findopera.com/install.sh | sh","latest":"99.0.0","update_available":true}
+{"current":"<version>","install":"<install command>","latest":"99.0.0","update_available":true}
 ```
 
 ## stderr
