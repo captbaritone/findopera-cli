@@ -32,6 +32,10 @@ pub struct Session<'a> {
     /// command knowing anything has changed.
     #[allow(clippy::type_complexity)]
     client: Option<Box<dyn Fn(&str, Option<String>) -> api::Client + Send + Sync>>,
+    /// How to fetch a document that is not findopera.com — the release check,
+    /// which asks GitHub rather than the API and so needs its own answer.
+    #[allow(clippy::type_complexity)]
+    fetch: Option<Box<dyn Fn() -> Box<dyn api::Transport> + Send + Sync>>,
 }
 
 impl<'a> Session<'a> {
@@ -40,6 +44,7 @@ impl<'a> Session<'a> {
             out,
             err,
             client: None,
+            fetch: None,
         }
     }
 
@@ -50,6 +55,23 @@ impl<'a> Session<'a> {
     ) -> Session<'a> {
         self.client = Some(Box::new(make));
         self
+    }
+
+    /// Answer this session's plain fetches with something other than the
+    /// network.
+    pub fn fetching_with(
+        mut self,
+        make: impl Fn() -> Box<dyn api::Transport> + Send + Sync + 'static,
+    ) -> Session<'a> {
+        self.fetch = Some(Box::new(make));
+        self
+    }
+
+    fn transport(&self) -> Box<dyn api::Transport> {
+        match &self.fetch {
+            Some(make) => make(),
+            None => Box::new(api::Http),
+        }
     }
 
     fn api(&self, endpoint: &str, token: Option<String>) -> api::Client {
@@ -1381,7 +1403,7 @@ fn cmd_self_update(ui: &mut Session, args: SelfUpdateArgs) -> i32 {
     // cannot be had — which is possible, and not worth failing over — the
     // installer is the documented route and so the better guess.
     let exe = std::env::current_exe().ok();
-    let check = match release::check(&args.releases_url, exe.as_deref()) {
+    let check = match release::check(&*ui.transport(), &args.releases_url, exe.as_deref()) {
         Ok(c) => c,
         Err(e) => {
             if args.json {
@@ -1435,15 +1457,15 @@ fn cmd_self_update(ui: &mut Session, args: SelfUpdateArgs) -> i32 {
     emit(ui, format_args!("{}", check.latest));
     note!(
         ui,
-        "findopera: {} has been released; this is {}.\n\n  {}\n",
+        "findopera: {} has been released; this is {}. To get it:",
         check.latest,
-        check.current,
-        check.how.command()
+        check.current
     );
+    note!(ui, "    {}", check.how.command());
     note!(
         ui,
-        "That is a guess from where this binary sits. If you installed it some \
-         other way, update it that way — this does not replace itself."
+        "    guessed from where this binary sits — if you installed it another \
+         way, update it that way, because this never replaces itself"
     );
     0
 }

@@ -68,6 +68,12 @@ impl Scripted {
         self
     }
 
+    /// Answer anything not otherwise scripted, with a status of its own.
+    pub fn refuses(self, status: u16, body: &str) -> Scripted {
+        self.0.fallback.lock().unwrap().push(reply(status, body));
+        self
+    }
+
     /// Answer anything not otherwise scripted.
     pub fn otherwise(self, status: u16, body: &str) -> Scripted {
         self.0.fallback.lock().unwrap().push(reply(status, body));

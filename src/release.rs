@@ -14,7 +14,6 @@
 
 use semver::Version;
 use std::path::Path;
-use std::time::Duration;
 
 /// Where releases are published.
 pub const RELEASES_API: &str =
@@ -121,42 +120,44 @@ pub fn latest_in(payload: &serde_json::Value) -> Result<Version, Error> {
 }
 
 /// Ask GitHub what the latest release is.
-pub fn check(url: &str, exe: Option<&Path>) -> Result<Check, Error> {
-    let response = ureq::get(url)
-        .header("user-agent", crate::api::USER_AGENT)
-        // The documented way to pin the shape of the answer, so a future
-        // default cannot quietly change the field this reads.
-        .header("accept", "application/vnd.github+json")
-        .config()
-        .timeout_global(Some(Duration::from_secs(10)))
-        .http_status_as_error(false)
-        .build()
-        .call()
-        .map_err(|e| Error::Unreachable(e.to_string()))?;
+///
+/// Through the same seam every other request goes through, so a test can
+/// answer this one too. It used to open its own socket, which meant the only
+/// way to exercise the command around it was to let it reach GitHub.
+pub fn check(
+    transport: &dyn crate::api::Transport,
+    url: &str,
+    exe: Option<&Path>,
+) -> Result<Check, Error> {
+    let request = crate::api::Request {
+        method: crate::api::Method::Get,
+        url: url.to_string(),
+        headers: vec![
+            ("User-Agent", crate::api::USER_AGENT.to_string()),
+            // The documented way to pin the shape of the answer, so a future
+            // default cannot quietly change the field this reads.
+            ("Accept", "application/vnd.github+json".to_string()),
+        ],
+        body: None,
+    };
+    let reply = transport.round_trip(&request).map_err(Error::Unreachable)?;
 
-    let status = response.status();
-    let mut response = response;
-    let body = response
-        .body_mut()
-        .read_to_string()
-        .map_err(|e| Error::Unreachable(e.to_string()))?;
-
-    if !status.is_success() {
+    if !reply.is_success() {
         // Worth naming: an unauthenticated caller gets sixty of these an hour
         // from one address, and "403" on its own would send someone looking
         // for a permission they do not need.
-        let why = if status.as_u16() == 403 || status.as_u16() == 429 {
+        let why = if reply.status == 403 || reply.status == 429 {
             "it is rate limiting this address, which it does after a number \
              of anonymous requests an hour. Try again later."
                 .to_string()
         } else {
-            format!("it answered {status}")
+            format!("it answered {}", reply.status)
         };
         return Err(Error::Unreachable(why));
     }
 
     let payload: serde_json::Value =
-        serde_json::from_str(&body).map_err(|e| Error::Unreadable(e.to_string()))?;
+        serde_json::from_str(&reply.body).map_err(|e| Error::Unreadable(e.to_string()))?;
     let latest = latest_in(&payload)?;
     let current = Version::parse(CURRENT)
         .map_err(|e| Error::Unreadable(format!("this binary's own version is unreadable: {e}")))?;

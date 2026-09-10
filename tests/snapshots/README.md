@@ -16,6 +16,7 @@ A case names its sections, and they say what it needs:
 | `## Recordings` | serve the captured corpus, by whatever ids are asked for |
 | `## Recording <id>` | one recording, said by how it differs from a real one |
 | `## Answer <Operation>` | a canned reply for one GraphQL operation, written out |
+| `## Answer <status>` | a reply with that status, for anything not otherwise answered |
 | `## Run` | one `$ …` line per step, run in order |
 | `## Requires` | what the platform must offer — `unix`, so far |
 
@@ -34,7 +35,10 @@ is a fixture describing a server that does not exist. `## Answer <Operation>`
 replaces the reply entirely, for the cases whose subject is an answer nothing
 real would give: a refusal, a rate limit, a record that is not there.
 
-An `## Answer` beats the corpus. A case that writes one out means it.
+An `## Answer` beats the corpus. A case that writes one out means it. In one,
+`{version}` is the version this binary was built as — a case about being
+current has to name it, and writing the number out would make the case wrong
+at the next release.
 
 A step in `## Run` is either the program or something done to the disk:
 

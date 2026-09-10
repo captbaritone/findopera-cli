@@ -395,13 +395,24 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
         script = script.serving_corpus(declared);
     }
 
+    // `{version}` in an answer, for a case about what this binary is: the
+    // release it calls current is the one it was built as, and writing that
+    // out would make the case wrong at the next bump.
+    let versioned = |body: &str| body.trim().replace("{version}", env!("CARGO_PKG_VERSION"));
     for section in &case.inputs {
-        if let Some(operation) = section.name.strip_prefix("Answer ") {
-            script = script.answers(operation.trim(), 200, section.body.trim());
+        let Some(named) = section.name.strip_prefix("Answer ") else {
+            continue;
+        };
+        let named = named.trim();
+        // `## Answer 403` is a status rather than an operation. No operation
+        // is a number, so which one is meant is never in question.
+        match named.parse::<u16>() {
+            Ok(status) => script = script.refuses(status, &versioned(&section.body)),
+            Err(_) => script = script.answers(named, 200, &versioned(&section.body)),
         }
     }
     if let Some(body) = case.body("Answer") {
-        script = script.otherwise(200, body.trim());
+        script = script.otherwise(200, &versioned(body));
     }
 
     // The config names the destination, which only exists at run time.
@@ -514,8 +525,10 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
             let _ = writeln!(err, "$ {command}");
         }
         let for_client = script.clone();
+        let for_fetch = script.clone();
         let mut ui = Session::new(&mut out, &mut err)
-            .served_by(move |endpoint, token| for_client.client(endpoint, token));
+            .served_by(move |endpoint, token| for_client.client(endpoint, token))
+            .fetching_with(move || Box::new(for_fetch.clone()));
         let code = match Cli::try_parse_from_argv(&argv) {
             Ok(cli) => findopera::cli::dispatch(&mut ui, cli),
             Err(printed) => {
