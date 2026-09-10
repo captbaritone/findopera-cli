@@ -802,9 +802,10 @@ version that also built trees of symlinks from marker files.
 
 The tree can only be filed one way, and whichever way you choose hides the
 rest: a library by composer says nothing about who sang, and finding a Tosca
-in it means already knowing that Tosca is Puccini's. So a build can leave a
-list beside the tree, which is the one place the whole collection reads at
-once:
+in it means already knowing that Tosca is Puccini's. So a build leaves a list
+beside the tree, which is the one place the whole collection reads at once.
+
+`findopera init` asks for one already; this is what it writes:
 
 ```toml
 [index]
@@ -827,5 +828,9 @@ somebody would look for them rather than after `Zimmermann`.
 
 It is written after a build and never read back. Unlike the record in
 `.findopera-state.json`, which is what makes removing a folder safe, this is
-only an answer to somebody's question: delete it, edit it, or leave the
-setting out, and nothing else changes.
+only an answer to somebody's question: delete it, edit it, or take the
+section out, and nothing else changes.
+
+`[index]` stays at the bottom of the settings file. Everything below a `[…]`
+heading belongs to it, so a setting written under this one would be read as
+part of the list.

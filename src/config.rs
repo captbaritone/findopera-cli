@@ -310,14 +310,18 @@ follow-links = false
 # folder for each, and `{{variants}}` names them together. `{{path}}` says
 # where to go. `findopera template` lists every field.
 #
-# Written after a build, never read back: delete it, edit it, or leave it out
-# and nothing else changes.
+# Written after a build, never read back: delete it, edit it, or take this
+# section out, and nothing else changes.
 #
-# [index]
-# file = "00 - What is in here.txt"
-# template = '''
-# {{composer.lastName}}, {{composer.firstName}} - {{opera.title}}[ ({{year}}[.{{month}}][.{{day}}])] {{conductor.lastName}}[ \[{{singers.lastNames}}\]][ \[{{variants}}\]] (findopera {{id}}) — {{path}}
-# '''
+# It stays at the bottom. Everything below a `[…]` heading belongs to it, so a
+# setting written under this one would be read as part of the list rather than
+# as a setting — put anything you add above here.
+
+[index]
+file = "00 - What is in here.txt"
+template = '''
+{{composer.lastName}}, {{composer.firstName}} - {{opera.title}}[ ({{year}}[.{{month}}][.{{day}}])] {{conductor.lastName}}[ \[{{singers.lastNames}}\]][ \[{{variants}}\]] (findopera {{id}}) — {{path}}
+'''
 "#;
     format!("{head}{syntax}{rest}")
 }
