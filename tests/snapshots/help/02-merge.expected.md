@@ -15,9 +15,9 @@ The first id loses. Its record goes, keeping its history, and anyone arriving
 with that id afterwards is sent to the survivor instead, so a link written
 down before the merge still works.
 
-It is refused while anything still points at the losing record — recordings
-against a duplicate singer, say. Move those over first, so that what became
-of them is a decision somebody made rather than a side effect of this. The
+A merge is refused while anything still points at the losing record —
+recordings against a duplicate singer, say. Move those over first, so that
+what became of them is a decision somebody made rather than a side effect. The
 refusal comes from the server, and names what is still in the way.
 
 Not every type can be merged. `findopera describe <type>` says whether one

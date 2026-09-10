@@ -24,11 +24,11 @@ writes one into the current folder, named as findopera.com names it:
 
   Sosarme, Re di Media-2026-Angioloni [findopera-10655].txt
 
-That name is also how this program recognises the folder again. It looks for
-`findopera-<id>` in it, so the file can be renamed freely as long as that part
-survives. A bare `10655.txt` is not enough — a number and a .txt is what a
-track listing or a year looks like, and the `findopera-` is what says the
-number means a recording.
+That filename is also how this program recognises the folder again: it looks
+for `findopera-<id>` in the name, so the file may be renamed freely as long
+as that part survives. A bare `10655.txt` is not enough — a number and a
+.txt is what a track listing or a year looks like, and the `findopera-` is
+what says the number means a recording.
 
 Only the name is matched on, never the contents, so a folder can be claimed by
 hand — `touch 'findopera-10655.txt'` works — but that leaves a file with
@@ -78,8 +78,8 @@ Options:
           Actually build it.
           
           Without this, nothing is written: the command says what it would do and stops. The
-          destination lives in the settings file rather than on the command line, so this is the
-          only thing that says out loud that a run is going to touch the disk.
+          destination lives in the settings file rather than on the command line, so this flag is
+          the only warning that a run is going to touch the disk.
 
       --dry-run
           Say so explicitly: make no changes.

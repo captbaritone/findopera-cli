@@ -178,7 +178,7 @@ pub fn starter() -> String {
         .map(|l| format!("#   {l}"))
         .collect::<Vec<_>>()
         .join("\n");
-    let head = r#"# How this library is organized.
+    let head = r#"# How this library is organised.
 #
 # Run `findopera organize` in this folder to see what each recording's folder
 # would be called. Nothing is renamed or moved; it only ever prints.

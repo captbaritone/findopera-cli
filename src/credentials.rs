@@ -1,7 +1,7 @@
 //! Where the token lives between runs.
 //!
 //! Deliberately not [`crate::config`]. That file sits inside the library being
-//! organized: [`crate::scan`] walks it, `organize --write` can link the folder
+//! organised: [`crate::scan`] walks it, `organize --write` can link the folder
 //! holding it into the destination tree, and libraries live on network shares
 //! and in sync folders. A secret kept there leaks by construction, however
 //! carefully it was written. This one goes in the user's own configuration

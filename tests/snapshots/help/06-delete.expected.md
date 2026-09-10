@@ -9,11 +9,12 @@
 Remove a record.
 
 Nothing here is really destroyed — every change is versioned and can be
-reverted — but this takes something away, so it asks for --yes as well as a
+reverted — but this removes a record, so it asks for --yes as well as a
 reason. `findopera merge` is the other one that does, and asks the same.
 
-Where a record is going because something else says the same thing, prefer
-merge: it leaves the old id pointing at the survivor, and this does not.
+Where a record is going because another record describes the same thing,
+prefer merge: a merge leaves the old id pointing at the survivor, and a
+delete does not.
 
 Usage: findopera delete [OPTIONS] --message <TEXT> <TYPE> <ID>
 

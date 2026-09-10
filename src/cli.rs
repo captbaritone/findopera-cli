@@ -141,11 +141,11 @@ writes one into the current folder, named as findopera.com names it:
 
   Sosarme, Re di Media-2026-Angioloni [findopera-10655].txt
 
-That name is also how this program recognises the folder again. It looks for
-`findopera-<id>` in it, so the file can be renamed freely as long as that part
-survives. A bare `10655.txt` is not enough — a number and a .txt is what a
-track listing or a year looks like, and the `findopera-` is what says the
-number means a recording.
+That filename is also how this program recognises the folder again: it looks
+for `findopera-<id>` in the name, so the file may be renamed freely as long
+as that part survives. A bare `10655.txt` is not enough — a number and a
+.txt is what a track listing or a year looks like, and the `findopera-` is
+what says the number means a recording.
 
 Only the name is matched on, never the contents, so a folder can be claimed by
 hand — `touch 'findopera-10655.txt'` works — but that leaves a file with
@@ -245,14 +245,15 @@ connection between the two goes.
 Remove a record.
 
 Nothing here is really destroyed — every change is versioned and can be
-reverted — but this takes something away, so it asks for --yes as well as a
+reverted — but this removes a record, so it asks for --yes as well as a
 reason. `findopera merge` is the other one that does, and asks the same.
 
-Where a record is going because something else says the same thing, prefer
-merge: it leaves the old id pointing at the survivor, and this does not.")]
+Where a record is going because another record describes the same thing,
+prefer merge: a merge leaves the old id pointing at the survivor, and a
+delete does not.")]
     Delete(DeleteArgs),
 
-    /// Fold one record into another that turns out to be the same thing.
+    /// Fold one record into another describing the same performance.
     #[command(
         long_about = "\
 Merge a record into another, in favour of the second, for when two of them
@@ -264,9 +265,9 @@ The first id loses. Its record goes, keeping its history, and anyone arriving
 with that id afterwards is sent to the survivor instead, so a link written
 down before the merge still works.
 
-It is refused while anything still points at the losing record — recordings
-against a duplicate singer, say. Move those over first, so that what became
-of them is a decision somebody made rather than a side effect of this. The
+A merge is refused while anything still points at the losing record —
+recordings against a duplicate singer, say. Move those over first, so that
+what became of them is a decision somebody made rather than a side effect. The
 refusal comes from the server, and names what is still in the way.
 
 Not every type can be merged. `findopera describe <type>` says whether one
@@ -465,7 +466,7 @@ does not end up in the shell's history, or visible to anyone who can list
 processes on this machine.
 
 It is kept in your own configuration directory — not in findopera.toml, which
-lives inside the library being organized and is walked, linked and synced
+lives inside the library being organised and is walked, linked and synced
 along with it.
 
 For anything unattended, set FINDOPERA_TOKEN instead and store nothing.
@@ -525,8 +526,8 @@ struct OrganizeArgs {
     ///
     /// Without this, nothing is written: the command says what it would do and
     /// stops. The destination lives in the settings file rather than on the
-    /// command line, so this is the only thing that says out loud that a run
-    /// is going to touch the disk.
+    /// command line, so this flag is the only warning that a run is going to
+    /// touch the disk.
     #[arg(long)]
     write: bool,
     /// Say so explicitly: make no changes.
@@ -745,11 +746,10 @@ it if so.
 
   findopera self update
 
-It does not replace this binary. Whatever put it where it is — an installer,
-a package manager, or you with `scp` — is what knows where it lives and what
-is expected alongside it, and is the thing that should replace it. On the
-machines this is usually run on the binary may not even be writable by
-whoever is running it.
+It does not replace this binary. Whatever installed it — an installer, a
+package manager, or you with `scp` — knows where the binary lives and what
+belongs beside it, and is what should replace it. On the machines this is
+usually run on, the binary may not even be writable by whoever runs it.
 
 So this reports, and names the command to run. Which command that is depends
 on how this copy looks to have been installed, which is guessed from where it

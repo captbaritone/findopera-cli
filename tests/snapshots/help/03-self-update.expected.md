@@ -11,11 +11,10 @@ it if so.
 
   findopera self update
 
-It does not replace this binary. Whatever put it where it is — an installer,
-a package manager, or you with `scp` — is what knows where it lives and what
-is expected alongside it, and is the thing that should replace it. On the
-machines this is usually run on the binary may not even be writable by
-whoever is running it.
+It does not replace this binary. Whatever installed it — an installer, a
+package manager, or you with `scp` — knows where the binary lives and what
+belongs beside it, and is what should replace it. On the machines this is
+usually run on, the binary may not even be writable by whoever runs it.
 
 So this reports, and names the command to run. Which command that is depends
 on how this copy looks to have been installed, which is guessed from where it
