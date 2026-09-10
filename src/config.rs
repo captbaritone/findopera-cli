@@ -97,6 +97,14 @@ pub struct Index {
     pub file: PathBuf,
     /// One line of it, in the same language folder names are written in.
     pub template: String,
+    /// A note at the top: what this is, and how to read a line of it.
+    ///
+    /// Somebody opening the file has no other context, and the line format is
+    /// yours — so only you can say what `(1959.07)` and `[flac, mp3]` mean.
+    /// It sits beside the template it describes, which is as close as the two
+    /// can be kept.
+    #[serde(default)]
+    pub header: Option<String>,
 }
 
 #[derive(Debug)]
@@ -183,6 +191,22 @@ impl Config {
                     why,
                 }
             })?;
+            if let Some(header) = &index.header {
+                crate::index::parse_header(header).map_err(|e| {
+                    let mut why = format!("the list header is not valid: {e}");
+                    for line in e.underline(header) {
+                        why.push_str(&format!("\n  {line}"));
+                    }
+                    if let Some(help) = &e.help {
+                        why.push_str(&format!("\n  help: {help}"));
+                    }
+                    why.push_str("\n  a header may name {{count}} and {{date}}, and nothing else");
+                    ConfigError::Invalid {
+                        path: path.to_path_buf(),
+                        why,
+                    }
+                })?;
+            }
             if index.file.as_os_str().is_empty() {
                 return Err(ConfigError::Invalid {
                     path: path.to_path_buf(),
@@ -333,6 +357,20 @@ follow-links = false
 
 [index]
 file = "00 - What is in here.txt"
+
+# A note at the top. Whoever opens the file has no other context, and the
+# shape of a line is yours — so the second line here says how to read one.
+#
+# It may name {{count}} and {{date}}, and nothing else: those are the two a
+# person cannot keep right by hand, and the two that tell a reader whether
+# they are looking at something current. Brackets are literal only when
+# written `\[` and `\]`, as in a folder name.
+header = '''
+List of the {{count}} opera recordings in this collection, as of {{date}}.
+
+Composer, first - Opera (year.month.day) Conductor \[singers\] \[rips\] (findopera id) — folder
+'''
+
 template = '''
 {{composer.lastName}}, {{composer.firstName}} - {{opera.title}}[ ({{year}}[.{{month}}][.{{day}}])] {{conductor.lastName}}[ \[{{singers.lastNames}}\]][ \[{{variants}}\]] (findopera {{id}}) — {{path}}
 '''

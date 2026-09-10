@@ -239,6 +239,32 @@ fn words(line: &str) -> Vec<String> {
     out
 }
 
+/// `2026-09-10` becomes `<date>`, wherever it appears.
+///
+/// Only a date in that exact shape, so a year in a folder name is left as it
+/// is — `1959` is four digits and not a date, and `1959.07` is not this one.
+fn replace_dates(text: &str) -> String {
+    let bytes: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let is_date = i + 10 <= bytes.len()
+            && bytes[i..i + 4].iter().all(char::is_ascii_digit)
+            && bytes[i + 4] == '-'
+            && bytes[i + 5..i + 7].iter().all(char::is_ascii_digit)
+            && bytes[i + 7] == '-'
+            && bytes[i + 8..i + 10].iter().all(char::is_ascii_digit);
+        if is_date {
+            out.push_str("<date>");
+            i += 10;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    out
+}
+
 /// Forward slashes inside the path tokens, whatever this platform writes.
 ///
 /// A token runs from `./library` or `./named` to the next tab, newline or
@@ -297,6 +323,9 @@ fn normalize(text: &str, sandbox: &Sandbox) -> String {
         }
     }
     let normalized = normalized.replace(env!("CARGO_PKG_VERSION"), "<version>");
+    // A list may carry the day it was written, which would otherwise make
+    // every case holding one wrong tomorrow.
+    let normalized = replace_dates(&normalized);
     slashes_in_paths(&normalized)
 }
 

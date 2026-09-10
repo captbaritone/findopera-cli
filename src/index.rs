@@ -50,6 +50,71 @@ pub fn parse(template: &str) -> Result<Template, TemplateError> {
     Template::parse(template, &schema())
 }
 
+/// How many recordings the list names.
+pub const COUNT: FieldDoc = FieldDoc::non_null("count", "How many recordings the list names");
+
+/// The day it was written, as `2026-09-10`.
+pub const DATE: FieldDoc =
+    FieldDoc::non_null("date", "The day the list was written, as `2026-09-10`");
+
+/// What the note at the top of a list may name.
+///
+/// Two fields, and neither is a recording's: a header is written once, above
+/// everything, and the only things it can say that a person could not write
+/// by hand are how many there are and when. Those are also the two that go
+/// stale silently, which is the whole reason to have them.
+pub fn header_schema() -> Vec<FieldDoc> {
+    vec![COUNT, DATE]
+}
+
+/// Check a header against what it may name.
+pub fn parse_header(template: &str) -> Result<Template, TemplateError> {
+    Template::parse(template, &header_schema())
+}
+
+/// What a header is rendered against.
+struct Summary {
+    count: usize,
+    date: String,
+}
+
+impl Fields for Summary {
+    fn required(&self, path: &str) -> String {
+        self.optional(path).unwrap_or_default()
+    }
+    fn optional(&self, path: &str) -> Option<String> {
+        match path {
+            p if p == COUNT.path => Some(self.count.to_string()),
+            p if p == DATE.path => Some(self.date.clone()),
+            _ => None,
+        }
+    }
+}
+
+/// Today, as `2026-09-10`.
+///
+/// Worked out here rather than taken from a crate: it is one date, in one
+/// format, and the algorithm for it is older than any of the crates that
+/// would do it. Days since the epoch to a civil date, after Howard Hinnant.
+fn today() -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let days = (seconds / 86_400) as i64 + 719_468;
+    let era = days.div_euclid(146_097);
+    let day_of_era = days.rem_euclid(146_097);
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let mp = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = year + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
 /// One recording, however many folders it turned into.
 struct Listed<'a> {
     recording: &'a Recording,
@@ -119,6 +184,7 @@ pub fn render(
     plan: &Plan,
     recordings: &BTreeMap<String, Recording>,
     template: &Template,
+    header: Option<&Template>,
 ) -> String {
     // By recording, so two rips make one line naming both.
     let mut gathered: BTreeMap<&str, (Vec<&str>, &str)> = BTreeMap::new();
@@ -152,5 +218,15 @@ pub fn render(
         .collect();
 
     lines.sort_by_key(|l| sort_key(l));
-    lines.join("\n")
+
+    let Some(header) = header else {
+        return lines.join("\n");
+    };
+    // A blank line between the note and the list, so the note reads as a note
+    // rather than as the first entry.
+    let note = header.render_line(&Summary {
+        count: lines.len(),
+        date: today(),
+    });
+    format!("{}\n\n{}", note.trim_end(), lines.join("\n"))
 }

@@ -55,6 +55,11 @@ link = "copy"
 
 [index]
 file = "00 - What is in here.txt"
+header = '''
+List of the {{count}} opera recordings in this collection, as of {{date}}.
+
+Composer, first - Opera (year.month) Conductor \[singers\] \[rips\] (findopera id) — folder
+'''
 template = '''{{composer.lastName}}, {{composer.firstName}} - {{opera.title}}[ ({{year}}[.{{month}}])] {{conductor.lastName}}[ \[{{singers.lastNames}}\]][ \[{{variants}}\]] (findopera {{id}}) — {{path}}'''
 ```
 

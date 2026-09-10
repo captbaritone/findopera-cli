@@ -2239,7 +2239,12 @@ fn cmd_organize(ui: &mut Session, args: OrganizeArgs) -> i32 {
             match crate::index::parse(&index.template) {
                 Ok(template) => {
                     let at = destination.join(&index.file);
-                    let body = crate::index::render(&plan, &p.recordings, &template);
+                    let header = index
+                        .header
+                        .as_deref()
+                        .and_then(|h| crate::index::parse_header(h).ok());
+                    let body =
+                        crate::index::render(&plan, &p.recordings, &template, header.as_ref());
                     match std::fs::write(&at, format!("{body}\n")) {
                         Ok(()) => note!(ui, "findopera: listed them in {}", at.display()),
                         // The tree is built, which is the part that matters.

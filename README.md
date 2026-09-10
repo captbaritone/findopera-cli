@@ -810,13 +810,32 @@ beside the tree, which is the one place the whole collection reads at once.
 ```toml
 [index]
 file = "00 - What is in here.txt"
+header = '''
+List of the {{count}} opera recordings in this collection, as of {{date}}.
+
+Composer, first - Opera (year.month) Conductor \[singers\] \[rips\] (findopera id) — folder
+'''
 template = '''{{composer.lastName}}, {{composer.firstName}} - {{opera.title}}[ ({{year}}[.{{month}}])] {{conductor.lastName}}[ \[{{singers.lastNames}}\]][ \[{{variants}}\]] (findopera {{id}}) — {{path}}'''
 ```
 
 ```
+List of the 3 opera recordings in this collection, as of 2026-09-10.
+
+Composer, first - Opera (year.month) Conductor [singers] [rips] (findopera id) — folder
+
 Britten, Benjamin - Billy Budd (1967) Britten [Pears] (findopera 75) — Britten/Billy Budd
 Mozart, Wolfgang Amadeus - Don Giovanni (1959.07) Krips [Siepi, della Casa] [flac, mp3] (findopera 332) — Mozart/Don Giovanni (flac)
 ```
+
+The header is what makes the file usable by anybody but you. Whoever opens it
+has no other context, and the shape of a line is yours — so only you can say
+what `(1959.07)` and `[flac, mp3]` mean, and the header sits directly above
+the template it describes.
+
+It may name `{{count}}` and `{{date}}`, and nothing else: those are the two
+nobody can keep right by hand, and the two that tell a reader whether they are
+looking at something current. Brackets in it are literal only when written
+`\[` and `\]`, as in a folder name.
 
 One line per recording, not per folder: two rips of one performance are two
 folders on a disk and one recording to somebody asking whether you have it,

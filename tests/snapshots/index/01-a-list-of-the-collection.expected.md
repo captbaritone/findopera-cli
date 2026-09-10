@@ -40,6 +40,10 @@ Mozart/Don Giovanni (mp3)/findopera-332 mp3.txt
 ## Index
 
 ```text title="./named/00 - What is in here.txt"
+List of the 3 opera recordings in this collection, as of <date>.
+
+Composer, first - Opera (year.month) Conductor [singers] [rips] (findopera id) — folder
+
 Britten, Benjamin - Billy Budd (1967) Britten [Pears] (findopera 75) — Britten/Billy Budd
 Mozart, Wolfgang Amadeus - Don Giovanni (1959.07) Krips [Siepi, della Casa] [flac, mp3] (findopera 332) — Mozart/Don Giovanni (flac)
 Ödön, Anton - Maria Egiziaca Ödön (findopera 5000) — Ödön/Maria Egiziaca
