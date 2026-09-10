@@ -12,11 +12,11 @@
 
 ```
 findopera: ./findopera.toml is not valid:
-TOML parse error at line 2, column 20
-  |
-2 | require-variants = "yes"
-  |                    ^^^^^
-invalid type: string "yes", expected a boolean
+    TOML parse error at line 2, column 20
+      |
+    2 | require-variants = "yes"
+      |                    ^^^^^
+    invalid type: string "yes", expected a boolean
 ```
 
 ## Destination

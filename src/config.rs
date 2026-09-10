@@ -98,7 +98,18 @@ impl std::fmt::Display for ConfigError {
                 path.display()
             ),
             Self::Unreadable { path, why } => write!(f, "cannot read {}: {why}", path.display()),
-            Self::Invalid { path, why } => write!(f, "{} is not valid:\n{why}", path.display()),
+            // Indented like every other continuation, so what the settings
+            // parser said reads as part of this message rather than as
+            // something that escaped alongside it.
+            Self::Invalid { path, why } => {
+                let quoted: String = why
+                    .to_string()
+                    .lines()
+                    .map(|l| format!("    {l}").trim_end().to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                write!(f, "{} is not valid:\n{quoted}", path.display())
+            }
         }
     }
 }

@@ -12,11 +12,11 @@
 
 ```
 findopera: ./findopera.toml is not valid:
-TOML parse error at line 2, column 8
-  |
-2 | link = "shortcut"
-  |        ^^^^^^^^^^
-unknown variant `shortcut`, expected one of `symlink`, `hardlink`, `reflink`, `copy`
+    TOML parse error at line 2, column 8
+      |
+    2 | link = "shortcut"
+      |        ^^^^^^^^^^
+    unknown variant `shortcut`, expected one of `symlink`, `hardlink`, `reflink`, `copy`
 ```
 
 ## Destination

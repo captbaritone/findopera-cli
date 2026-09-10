@@ -334,7 +334,7 @@ fn one_symlink(source: &Path, at: &Path, dry_run: bool) -> Outcome {
         return Outcome::Created;
     }
     let Some(parent) = at.parent() else {
-        return Outcome::Failed("there is nowhere to put it".to_string());
+        return Outcome::Failed("there is no folder above this one to build it in".to_string());
     };
     if let Err(e) = std::fs::create_dir_all(parent) {
         return Outcome::Failed(format!("cannot make {}: {e}", parent.display()));
@@ -596,20 +596,20 @@ pub fn reconcile(
 fn still_ours(at: &Path, built: &state::Built) -> Result<(), String> {
     let meta = at
         .symlink_metadata()
-        .map_err(|_| "it is not there any more".to_string())?;
+        .map_err(|_| "nothing is there any more".to_string())?;
     match built.link {
         Link::Symlink => {
             if !meta.is_symlink() {
-                return Err("it was a link and is now a folder".to_string());
+                return Err("recorded as a link, and now a folder".to_string());
             }
             Ok(())
         }
         Link::Hardlink | Link::Reflink | Link::Copy => {
             if meta.is_symlink() {
-                return Err("it was a folder and is now a link".to_string());
+                return Err("recorded as a folder, and now a link".to_string());
             }
             if !meta.is_dir() {
-                return Err("it was a folder and is now a file".to_string());
+                return Err("recorded as a folder, and now a file".to_string());
             }
             Ok(())
         }

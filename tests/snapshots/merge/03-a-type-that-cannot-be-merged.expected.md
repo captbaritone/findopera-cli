@@ -11,7 +11,7 @@
 ## stderr
 
 ```
-findopera: upc records cannot be merged. These can be: character, composer, conductor, language, opera, recording, singer
+findopera: upc records cannot be merged. These can be: character, composer, conductor, language, opera, recording, singer.
 ```
 
 ## Destination

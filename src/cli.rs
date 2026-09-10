@@ -1236,7 +1236,7 @@ fn cmd_merge(ui: &mut Session, args: MergeArgs) -> i32 {
         return refused(
             ui,
             &format!(
-                "{} records cannot be merged. These can be: {}",
+                "{} records cannot be merged. These can be: {}.",
                 kind.name,
                 mergeable.join(", ")
             ),
@@ -2257,7 +2257,7 @@ fn cmd_organize(ui: &mut Session, args: OrganizeArgs) -> i32 {
     }
     for (path, why) in &gone.changed {
         note!(ui, "findopera: {}", path.display());
-        note!(ui, "    {why}, so it was left alone");
+        note!(ui, "    {why} — left alone");
     }
     for (path, why) in &gone.failed {
         note!(ui, "findopera: cannot remove {}: {why}", path.display());

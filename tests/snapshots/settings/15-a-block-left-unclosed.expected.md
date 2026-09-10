@@ -12,11 +12,11 @@
 
 ```
 findopera: ./findopera.toml is not valid:
-TOML parse error at line 2, column 17
-  |
-2 | {{opera.title}}
-  |                 ^
-invalid multi-line literal string, expected `'`
+    TOML parse error at line 2, column 17
+      |
+    2 | {{opera.title}}
+      |                 ^
+    invalid multi-line literal string, expected `'`
 ```
 
 ## Destination

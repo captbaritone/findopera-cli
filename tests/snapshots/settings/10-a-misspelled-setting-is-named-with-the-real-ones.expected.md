@@ -12,11 +12,11 @@
 
 ```
 findopera: ./findopera.toml is not valid:
-TOML parse error at line 2, column 1
-  |
-2 | requre-variants = true
-  | ^^^^^^^^^^^^^^^
-unknown field `requre-variants`, expected one of `template`, `destination`, `link`, `require-variants`, `follow-links`, `ignore`
+    TOML parse error at line 2, column 1
+      |
+    2 | requre-variants = true
+      | ^^^^^^^^^^^^^^^
+    unknown field `requre-variants`, expected one of `template`, `destination`, `link`, `require-variants`, `follow-links`, `ignore`
 ```
 
 ## Destination

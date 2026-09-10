@@ -25,7 +25,7 @@ findopera: 1 built, 0 already there, 0 left alone
 $ findopera organize ./library --write -t '{{opera.title}} {{id}}'
 findopera: building a copy of every file in ./named
 findopera: ./named/Billy Budd
-    it was a folder and is now a file, so it was left alone
+    recorded as a folder, and now a file — left alone
 findopera: 1 built, 0 already there, 0 left alone
 ```
 
