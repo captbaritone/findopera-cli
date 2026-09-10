@@ -9,8 +9,8 @@
 $ findopera organize ./library --write
 + ./library/BillyBudd  Billy Budd
 $ findopera organize ./library --dry-run -t '{{opera.title}} {{id}}'
-+ ./library/BillyBudd  Billy Budd 75
 - Billy Budd
++ ./library/BillyBudd  Billy Budd 75
 ```
 
 ## stderr

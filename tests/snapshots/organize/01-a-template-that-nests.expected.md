@@ -9,8 +9,8 @@
 $ findopera organize ./library --write -t '{{opera.title}}'
 + ./library/BillyBudd  Billy Budd
 $ findopera organize ./library --write -t '{{opera.title}}/audio'
-+ ./library/BillyBudd  Billy Budd/audio
 - Billy Budd
++ ./library/BillyBudd  Billy Budd/audio
 ```
 
 ## stderr

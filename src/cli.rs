@@ -2277,6 +2277,16 @@ fn cmd_organize(ui: &mut Session, args: OrganizeArgs) -> i32 {
         report(ui, &plan, p.require_variants);
         return i32::from(done.troubled() || plan.blocked(p.require_variants));
     }
+    // Removals first, because that is the order they happen in. Printed the
+    // other way round, a build nested under a removal reads as a folder made
+    // inside one about to go — which is what this program used to do, and
+    // what somebody checking whether it still does will think they are
+    // looking at. It cost a reader that once already.
+    for path in &gone.removed {
+        if !emit(ui, format_args!("- {}", relative(path, &destination))) {
+            return 0;
+        }
+    }
     for (line, entry) in listing.iter().zip(&done.entries) {
         let mark = match &entry.outcome {
             apply::Outcome::Created => '+',
@@ -2284,11 +2294,6 @@ fn cmd_organize(ui: &mut Session, args: OrganizeArgs) -> i32 {
             apply::Outcome::Conflict(_) | apply::Outcome::Failed(_) => '!',
         };
         if !emit(ui, format_args!("{mark} {line}")) {
-            return 0;
-        }
-    }
-    for path in &gone.removed {
-        if !emit(ui, format_args!("- {}", relative(path, &destination))) {
             return 0;
         }
     }

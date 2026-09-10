@@ -10,8 +10,8 @@ $ findopera organize ./library --write
 + ./library/BillyBudd  Billy Budd
 $ write './named/My Own Mixes/track.flac' 'nobody asked findopera about this'
 $ findopera organize ./library --write -t '{{opera.title}} {{id}}'
-+ ./library/BillyBudd  Billy Budd 75
 - Billy Budd
++ ./library/BillyBudd  Billy Budd 75
 $ show './named/My Own Mixes/track.flac'
 nobody asked findopera about this
 ```
