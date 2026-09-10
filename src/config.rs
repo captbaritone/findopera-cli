@@ -165,9 +165,23 @@ impl Config {
         // a template that will not parse is a mistake in the settings, and
         // saying so at the end of a build is saying so too late.
         if let Some(index) = &config.index {
-            crate::index::parse(&index.template).map_err(|e| ConfigError::Invalid {
-                path: path.to_path_buf(),
-                why: format!("the index template is not valid: {}", e.message),
+            // Framed the way a folder template's mistake is framed. It is the
+            // same language and the same class of mistake, and an answer that
+            // names the field but not where it sits is a worse answer for
+            // being in a different file.
+            crate::index::parse(&index.template).map_err(|e| {
+                let mut why = format!("the list template is not valid: {e}");
+                for line in e.underline(&index.template) {
+                    why.push_str(&format!("\n  {line}"));
+                }
+                if let Some(help) = &e.help {
+                    why.push_str(&format!("\n  help: {help}"));
+                }
+                why.push_str("\n  see `findopera template` for every field and the syntax");
+                ConfigError::Invalid {
+                    path: path.to_path_buf(),
+                    why,
+                }
             })?;
             if index.file.as_os_str().is_empty() {
                 return Err(ConfigError::Invalid {
