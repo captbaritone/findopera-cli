@@ -25,6 +25,7 @@ pub mod apply;
 pub mod cli;
 pub mod config;
 pub mod credentials;
+pub mod index;
 pub mod model;
 pub mod plan;
 pub mod release;

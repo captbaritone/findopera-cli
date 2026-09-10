@@ -216,6 +216,15 @@ impl Template {
     /// string. Whether that string is a usable relative path is a separate
     /// question — see [`to_path`].
     pub fn render(&self, data: &dyn Fields) -> String {
-        render::render(&self.nodes, data)
+        render::render(&self.nodes, data, render::Rendering::Name)
+    }
+
+    /// The same, for a line of text rather than a folder name.
+    ///
+    /// A name cannot hold a path separator, so one inside a value is turned
+    /// into a dash. A line can, and a list that says where a folder sits
+    /// needs it to.
+    pub fn render_line(&self, data: &dyn Fields) -> String {
+        render::render(&self.nodes, data, render::Rendering::Line)
     }
 }

@@ -2232,6 +2232,28 @@ fn cmd_organize(ui: &mut Session, args: OrganizeArgs) -> i32 {
             );
             return 1;
         }
+
+        // After the record, and never read back: the list is an answer to
+        // somebody's question rather than anything this program relies on.
+        if let Some(index) = p.settings.as_ref().and_then(|s| s.index.as_ref()) {
+            match crate::index::parse(&index.template) {
+                Ok(template) => {
+                    let at = destination.join(&index.file);
+                    let body = crate::index::render(&plan, &p.recordings, &template);
+                    match std::fs::write(&at, format!("{body}\n")) {
+                        Ok(()) => note!(ui, "findopera: listed them in {}", at.display()),
+                        // The tree is built, which is the part that matters.
+                        Err(e) => note!(ui, "findopera: cannot write {}: {e}", at.display()),
+                    }
+                }
+                // Settled when the settings were read; here for completeness.
+                Err(e) => note!(
+                    ui,
+                    "findopera: the index template is not valid: {}",
+                    e.message
+                ),
+            }
+        }
     }
     if args.json {
         let rows: Vec<serde_json::Value> = plan

@@ -797,3 +797,35 @@ This was a CLI that fetched recordings from [FindOpera](https://findopera.com/)
 and rendered them through these templates. It has been scoped back to the
 templating core; the `full-linking-prototype` branch carries a larger earlier
 version that also built trees of symlinks from marker files.
+
+### A list of the collection
+
+The tree can only be filed one way, and whichever way you choose hides the
+rest: a library by composer says nothing about who sang, and finding a Tosca
+in it means already knowing that Tosca is Puccini's. So a build can leave a
+list beside the tree, which is the one place the whole collection reads at
+once:
+
+```toml
+[index]
+file = "00 - What is in here.txt"
+template = '''{{composer.lastName}}, {{composer.firstName}} - {{opera.title}}[ ({{year}}[.{{month}}])] {{conductor.lastName}}[ \[{{singers.lastNames}}\]][ \[{{variants}}\]] (findopera {{id}}) — {{path}}'''
+```
+
+```
+Britten, Benjamin - Billy Budd (1967) Britten [Pears] (findopera 75) — Britten/Billy Budd
+Mozart, Wolfgang Amadeus - Don Giovanni (1959.07) Krips [Siepi, della Casa] [flac, mp3] (findopera 332) — Mozart/Don Giovanni (flac)
+```
+
+One line per recording, not per folder: two rips of one performance are two
+folders on a disk and one recording to somebody asking whether you have it,
+so `{{variants}}` names them together. `{{path}}` says where to go, and
+`findopera template` lists the rest.
+
+Sorted with case and accents folded, so `d'Albert` and `Ödön` land where
+somebody would look for them rather than after `Zimmermann`.
+
+It is written after a build and never read back. Unlike the record in
+`.findopera-state.json`, which is what makes removing a folder safe, this is
+only an answer to somebody's question: delete it, edit it, or leave the
+setting out, and nothing else changes.

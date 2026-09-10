@@ -70,9 +70,24 @@ impl PathError {
 }
 
 /// Render the whole template. Cannot fail; see the module docs.
-pub fn render(items: &[Node], data: &dyn Fields) -> String {
+/// What is being rendered, which decides how much of a value survives.
+///
+/// A folder name cannot hold a separator, so one inside a value becomes a
+/// dash — otherwise a title like `Cavalleria rusticana / Pagliacci` would
+/// quietly make two folders. A line of text is not a path and keeps what it
+/// was given: a list naming where a folder sits would otherwise report the
+/// path with its slashes turned into dashes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Rendering {
+    /// A folder name, where a separator inside a value is a hazard.
+    Name,
+    /// A line of text, where only what would break the line comes out.
+    Line,
+}
+
+pub fn render(items: &[Node], data: &dyn Fields, rendering: Rendering) -> String {
     let mut out = String::new();
-    render_seq(items, data, &mut out, false);
+    render_seq(items, data, &mut out, false, rendering);
     out
 }
 
@@ -80,13 +95,19 @@ pub fn render(items: &[Node], data: &dyn Fields) -> String {
 ///
 /// Returns `false` when a placeholder resolved to nothing and `in_group` is
 /// set, meaning the caller should discard what was written.
-fn render_seq(items: &[Node], data: &dyn Fields, out: &mut String, in_group: bool) -> bool {
+fn render_seq(
+    items: &[Node],
+    data: &dyn Fields,
+    out: &mut String,
+    in_group: bool,
+    rendering: Rendering,
+) -> bool {
     for item in items {
         match item {
             Node::Text { text, .. } => out.push_str(text),
 
             Node::Placeholder { alts, source, .. } => match resolve(alts, data) {
-                Some(v) => out.push_str(&sanitize_value(&v)),
+                Some(v) => out.push_str(&sanitize_value(&v, rendering)),
                 None if in_group => return false,
                 // `parse` rejects a placeholder that can resolve to nothing
                 // unless it is inside a group, so this cannot be reached
@@ -99,7 +120,7 @@ fn render_seq(items: &[Node], data: &dyn Fields, out: &mut String, in_group: boo
                 // nothing behind. An omitted *inner* group is not a failure of
                 // the outer one, so the result is not propagated.
                 let mut buf = String::new();
-                if render_seq(items, data, &mut buf, true) {
+                if render_seq(items, data, &mut buf, true, rendering) {
                     out.push_str(&buf);
                 }
             }
@@ -140,18 +161,22 @@ fn resolve(alts: &[Alt], data: &dyn Fields) -> Option<String> {
 /// are not, so a title containing `/` must not introduce a directory level.
 /// This runs during rendering because that is the only point that still knows
 /// which text came from a value and which from the template.
-fn sanitize_value(value: &str) -> String {
+fn sanitize_value(value: &str, rendering: Rendering) -> String {
     let mut s: String = value
         .chars()
         .map(|c| match c {
-            '/' | '\\' | '\0' => '-',
+            '/' | '\\' | '\0' if rendering == Rendering::Name => '-',
+            '\0' => ' ',
             c if c.is_control() => ' ',
             c => c,
         })
         .collect();
     s = s.trim().to_string();
     // A value that is entirely dots would otherwise become `.` or `..`.
-    if !s.is_empty() && s.chars().all(|c| c == '.' || c == '-' || c.is_whitespace()) {
+    if rendering == Rendering::Name
+        && !s.is_empty()
+        && s.chars().all(|c| c == '.' || c == '-' || c.is_whitespace())
+    {
         s = s.replace('.', "_");
     }
     s

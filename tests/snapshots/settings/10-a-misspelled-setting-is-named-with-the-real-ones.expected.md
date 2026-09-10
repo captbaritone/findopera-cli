@@ -16,7 +16,7 @@ findopera: ./findopera.toml is not valid:
       |
     2 | requre-variants = true
       | ^^^^^^^^^^^^^^^
-    unknown field `requre-variants`, expected one of `template`, `destination`, `link`, `require-variants`, `follow-links`, `ignore`
+    unknown field `requre-variants`, expected one of `template`, `destination`, `link`, `require-variants`, `follow-links`, `ignore`, `index`
 ```
 
 ## Destination

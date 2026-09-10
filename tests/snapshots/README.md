@@ -72,8 +72,14 @@ the folder a template renders, or the refusal a contradiction draws, rather
 than the fields a file parsed into.
 
 What comes back is `stdout`, `stderr`, `Destination`, `Requests` and `Exit`
-— all of them, every time. The failures worth catching live *between* those:
-a summary claiming a folder was built, above a destination that does not
+— and `Index`, where the settings asked for a list of the collection. Its
+fence names the file it was written to, because where a list was put is half
+of what a case about writing one is claiming. It appears whether or not the
+file is there, so a list that failed to appear is a visible absence rather
+than a section that quietly is not.
+
+All of them, every time. The failures worth catching live *between* them: a
+summary claiming a folder was built, above a destination that does not
 contain it, is only visible if you can see both at once.
 
 ```bash

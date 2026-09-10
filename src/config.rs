@@ -79,6 +79,24 @@ pub struct Config {
     /// Folders to leave alone.
     #[serde(default)]
     pub ignore: Vec<String>,
+    /// A list of the collection, left at the destination for someone to read.
+    #[serde(default)]
+    pub index: Option<Index>,
+}
+
+/// What to write, and what each line should say.
+///
+/// A file rather than a flag, because the name is the whole of how anybody
+/// finds it: somebody browsing the destination has to notice it without being
+/// told, so it is worth choosing a name that says what it is and sorts near
+/// the top.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct Index {
+    /// The name to write it under, inside the destination.
+    pub file: PathBuf,
+    /// One line of it, in the same language folder names are written in.
+    pub template: String,
 }
 
 #[derive(Debug)]
@@ -143,6 +161,21 @@ impl Config {
             path: path.to_path_buf(),
             why,
         })?;
+        // Checked here, against this file, for the same reason a pattern is:
+        // a template that will not parse is a mistake in the settings, and
+        // saying so at the end of a build is saying so too late.
+        if let Some(index) = &config.index {
+            crate::index::parse(&index.template).map_err(|e| ConfigError::Invalid {
+                path: path.to_path_buf(),
+                why: format!("the index template is not valid: {}", e.message),
+            })?;
+            if index.file.as_os_str().is_empty() {
+                return Err(ConfigError::Invalid {
+                    path: path.to_path_buf(),
+                    why: "the index needs a filename to be written under".to_string(),
+                });
+            }
+        }
         Ok(config)
     }
 }
@@ -264,6 +297,27 @@ link = "symlink"
 # Follow symlinks while walking. Off by default: a library built out of
 # symlinks would otherwise report every recording twice.
 follow-links = false
+
+# A list of the collection, left at the destination after a build.
+#
+# The tree can only be filed one way, and whichever way you choose hides the
+# rest: a library by composer says nothing about who sang, and finding a Tosca
+# in it means knowing that Tosca is Puccini's. This is the one file where the
+# whole collection can be read at once, so give it a name somebody browsing
+# will notice.
+#
+# One line per recording, however many rips of it there are — the tree has a
+# folder for each, and `{{variants}}` names them together. `{{path}}` says
+# where to go. `findopera template` lists every field.
+#
+# Written after a build, never read back: delete it, edit it, or leave it out
+# and nothing else changes.
+#
+# [index]
+# file = "00 - What is in here.txt"
+# template = '''
+# {{composer.lastName}}, {{composer.firstName}} - {{opera.title}}[ ({{year}}[.{{month}}][.{{day}}])] {{conductor.lastName}}[ \[{{singers.lastNames}}\]][ \[{{variants}}\]] (findopera {{id}}) — {{path}}
+# '''
 "#;
     format!("{head}{syntax}{rest}")
 }

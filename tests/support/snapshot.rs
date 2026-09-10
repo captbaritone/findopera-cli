@@ -522,6 +522,28 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
     );
     push("Destination", "tree", describe_tree(&sandbox.destination()));
 
+    // The list a build leaves, wherever the settings asked for one. Read
+    // through the real settings parser rather than by looking for a likely
+    // file, so a case cannot be shown an index it did not actually ask for.
+    //
+    // The section appears whenever an index was asked for, so one that was
+    // asked for and not written is a visible absence rather than a section
+    // that quietly is not there.
+    if let Ok(settings) = findopera::config::Config::load(&config_path) {
+        if let Some(index) = &settings.index {
+            let at = sandbox.destination().join(&index.file);
+            let body = match std::fs::read_to_string(&at) {
+                Ok(text) => normalize(text.trim_end(), &sandbox),
+                Err(e) => format!("<not written: {}>", e.kind()),
+            };
+            // Named on the fence, because where a file was put is half of
+            // what a case about writing one is claiming — and a settings
+            // file that quietly changed it would otherwise look identical.
+            let where_ = normalize(&at.to_string_lossy(), &sandbox);
+            push("Index", &format!("text title=\"{where_}\""), body);
+        }
+    }
+
     let mut asked = String::new();
     for sent in script.sent() {
         if let Some(operation) = &sent.operation {
