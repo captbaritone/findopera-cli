@@ -36,15 +36,22 @@ findopera: 0.9.0 has been released; this is 0.7.2.
     https://github.com/captbaritone/findopera-cli/releases/latest/download/findopera-installer.sh | sh
 ```
 
-It asks GitHub what the latest release is and says how to get it. It does not
-replace the binary. Whatever put it where it is — one of the installers above,
-Cargo, or you with `scp` — is what knows where it lives and what is expected
-alongside it, and overwriting it from underneath leaves that thing's record of
-the world wrong. On a NAS the binary may not even be writable by whoever is
-running it.
+It asks GitHub what the latest release is and names the command that installs
+one — the same command [findopera.com/cli](https://findopera.com/cli) gives,
+chosen the same way, by which system is asking.
 
-Which command it names is a guess from where the binary sits, and is said as
-one. `--json` gives `current`, `latest`, `update_available` and `how`, for
+It does not replace the binary. Whatever installed it knows where it lives and
+what belongs beside it, and overwriting it from underneath leaves that thing's
+record of the world wrong. On a NAS the binary may not even be writable by
+whoever is running it.
+
+Where it sits is not read, and used to be. The installer puts it in
+`$CARGO_HOME/bin` when Cargo is there, so that directory says nothing about
+what put the binary in it — and reading it that way sent people to `cargo
+install`, which refuses, because Cargo has no record of an install it did not
+do.
+
+`--json` gives `current`, `latest`, `update_available` and `install`, for
 anything that would rather decide for itself.
 
 ## Getting started

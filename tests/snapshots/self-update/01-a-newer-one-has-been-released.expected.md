@@ -13,8 +13,8 @@
 
 ```
 findopera: 99.0.0 has been released; this is <version>. To get it:
-    curl --proto '=https' --tlsv1.2 -LsSf https://github.com/captbaritone/findopera-cli/releases/latest/download/findopera-installer.sh | sh
-    guessed from where this binary sits — if you installed it another way, update it that way, because this never replaces itself
+    curl --proto '=https' --tlsv1.2 -LsSf https://findopera.com/install.sh | sh
+    installed another way? https://findopera.com/cli lists the rest — this never replaces itself
 ```
 
 ## Destination

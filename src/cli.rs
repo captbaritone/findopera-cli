@@ -1399,11 +1399,7 @@ fn cmd_link(ui: &mut Session, args: LinkArgs, on: bool) -> i32 {
 }
 
 fn cmd_self_update(ui: &mut Session, args: SelfUpdateArgs) -> i32 {
-    // Where this binary sits is what the advice is built from. If the path
-    // cannot be had — which is possible, and not worth failing over — the
-    // installer is the documented route and so the better guess.
-    let exe = std::env::current_exe().ok();
-    let check = match release::check(&*ui.transport(), &args.releases_url, exe.as_deref()) {
+    let check = match release::check(&*ui.transport(), &args.releases_url) {
         Ok(c) => c,
         Err(e) => {
             if args.json {
@@ -1431,7 +1427,7 @@ fn cmd_self_update(ui: &mut Session, args: SelfUpdateArgs) -> i32 {
                     "current": check.current.to_string(),
                     "latest": check.latest.to_string(),
                     "update_available": check.newer_available(),
-                    "how": check.how.command(),
+                    "install": release::install_command(),
                 })
             ),
         );
@@ -1461,11 +1457,12 @@ fn cmd_self_update(ui: &mut Session, args: SelfUpdateArgs) -> i32 {
         check.latest,
         check.current
     );
-    note!(ui, "    {}", check.how.command());
+    note!(ui, "    {}", release::install_command());
     note!(
         ui,
-        "    guessed from where this binary sits — if you installed it another \
-         way, update it that way, because this never replaces itself"
+        "    installed another way? {} lists the rest — this never replaces \
+         itself",
+        release::INSTRUCTIONS
     );
     0
 }

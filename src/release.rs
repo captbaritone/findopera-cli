@@ -13,7 +13,6 @@
 //! by whoever is running it anyway.
 
 use semver::Version;
-use std::path::Path;
 
 /// Where releases are published.
 pub const RELEASES_API: &str =
@@ -27,8 +26,6 @@ pub const CURRENT: &str = env!("CARGO_PKG_VERSION");
 pub struct Check {
     pub current: Version,
     pub latest: Version,
-    /// How to install the newer one, given where this copy appears to live.
-    pub how: How,
 }
 
 impl Check {
@@ -37,53 +34,31 @@ impl Check {
     }
 }
 
-/// How this copy looks to have been installed, and so how to replace it.
+/// The command that installs it, for whichever system is asking.
 ///
-/// A guess from where the binary sits, and said as a guess. Getting it wrong
-/// costs someone one wrong command to read past; asking the machine to prove
-/// it costs a dependency on every package manager that might have been used.
-#[derive(Debug, PartialEq, Eq)]
-pub enum How {
-    /// Under a Cargo bin directory, so Cargo put it there.
-    Cargo,
-    /// Anywhere else: the installer script is the documented route.
-    Installer,
-}
-
-impl How {
-    /// The command to run, as a person would type it.
-    pub fn command(&self) -> &'static str {
-        match self {
-            How::Cargo => "cargo install --git https://github.com/captbaritone/findopera-cli",
-            How::Installer if cfg!(windows) => {
-                "irm https://github.com/captbaritone/findopera-cli/releases/latest/download/findopera-installer.ps1 | iex"
-            }
-            How::Installer => {
-                "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/captbaritone/findopera-cli/releases/latest/download/findopera-installer.sh | sh"
-            }
-        }
-    }
-}
-
-/// Which route a binary at this path came by.
+/// The same two findopera.com/cli offers, chosen the same way it chooses:
+/// by the system, and by nothing else.
 ///
-/// Split out from the lookup so it can be tested without a filesystem: the
-/// interesting cases are paths, not directories that happen to exist.
-pub fn how_installed(exe: &Path) -> How {
-    // `~/.cargo/bin/findopera`, or wherever CARGO_HOME was pointed. Matching
-    // on the pair of components rather than on `.cargo` alone keeps a library
-    // that happens to live under a folder called `bin` from being mistaken
-    // for an installation.
-    let components: Vec<_> = exe.iter().collect();
-    let cargo_bin = components
-        .windows(2)
-        .any(|w| (w[0] == ".cargo" || w[0] == "cargo") && w[1] == "bin");
-    if cargo_bin {
-        How::Cargo
+/// Not by where this binary sits, which is what this used to do. The
+/// installer puts it in `$CARGO_HOME/bin` when Cargo is there — its own
+/// receipt says `"install_layout": "cargo-home"` — so the directory says
+/// nothing about what put the binary in it. Reading it that way sent somebody
+/// to `cargo install`, which refused, because Cargo had no record of an
+/// install it had not done.
+pub fn install_command() -> &'static str {
+    if cfg!(windows) {
+        "irm https://findopera.com/install.ps1 | iex"
     } else {
-        How::Installer
+        "curl --proto '=https' --tlsv1.2 -LsSf https://findopera.com/install.sh | sh"
     }
 }
+
+/// Where every way of installing it is written down.
+///
+/// For the ways this cannot know about — a package manager, a binary copied
+/// off the releases page — and for any that did not exist when this binary
+/// was built, which no message compiled into it could name.
+pub const INSTRUCTIONS: &str = "https://findopera.com/cli";
 
 /// What went wrong looking.
 #[derive(Debug)]
@@ -124,11 +99,7 @@ pub fn latest_in(payload: &serde_json::Value) -> Result<Version, Error> {
 /// Through the same seam every other request goes through, so a test can
 /// answer this one too. It used to open its own socket, which meant the only
 /// way to exercise the command around it was to let it reach GitHub.
-pub fn check(
-    transport: &dyn crate::api::Transport,
-    url: &str,
-    exe: Option<&Path>,
-) -> Result<Check, Error> {
+pub fn check(transport: &dyn crate::api::Transport, url: &str) -> Result<Check, Error> {
     let request = crate::api::Request {
         method: crate::api::Method::Get,
         url: url.to_string(),
@@ -162,11 +133,7 @@ pub fn check(
     let current = Version::parse(CURRENT)
         .map_err(|e| Error::Unreadable(format!("this binary's own version is unreadable: {e}")))?;
 
-    Ok(Check {
-        current,
-        latest,
-        how: exe.map_or(How::Installer, how_installed),
-    })
+    Ok(Check { current, latest })
 }
 
 #[cfg(test)]
@@ -203,36 +170,5 @@ mod tests {
         assert!(matches!(latest_in(&payload), Err(Error::Unreadable(_))));
         let payload = serde_json::json!({});
         assert!(matches!(latest_in(&payload), Err(Error::Unreadable(_))));
-    }
-
-    #[test]
-    fn a_binary_in_a_cargo_bin_directory_says_so() {
-        assert_eq!(
-            how_installed(Path::new("/Users/someone/.cargo/bin/findopera")),
-            How::Cargo
-        );
-        // CARGO_HOME pointed elsewhere, which is common on CI and on shared
-        // machines.
-        assert_eq!(
-            how_installed(Path::new("/opt/cargo/bin/findopera")),
-            How::Cargo
-        );
-    }
-
-    #[test]
-    fn anything_else_is_taken_to_have_come_from_the_installer() {
-        assert_eq!(
-            how_installed(Path::new("/usr/local/bin/findopera")),
-            How::Installer
-        );
-        assert_eq!(
-            how_installed(Path::new("/Users/someone/.local/bin/findopera")),
-            How::Installer
-        );
-        // A `bin` that is not a Cargo one.
-        assert_eq!(
-            how_installed(Path::new("/volume1/homes/me/bin/findopera")),
-            How::Installer
-        );
     }
 }

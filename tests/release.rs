@@ -7,8 +7,7 @@
 
 mod support;
 
-use findopera::release::{self, How};
-use std::path::Path;
+use findopera::release;
 use support::server::{serve, Answer};
 
 /// A stand-in for the releases API, answering once.
@@ -22,12 +21,7 @@ fn releases(
 #[test]
 fn a_newer_release_is_reported_as_newer() {
     let (url, _asked) = releases(200, r#"{"tag_name":"v99.0.0"}"#);
-    let check = release::check(
-        &findopera::api::Http,
-        &url,
-        Some(Path::new("/usr/local/bin/findopera")),
-    )
-    .expect("the release was read");
+    let check = release::check(&findopera::api::Http, &url).expect("the release was read");
 
     assert!(check.newer_available());
     assert_eq!(check.latest.to_string(), "99.0.0");
@@ -41,7 +35,7 @@ fn the_release_this_binary_already_is_is_not_newer() {
     let body: &'static str =
         Box::leak(format!(r#"{{"tag_name":"v{}"}}"#, release::CURRENT).into_boxed_str());
     let (url, _asked) = releases(200, body);
-    let check = release::check(&findopera::api::Http, &url, None).expect("the release was read");
+    let check = release::check(&findopera::api::Http, &url).expect("the release was read");
 
     assert!(
         !check.newer_available(),
@@ -55,7 +49,7 @@ fn an_older_release_is_not_newer() {
     // A build from a checkout is ahead of what is published, and must not be
     // told to downgrade itself.
     let (url, _asked) = releases(200, r#"{"tag_name":"v0.0.1"}"#);
-    let check = release::check(&findopera::api::Http, &url, None).expect("the release was read");
+    let check = release::check(&findopera::api::Http, &url).expect("the release was read");
     assert!(!check.newer_available());
 }
 
@@ -64,7 +58,7 @@ fn the_request_says_who_is_asking_and_which_api_it_wants() {
     // GitHub refuses a request with no user-agent outright, and the Accept
     // header is what pins the response shape this parses.
     let (url, asked) = releases(200, r#"{"tag_name":"v99.0.0"}"#);
-    let _ = release::check(&findopera::api::Http, &url, None);
+    let _ = release::check(&findopera::api::Http, &url);
 
     let request = asked.recv().expect("the server was asked something");
     assert_eq!(
@@ -82,8 +76,7 @@ fn being_rate_limited_says_so_rather_than_saying_forbidden() {
     // Anonymous callers meet this often enough that "403" on its own would
     // send someone looking for a permission they do not need.
     let (url, _asked) = releases(403, r#"{"message":"rate limit exceeded"}"#);
-    let error =
-        release::check(&findopera::api::Http, &url, None).expect_err("403 is not an answer");
+    let error = release::check(&findopera::api::Http, &url).expect_err("403 is not an answer");
     let said = error.to_string();
     assert!(said.contains("rate limit"), "got: {said}");
 }
@@ -92,27 +85,9 @@ fn being_rate_limited_says_so_rather_than_saying_forbidden() {
 fn a_tag_that_is_not_a_version_is_an_error() {
     let (url, _asked) = releases(200, r#"{"tag_name":"nightly"}"#);
     let error =
-        release::check(&findopera::api::Http, &url, None).expect_err("`nightly` is not a version");
+        release::check(&findopera::api::Http, &url).expect_err("`nightly` is not a version");
     assert!(
         matches!(error, release::Error::Unreadable(_)),
         "got: {error}"
-    );
-}
-
-#[test]
-fn where_the_binary_sits_decides_what_it_is_told_to_run() {
-    let (url, _asked) = releases(200, r#"{"tag_name":"v99.0.0"}"#);
-    let check = release::check(
-        &findopera::api::Http,
-        &url,
-        Some(Path::new("/home/me/.cargo/bin/findopera")),
-    )
-    .expect("the release was read");
-
-    assert_eq!(check.how, How::Cargo);
-    assert!(
-        check.how.command().starts_with("cargo install"),
-        "got: {}",
-        check.how.command()
     );
 }
