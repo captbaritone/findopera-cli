@@ -971,9 +971,25 @@ impl Cli {
     ///
     /// `Cli::parse` writes usage errors straight to the process and exits,
     /// which a test cannot see and must not be subjected to.
-    pub fn try_parse_from_argv<S: AsRef<str>>(argv: &[S]) -> Result<Cli, String> {
-        <Cli as Parser>::try_parse_from(argv.iter().map(|a| a.as_ref())).map_err(|e| e.to_string())
+    pub fn try_parse_from_argv<S: AsRef<str>>(argv: &[S]) -> Result<Cli, NotACommand> {
+        <Cli as Parser>::try_parse_from(argv.iter().map(|a| a.as_ref())).map_err(|e| NotACommand {
+            // Help and a version are answers, and go where answers go. Only a
+            // complaint about the arguments is a failure.
+            to_stdout: !e.use_stderr(),
+            code: e.exit_code(),
+            text: e.to_string(),
+        })
     }
+}
+
+/// What was printed instead of a command being parsed.
+///
+/// `--help` and `--version` are among these, and are not failures: they are
+/// what was asked for, so they go to stdout and the run succeeds.
+pub struct NotACommand {
+    pub text: String,
+    pub to_stdout: bool,
+    pub code: i32,
 }
 
 /// Run one already-parsed command line against a session.

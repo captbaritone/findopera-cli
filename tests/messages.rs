@@ -48,25 +48,46 @@ fn messages() -> Vec<Message> {
             .to_string_lossy()
             .into_owned();
         let text = std::fs::read_to_string(path).expect("an expectation");
-        let Some(after) = text.split_once("## stderr\n\n```\n") else {
-            continue;
-        };
-        let Some((block, _)) = after.1.split_once("\n```") else {
-            continue;
-        };
-        for line in block.lines() {
+
+        // Line by line, and stopping at the fence that closes the block. An
+        // empty one closes on the line after it opens, and searching for the
+        // next fence instead ran on into the sections below — whose lines were
+        // then read as belonging to the last message of the file before.
+        let mut inside = false;
+        let mut opened = false;
+        let mut here: Option<usize> = None;
+        for line in text.lines() {
+            if !opened {
+                if line.trim() == "## stderr" {
+                    opened = true;
+                }
+                continue;
+            }
+            if !inside {
+                if line.starts_with("```") {
+                    inside = true;
+                }
+                continue;
+            }
+            if line.starts_with("```") {
+                break;
+            }
             if line.trim().is_empty() || line.starts_with("$ ") {
                 continue;
             }
             match line.strip_prefix("findopera: ") {
-                Some(first) => out.push(Message {
-                    first: first.to_string(),
-                    rest: Vec::new(),
-                    case: case.clone(),
-                }),
+                Some(first) => {
+                    out.push(Message {
+                        first: first.to_string(),
+                        rest: Vec::new(),
+                        case: case.clone(),
+                    });
+                    here = Some(out.len() - 1);
+                }
+                // Only ever onto a message from this same file.
                 None => {
-                    if let Some(last) = out.last_mut() {
-                        last.rest.push(line.to_string());
+                    if let Some(i) = here {
+                        out[i].rest.push(line.to_string());
                     }
                 }
             }

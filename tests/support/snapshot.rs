@@ -489,9 +489,13 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
             .served_by(move |endpoint, token| for_client.client(endpoint, token));
         let code = match Cli::try_parse_from_argv(&argv) {
             Ok(cli) => findopera::cli::dispatch(&mut ui, cli),
-            Err(rendered) => {
-                ui.note(format_args!("{rendered}"));
-                2
+            Err(printed) => {
+                if printed.to_stdout {
+                    ui.say(format_args!("{}", printed.text.trim_end()));
+                } else {
+                    ui.note(format_args!("{}", printed.text.trim_end()));
+                }
+                printed.code
             }
         };
         codes.push(code.to_string());
