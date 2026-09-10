@@ -5,9 +5,9 @@ come from whatever wrote the filename and say nothing about which record is
 meant.
 
 The proof is the complaint: both folders want the same name, and the reason
-given is that the template has no `{{variant}}` to tell them apart — which is
-what two folders holding *the same* recording look like. Two different
-recordings would have rendered two different names.
+given is that the template never asks for `{{variant}}` — which is what two
+folders holding *the same* recording look like. Two different recordings
+would have rendered two different names without being asked anything.
 
 ## Recording 75
 

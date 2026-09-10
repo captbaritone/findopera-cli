@@ -219,6 +219,29 @@ impl Template {
         render::render(&self.nodes, data, render::Rendering::Name)
     }
 
+    /// Does this template ever ask for that field?
+    ///
+    /// Which matters where the answer to a mistake depends on it. Two folders
+    /// taking one name is a different problem, with a different fix, depending
+    /// on whether the template asked what told them apart — and a template
+    /// that never asks cannot be answered by editing the markers.
+    ///
+    /// Anywhere counts: inside a group, or as the fallback of a placeholder
+    /// that resolved to something else. A field named in a group that happened
+    /// to drop is still a field this template asks about.
+    pub fn mentions(&self, path: &str) -> bool {
+        fn walk(items: &[parser::Node], path: &str) -> bool {
+            items.iter().any(|item| match item {
+                parser::Node::Placeholder { alts, .. } => alts
+                    .iter()
+                    .any(|alt| matches!(alt, parser::Alt::Field { path: p, .. } if p == path)),
+                parser::Node::Group { items, .. } => walk(items, path),
+                parser::Node::Text { .. } => false,
+            })
+        }
+        walk(&self.nodes, path)
+    }
+
     /// The same, for a line of text rather than a folder name.
     ///
     /// A name cannot hold a path separator, so one inside a value is turned

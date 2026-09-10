@@ -206,12 +206,17 @@ pub fn plan<'a>(
         });
     }
 
+    // Asked once rather than per clash: it is a property of the template.
+    let template_asks = tmpl.mentions(crate::scan::VARIANT.path);
+
     for group in clashing(&out.rows) {
-        // Why numbering could not separate these matters: either the markers
-        // say the same thing, or the template never asks what they say.
-        // Blaming the template for the first would send the reader to the
-        // wrong file.
-        let cause = if group.iter().all(|&i| out.rows[i].marker.variant.is_some()) {
+        // Why numbering could not separate these matters, because the fix is
+        // in a different file each way. A template that never asks what tells
+        // two rips apart cannot be answered by renaming either of them — and
+        // this used to say they declared the same variant when they declared
+        // `flac` and `mp3`, sending the reader to change a word that was
+        // already different.
+        let cause = if template_asks {
             Cause::SameVariant
         } else {
             Cause::TemplateIgnoresVariant
@@ -392,8 +397,9 @@ impl Plan<'_> {
                         Cause::SameVariant => "    ^ these markers declare the same variant; \
                                                give one a different word"
                             .to_string(),
-                        Cause::TemplateIgnoresVariant => "    ^ the template has no \
-                                                          `{{variant}}` for them to differ in"
+                        Cause::TemplateIgnoresVariant => "    ^ the template never asks for \
+                                                          `{{variant}}`; add it to give them \
+                                                          different names"
                             .to_string(),
                     });
                 }

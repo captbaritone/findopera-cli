@@ -17,7 +17,7 @@
 findopera: 2 directories want the name "Don Giovanni [332]":
     ./library/rips/a/findopera-332.txt
     ./library/rips/b/findopera-332.txt
-    ^ the template has no `{{variant}}` for them to differ in
+    ^ the template never asks for `{{variant}}`; add it to give them different names
 findopera: no destination set, so these are only the folder names. Add one to build it:
     destination = "/path/to/named"
 ```
