@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The change that breaks this CLI is a commit in another repo, so waiting
+  # for a push here would mean waiting for the wrong event. See `compatible`.
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -60,3 +65,20 @@ jobs:
       - run: npm run generate
         working-directory: codegen
       - run: git diff --exit-code -- src/model/generated.rs
+
+  compatible:
+    name: queries still work against findopera.com
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+        working-directory: codegen
+      # The `generated` job above proves the queries agree with the schema
+      # vendored in this repo. This asks the other question: whether that
+      # schema is still what findopera.com serves. Only an incompatible change
+      # fails it, so the API can go on adding fields without turning this red.
+      - run: npm run check-live
+        working-directory: codegen
