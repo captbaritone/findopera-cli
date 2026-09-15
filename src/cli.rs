@@ -1995,7 +1995,7 @@ fn cmd_feedback(ui: &mut Session, args: FeedbackArgs) -> i32 {
         }
     };
     if let Some(said) = api::refusal(&payload) {
-        note!(ui, "findopera: {said}");
+        note!(ui, "findopera: {}", api.ours_was_refused(said));
         return 3;
     }
 
@@ -2027,7 +2027,7 @@ fn request_token(ui: &mut Session, args: &LoginArgs) -> Result<(String, String),
         }
     };
     if let Some(said) = api::refusal(&payload) {
-        note!(ui, "findopera: {said}");
+        note!(ui, "findopera: {}", api.ours_was_refused(said));
         return Err(3);
     }
     let issued = &payload["data"]["createAccessToken"];

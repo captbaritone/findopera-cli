@@ -117,6 +117,7 @@ pub fn reply(status: u16, body: &str) -> Reply {
         status,
         retry_after: None,
         disposition: None,
+        cli_latest: None,
         body: body.to_string(),
     }
 }

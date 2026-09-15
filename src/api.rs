@@ -3,6 +3,7 @@
 use crate::model::crud::Type;
 use crate::model::{Recording, QUERY};
 use std::collections::BTreeMap;
+use std::sync::Mutex;
 use std::time::Duration;
 
 pub const DEFAULT_ENDPOINT: &str = "https://findopera.com/api/graphql";
@@ -112,6 +113,15 @@ pub enum ApiError {
     Unreachable(String),
     /// The server was reached, and said no.
     Refused(Refusal),
+    /// The server rejected a query this program wrote, which means this build
+    /// and the API no longer agree about what the API contains.
+    Outdated {
+        /// The newest published version, when the server named one.
+        latest: Option<String>,
+        /// What the server actually objected to, kept because it is the only
+        /// record of which field went away.
+        detail: Refusal,
+    },
 }
 
 impl ApiError {
@@ -122,6 +132,18 @@ impl ApiError {
             ApiError::Unreachable(why) => serde_json::json!({
                 "errors": [{ "message": why, "code": "UNREACHABLE" }]
             }),
+            // The server's own complaints, kept verbatim, with what they mean
+            // added alongside rather than in place of them: a script that was
+            // reading `errors` goes on working, and one that wants to know
+            // whether to reinstall can look at `outdated`.
+            ApiError::Outdated { latest, detail } => {
+                let mut out = detail.to_json();
+                out["outdated"] = serde_json::json!({
+                    "current": crate::release::CURRENT,
+                    "latest": latest,
+                });
+                out
+            }
         }
     }
 }
@@ -131,6 +153,62 @@ impl std::fmt::Display for ApiError {
         match self {
             ApiError::Unreachable(why) => write!(f, "{why}"),
             ApiError::Refused(r) => write!(f, "{r}"),
+            ApiError::Outdated { latest, detail } => {
+                write!(
+                    f,
+                    "this findopera ({}) and the API no longer agree: a query built into\nthis version asks for something the server no longer has.\n\n{detail}",
+                    crate::release::CURRENT
+                )?;
+                match latest.as_deref().and_then(Newer::of) {
+                    Some(Newer::Yes(latest)) => write!(
+                        f,
+                        "\n\n{latest} has it right. To upgrade:\n    {}",
+                        crate::release::install_command()
+                    ),
+                    // Already current, so there is nothing to upgrade to and
+                    // saying otherwise would send somebody in a circle. This
+                    // is the branch that means a release went out broken.
+                    Some(Newer::No) => write!(
+                        f,
+                        "\n\nThis is already the newest published version, so upgrading will not\nhelp. That makes it a bug worth reporting:\n    {}/issues",
+                        env!("CARGO_PKG_REPOSITORY")
+                    ),
+                    // The server said nothing, or said something unparseable.
+                    // Upgrading is still the likeliest fix; it is just no
+                    // longer a promise.
+                    None => write!(
+                        f,
+                        "\n\nUpgrading is usually the fix:\n    {}",
+                        crate::release::install_command()
+                    ),
+                }
+            }
+        }
+    }
+}
+
+/// Whether what the server named is newer than what is running.
+///
+/// Anything unparseable counts as no answer rather than as a new version: a
+/// header we cannot read is not grounds for telling somebody to reinstall.
+enum Newer {
+    Yes(String),
+    No,
+}
+
+impl Newer {
+    /// `None` when there is no usable answer, which is not the same as "no".
+    /// Saying "you already have the newest" on the strength of a header that
+    /// could not be read would send somebody to file a bug about nothing.
+    fn of(latest: &str) -> Option<Newer> {
+        use semver::Version;
+        match (
+            Version::parse(latest),
+            Version::parse(crate::release::CURRENT),
+        ) {
+            (Ok(there), Ok(here)) if there > here => Some(Newer::Yes(there.to_string())),
+            (Ok(_), Ok(_)) => Some(Newer::No),
+            _ => None,
         }
     }
 }
@@ -182,6 +260,10 @@ pub struct Reply {
     pub retry_after: Option<Duration>,
     /// `Content-Disposition`, which is where the notes filename comes from.
     pub disposition: Option<String>,
+    /// `X-FindOpera-CLI-Latest`: the newest published version of this program,
+    /// as the server understands it. Sent only to this program, and only
+    /// because the server is better placed to know it than we are.
+    pub cli_latest: Option<String>,
     pub body: String,
 }
 
@@ -251,6 +333,7 @@ impl Transport for Http {
             .and_then(|v| v.trim().parse::<u64>().ok())
             .map(Duration::from_secs);
         let disposition = header("content-disposition");
+        let cli_latest = header("x-findopera-cli-latest");
 
         let mut response = response;
         let body = response
@@ -262,6 +345,7 @@ impl Transport for Http {
             status,
             retry_after,
             disposition,
+            cli_latest,
             body,
         })
     }
@@ -380,6 +464,13 @@ pub struct Client {
     token: Option<String>,
     transport: Box<dyn Transport>,
     notice: Box<dyn Fn(&str) + Send + Sync>,
+    /// The newest published version, if the server has mentioned one.
+    ///
+    /// Behind a lock because every request goes through `&self`, and this is
+    /// the one thing a response tells the client about itself rather than
+    /// about the data. Only ever set from a header that was present, so an
+    /// endpoint that says nothing leaves what we already knew alone.
+    latest: Mutex<Option<String>>,
 }
 
 impl Client {
@@ -401,6 +492,7 @@ impl Client {
             token,
             transport,
             notice: Box::new(|said| eprintln!("{said}")),
+            latest: Mutex::new(None),
         }
     }
 
@@ -493,9 +585,35 @@ impl Client {
             "variables": variables,
         }))?;
         if let Some(said) = refusal(&payload) {
-            return Err(ApiError::Refused(said));
+            return Err(self.ours_was_refused(said));
         }
         Ok(payload)
+    }
+
+    /// What a refusal means when the query was ours rather than the user's.
+    ///
+    /// Everything that reaches here was built from `schema/*.graphql`, so a
+    /// complaint that the query is invalid is not something the person running
+    /// it wrote or can fix. It means this build and findopera.com no longer
+    /// agree about what the API contains, and the answer is a newer binary.
+    ///
+    /// That inference is only safe because of where this sits. The same
+    /// complaint about a query someone typed into `findopera graphql` is
+    /// ordinary feedback about their query, and telling them to upgrade would
+    /// send them somewhere there is nothing to find — which is why that path
+    /// calls [`refusal`] directly and never comes through here.
+    pub fn ours_was_refused(&self, said: Refusal) -> ApiError {
+        let invalid = said
+            .0
+            .iter()
+            .any(|c| c.code.as_deref() == Some("GRAPHQL_VALIDATION_FAILED"));
+        if !invalid {
+            return ApiError::Refused(said);
+        }
+        ApiError::Outdated {
+            latest: self.latest.lock().ok().and_then(|known| known.clone()),
+            detail: said,
+        }
     }
 
     fn send(&self, body: serde_json::Value) -> Result<serde_json::Value, ApiError> {
@@ -509,6 +627,11 @@ impl Client {
                 body: Some(body),
             },
         )?;
+        if let Some(latest) = &reply.cli_latest {
+            if let Ok(mut known) = self.latest.lock() {
+                *known = Some(latest.clone());
+            }
+        }
         serde_json::from_str(&reply.body).map_err(|e| {
             // A body that is not JSON is usually a proxy or an error page
             // rather than the API, and the status is the only clue as to
@@ -647,7 +770,7 @@ impl Client {
         let payload = self.post(QUERY, Some(serde_json::json!({ "ids": ids })))?;
 
         if let Some(said) = refusal(&payload) {
-            return Err(ApiError::Refused(said));
+            return Err(self.ours_was_refused(said));
         }
 
         let list = payload
