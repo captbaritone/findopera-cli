@@ -55,7 +55,7 @@ pub struct Extra {
     pub items: &'static [InputField],
 }
 
-/// Every type with a complete set of operations. 20 of them.
+/// Every type with a complete set of operations. 19 of them.
 pub const TYPES: &[Type] = &[
     Type {
         name: "album-cover-art",
@@ -472,37 +472,6 @@ pub const TYPES: &[Type] = &[
             InputField { name: "albumName", json: "string", required: false, about: "" },
             InputField { name: "id", json: "string", required: false, about: "" },
             InputField { name: "upcId", json: "string", required: false, about: "" },
-        ],
-        composite: None,
-    },
-    Type {
-        name: "spotify-track",
-        graphql: "SpotifyTrack",
-        get: "GetSpotifyTrack",
-        root: "getSpotifyTrackById",
-        add: "addSpotifyTrack",
-        update: "updateSpotifyTrack",
-        remove: "deleteSpotifyTrack",
-        merge: None,
-        create_input: "CreateSpotifyTrackInput",
-        edit_input: "UpdateSpotifyTrackInput",
-        create: &[
-            InputField { name: "discNumber", json: "integer", required: true, about: "" },
-            InputField { name: "durationMs", json: "integer", required: true, about: "" },
-            InputField { name: "id", json: "string", required: true, about: "" },
-            InputField { name: "name", json: "string", required: true, about: "" },
-            InputField { name: "spotifyAlbumId", json: "string", required: true, about: "" },
-            InputField { name: "trackNumber", json: "integer", required: true, about: "" },
-            InputField { name: "artists", json: "string", required: false, about: "" },
-        ],
-        edit: &[
-            InputField { name: "artists", json: "string", required: false, about: "" },
-            InputField { name: "discNumber", json: "integer", required: false, about: "" },
-            InputField { name: "durationMs", json: "integer", required: false, about: "" },
-            InputField { name: "id", json: "string", required: false, about: "" },
-            InputField { name: "name", json: "string", required: false, about: "" },
-            InputField { name: "spotifyAlbumId", json: "string", required: false, about: "" },
-            InputField { name: "trackNumber", json: "integer", required: false, about: "" },
         ],
         composite: None,
     },

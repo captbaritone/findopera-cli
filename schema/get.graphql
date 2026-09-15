@@ -174,19 +174,6 @@ query GetSpotifyAlbum($id: String!) {
     albumName
     url
     upc { upc }
-    tracks { id name discNumber trackNumber durationMs }
-  }
-}
-
-query GetSpotifyTrack($id: String!) {
-  getSpotifyTrackById(id: $id) {
-    id
-    name
-    artists
-    discNumber
-    trackNumber
-    durationMs
-    spotifyAlbum { id albumName }
   }
 }
 

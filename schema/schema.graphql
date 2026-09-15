@@ -106,6 +106,34 @@ enum PrestoMusicAlbumSortBy {
   LAST_EDITED
 }
 
+"""
+A table `recordChanges` can be narrowed to.
+
+Includes the join tables, which have no model of their own.
+"""
+enum RecordTable {
+  ALBUM_COVER_ART
+  APPLE_MUSIC_ALBUMS
+  CHARACTERS
+  COMPOSERS
+  CONDUCTORS
+  LANGUAGES
+  MUSIC_BRAINZ_RELEASES
+  MUSIC_BRAINZ_RELEASE_GROUPS
+  NAXOS_ALBUMS
+  OPERAS
+  PORTRAYALS
+  PRESTO_MUSIC_ALBUMS
+  RECORDINGS
+  RECORDING_UPCS
+  RECORDING_URLS
+  SINGERS
+  SPOTIFY_ALBUMS
+  TIDAL_ALBUMS
+  UPCS
+  WIKIPEDIA_IMAGES
+}
+
 enum RecordingSortBy {
   DATE_CREATED
   LAST_EDITED
@@ -127,11 +155,6 @@ enum SortOrder {
 }
 
 enum SpotifyAlbumSortBy {
-  DATE_CREATED
-  LAST_EDITED
-}
-
-enum SpotifyTrackSortBy {
   DATE_CREATED
   LAST_EDITED
 }
@@ -159,7 +182,7 @@ the record as it stands *now*, not as that edit left it. Following an edit
 to a singer tells you which singer was changed, not what the change said —
 for that, read the versions.
 """
-union EditableRecord = AlbumCoverArt | AppleMusicAlbum | Character | Composer | Conductor | Language | MusicBrainzRelease | MusicBrainzReleaseGroup | NaxosAlbum | Opera | Portrayal | PrestoMusicAlbum | Recording | RecordingURL | Singer | SpotifyAlbum | SpotifyTrack | TidalAlbum | Upc | WikipediaImage
+union EditableRecord = AlbumCoverArt | AppleMusicAlbum | Character | Composer | Conductor | Language | MusicBrainzRelease | MusicBrainzReleaseGroup | NaxosAlbum | Opera | Portrayal | PrestoMusicAlbum | Recording | RecordingURL | Singer | SpotifyAlbum | TidalAlbum | Upc | WikipediaImage
 
 input CreateAlbumCoverArtInput {
   imageUrl: String
@@ -276,16 +299,6 @@ input CreateSpotifyAlbumInput {
   albumName: String
   id: String!
   upcId: String
-}
-
-input CreateSpotifyTrackInput {
-  artists: String
-  discNumber: Int!
-  durationMs: Int!
-  id: String!
-  name: String!
-  spotifyAlbumId: String!
-  trackNumber: Int!
 }
 
 input CreateTidalAlbumInput {
@@ -463,16 +476,6 @@ input UpdateSpotifyAlbumInput {
   upcId: String
 }
 
-input UpdateSpotifyTrackInput {
-  artists: String
-  discNumber: Int
-  durationMs: Int
-  id: String
-  name: String
-  spotifyAlbumId: String
-  trackNumber: Int
-}
-
 input UpdateTidalAlbumInput {
   id: String
   upcId: String
@@ -516,6 +519,18 @@ type AlbumCoverArt {
   id: String @semanticNonNull
   imageUrl: String
   source: String
+  """
+  The barcode, always at its full fourteen digits.
+  
+  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
+  different barcodes, and the check digit is the same at every length. This
+  returns the longest, zero-padded, because it is the one form that can hold
+  any of them.
+  
+  Any of the three is accepted wherever a barcode is taken, and answered for
+  with this one. Somewhere less formal than an API -- a page, a link, anything
+  a person reads -- is welcome to drop the leading zeros again.
+  """
   upc: String @semanticNonNull
 }
 
@@ -713,6 +728,17 @@ type EditedRecord {
   rows directly, and a few did not start at 1.
   """
   changes: [FieldChange!] @semanticNonNull
+  """
+  How this record was removed, or null while it is still live.
+  
+  Describes the state this version left rather than what this edit did, so
+  that an entry can be applied on its own: it is set on every version of an
+  already-removed record, not only on the one that removed it. `changes`
+  carries the transition.
+  """
+  deletion: RecordDeletion
+  """The edit that wrote this version: who made it, when, and why."""
+  edit: Edit @semanticNonNull
   """True if this edit created the record rather than changing one."""
   isNew: Boolean @semanticNonNull
   """
@@ -732,8 +758,13 @@ type EditedRecord {
   hand back the record as of an old version without version-aware traversal
   through every relationship. `changes` is what the change said.
   
-  Null when the record has no model of its own (a join table), or when it
-  has since been deleted.
+  Deleted and merged-away records are returned too, through a lookup that
+  reads past the view. Reviewing a merge means seeing the record it took
+  away, and the edit that removed a record is exactly the edit somebody needs
+  to look at; returning null there left the one case that most needed an
+  answer without one.
+  
+  Null when the record has no model of its own — a join table.
   """
   record: EditableRecord
   """
@@ -751,6 +782,22 @@ type EditedRecord {
   creation.
   """
   version: Int @semanticNonNull
+}
+
+type EditedRecordConnection {
+  """The entries on this page, each with its position."""
+  edges: [EditedRecordEdge!] @semanticNonNull
+  """Whether there is more, and the positions at either end."""
+  pageInfo: PageInfo @semanticNonNull
+}
+
+type EditedRecordEdge {
+  """
+  Where this entry sits in the list that returned it. Opaque. Pass it back
+  as `after` to resume from just past it.
+  """
+  cursor: String @semanticNonNull
+  node: EditedRecord @semanticNonNull
 }
 
 """
@@ -947,12 +994,6 @@ type Mutation {
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
   ): SpotifyAlbum @semanticNonNull
-  """Create a new SpotifyTrack record."""
-  addSpotifyTrack(
-    input: CreateSpotifyTrackInput!
-    """Verifiable source (ideally URL) and context for this change"""
-    justification: String!
-  ): SpotifyTrack @semanticNonNull
   """Create a new TidalAlbum record."""
   addTidalAlbum(
     input: CreateTidalAlbumInput!
@@ -1130,15 +1171,6 @@ type Mutation {
   Returns true if the record was deleted, false if it didn't exist.
   """
   deleteSpotifyAlbum(
-    id: String!
-    """Verifiable source (ideally URL) and context for this change"""
-    justification: String!
-  ): Boolean @semanticNonNull
-  """
-  Delete a SpotifyTrack record by ID.
-  Returns true if the record was deleted, false if it didn't exist.
-  """
-  deleteSpotifyTrack(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
@@ -1460,13 +1492,6 @@ type Mutation {
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
   ): SpotifyAlbum @semanticNonNull
-  """Update a SpotifyTrack record by ID."""
-  updateSpotifyTrack(
-    id: String!
-    input: UpdateSpotifyTrackInput!
-    """Verifiable source (ideally URL) and context for this change"""
-    justification: String!
-  ): SpotifyTrack @semanticNonNull
   """Update a TidalAlbum record by ID."""
   updateTidalAlbum(
     id: String!
@@ -1496,7 +1521,7 @@ type NaxosAlbum {
   """
   The value that identifies this record.
   
-  Naxos catalogue numbers are unique, and are what their own site keys on.
+  Naxos catalog numbers are unique, and are what their own site keys on.
   
   Every other type here answers to `id`, and code that walks all of them —
   the CLI's get/create/edit/delete commands, for one — should not have to
@@ -1505,7 +1530,7 @@ type NaxosAlbum {
   """
   id: String @semanticNonNull
   upc: Upc
-  """URL to the catalogue page on naxos.com."""
+  """URL to the catalog page on naxos.com."""
   url: String @semanticNonNull
 }
 
@@ -1523,6 +1548,17 @@ type Opera {
   url: String @semanticNonNull
   wikipediaImage: WikipediaImage
   wikipediaUrl: String
+}
+
+type PageInfo {
+  """The position of the last entry, or null on an empty page."""
+  endCursor: String
+  """Whether asking again with `after: endCursor` would return anything."""
+  hasNextPage: Boolean @semanticNonNull
+  """Whether anything precedes this page."""
+  hasPreviousPage: Boolean @semanticNonNull
+  """The position of the first entry, or null on an empty page."""
+  startCursor: String
 }
 
 type Portrayal {
@@ -1748,8 +1784,6 @@ type Query {
   getSingerByOperaclassId(operaclassId: Int!): Singer
   getSpotifyAlbumById(id: String!): SpotifyAlbum
   getSpotifyAlbumByIds(ids: [String!]!): [SpotifyAlbum] @semanticNonNull
-  getSpotifyTrackById(id: String!): SpotifyTrack
-  getSpotifyTrackByIds(ids: [String!]!): [SpotifyTrack] @semanticNonNull
   getTidalAlbumById(id: String!): TidalAlbum
   getTidalAlbumByIds(ids: [String!]!): [TidalAlbum] @semanticNonNull
   getUpcById(id: String!): Upc
@@ -1772,10 +1806,36 @@ type Query {
   listRecordings(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: RecordingSortBy): [Recording!] @semanticNonNull
   listSingers(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: SingerSortBy): [Singer!] @semanticNonNull
   listSpotifyAlbums(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: SpotifyAlbumSortBy): [SpotifyAlbum!] @semanticNonNull
-  listSpotifyTracks(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: SpotifyTrackSortBy): [SpotifyTrack!] @semanticNonNull
   listTidalAlbums(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: TidalAlbumSortBy): [TidalAlbum!] @semanticNonNull
   listUpcs(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: UpcSortBy): [Upc!] @semanticNonNull
   listWikipediaImages(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: WikipediaImageSortBy): [WikipediaImage!] @semanticNonNull
+  """
+  Every record version, oldest first: the change log, one entry per record
+  rather than one per edit.
+  
+  Each entry says what is true of the record after that version, `isNew` and
+  `deletion`, so it can be applied on its own. A consumer
+  that stores the `cursor` of the last entry it handled and resumes from it
+  later arrives where one that read the whole log at once would.
+  
+  Forward only, and nothing is ever inserted behind a cursor, so a stored
+  cursor cannot miss a change.
+  """
+  recordChanges(
+    """
+    Resume from the `cursor` of the last entry read. Null starts at the
+    beginning.
+    """
+    after: String
+    """At most this many. Capped at 500."""
+    first: Int! = 100
+    """
+    Only rows of this table. A cursor belongs to the feed that issued it, so
+    read each table with its own cursor; passing one from a differently
+    narrowed feed is an error rather than a silent skip.
+    """
+    table: RecordTable
+  ): EditedRecordConnection @semanticNonNull
   searchCharacters(first: Int! = 5, query: String!): [Character!] @semanticNonNull
   searchComposers(first: Int! = 5, query: String!): [Composer!] @semanticNonNull
   searchConductors(first: Int! = 5, query: String!): [Conductor!] @semanticNonNull
@@ -1808,6 +1868,17 @@ type Query {
     """
     order: SortOrder
   ): [Edit!] @semanticNonNull
+}
+
+"""A record that is no longer live, and where it went."""
+type RecordDeletion {
+  """
+  Where this record's id now leads. Null for a plain deletion, which leads
+  nowhere.
+  
+  Never more than one step: merging repoints any id that already led here.
+  """
+  mergedIntoId: String
 }
 
 type Recording {
@@ -1877,21 +1948,9 @@ type SpotifyAlbum {
   albumName: String
   history: [Edit!] @semanticNonNull
   id: String @semanticNonNull
-  tracks: [SpotifyTrack!] @semanticNonNull
   upc: Upc
   """URL to the album on Spotify."""
   url: String @semanticNonNull
-}
-
-type SpotifyTrack {
-  artists: String
-  discNumber: Int @semanticNonNull
-  durationMs: Int @semanticNonNull
-  history: [Edit!] @semanticNonNull
-  id: String @semanticNonNull
-  name: String @semanticNonNull
-  spotifyAlbum: SpotifyAlbum @semanticNonNull
-  trackNumber: Int @semanticNonNull
 }
 
 type TidalAlbum {
@@ -1926,6 +1985,18 @@ type Upc {
   recordings: [Recording!] @semanticNonNull
   spotifyAlbums: [SpotifyAlbum!] @semanticNonNull
   tidalAlbums: [TidalAlbum!] @semanticNonNull
+  """
+  The barcode, always at its full fourteen digits.
+  
+  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
+  different barcodes, and the check digit is the same at every length. This
+  returns the longest, zero-padded, because it is the one form that can hold
+  any of them.
+  
+  Any of the three is accepted wherever a barcode is taken, and answered for
+  with this one. Somewhere less formal than an API -- a page, a link, anything
+  a person reads -- is welcome to drop the leading zeros again.
+  """
   upc: String @semanticNonNull
 }
 
