@@ -25,6 +25,11 @@ const DOCUMENTS = [
   "schema/recording.graphql",
   "schema/search.graphql",
   "schema/get.graphql",
+  // The mutations src/cli.rs sends. They were string literals, and so were
+  // invisible to this check, until `createAccessToken` required a username --
+  // precisely the kind of upstream move this file exists to notice.
+  "schema/token.graphql",
+  "schema/feedback.graphql",
 ];
 
 const at = (p) => new URL(`../${p}`, import.meta.url);

@@ -512,8 +512,8 @@ Requests are anonymous by default, which is enough to read. A token makes them
 yours:
 
 ```bash
-findopera login --new           # findopera.com issues one on the spot
-findopera login --new --email you@example.com
+findopera login --new --username tosca-1900        # issued on the spot
+findopera login --new --username tosca-1900 --email you@example.com
 findopera login < token.txt     # or paste one you already have
 export FINDOPERA_TOKEN=...      # or this, for anything unattended
 findopera logout
@@ -522,13 +522,28 @@ findopera logout
 `--new` asks for no account and no proof of who you are. The token is not there
 to identify you; it is there so your requests can be told apart from everyone
 else's — which is what lets an edit be attributed, a bad run be found together
-and undone, and your reads be given a limit of their own. Edits made with it
-are recorded under a name the server gives you.
+and undone, and your reads be given a limit of their own.
+
+`--username` is the one thing you are asked for, and it is **public**: it
+appears on every edit you make, so that a reader who thinks a change looks
+wrong can see whose change it was. Letters, digits and hyphens, up to 39, with
+no hyphen at either end and none doubled — the rule GitHub uses, for the same
+reason, since the name has to survive being part of an address. Names are
+compared without regard to case, so one is taken whichever way it is
+capitalised. It is not meant to be changed afterwards.
+
+Saying a name is not the same as proving anything, and nothing checks that it
+is yours. What it buys is a change log somebody can read and question.
+
+`--label` is a private note for the token itself, so you can tell it from your
+others. It is never published — and, for now, never shown back to you either,
+since nothing lists your tokens. Name the machine or the agent that will hold
+it.
 
 `--email` is optional and never verified. It is somewhere to reach you if
 something you are doing turns out to be blocked — a limit, or a bug at the
 other end — which is otherwise impossible for an account nobody proved anything
-to get. It is not a login, it is not published, and nothing in the schema can
+to get. It is not a login, it is never published, and nothing in the schema can
 read it back.
 
 findopera.com keeps only a hash of the token, so it is shown once and cannot be

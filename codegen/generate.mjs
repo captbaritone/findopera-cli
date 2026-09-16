@@ -35,7 +35,12 @@ if (errors.length) {
 // These generate no model, but they are still strings this binary sends, so
 // they are validated here too: a field renamed upstream should fail the build
 // rather than someone's search.
-for (const file of ["schema/search.graphql", "schema/get.graphql"]) {
+for (const file of [
+  "schema/search.graphql",
+  "schema/get.graphql",
+  "schema/token.graphql",
+  "schema/feedback.graphql",
+]) {
   const errors = validate(schema, parse(readFileSync(at(file), "utf8")));
   if (errors.length) {
     console.error(`${file} does not validate against the schema:`);

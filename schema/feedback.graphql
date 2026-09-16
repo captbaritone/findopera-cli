@@ -1,0 +1,7 @@
+# What `findopera feedback` sends.
+#
+# Here for the same reason as token.graphql: an operation validated against the
+# schema cannot quietly stop matching the API.
+mutation Say($kind: FeedbackKind!, $message: String!, $email: String, $url: String) {
+  submitFeedback(kind: $kind, message: $message, email: $email, url: $url)
+}

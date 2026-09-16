@@ -22,6 +22,15 @@ use std::path::{Path, PathBuf};
 /// said read back afterwards. The two streams stay separate because they
 /// carry different things: stdout is the result, stderr is everything about
 /// producing it.
+/// The two operations this file sends, kept in `schema/` so that codegen
+/// validates them against the API like every other query here.
+///
+/// They were string literals until `createAccessToken` grew a required
+/// `username`, which is the break the validation exists to catch and could not:
+/// a query nothing parses is a query nothing can check.
+const NEW_TOKEN: &str = include_str!("../schema/token.graphql");
+const SAY: &str = include_str!("../schema/feedback.graphql");
+
 pub struct Session<'a> {
     out: &'a mut dyn Write,
     err: &'a mut dyn Write,
@@ -520,13 +529,19 @@ For anything unattended, set FINDOPERA_TOKEN instead and store nothing.
 With --new there is nothing to paste: findopera.com issues one on the spot.
 It asks for no account and no proof of who you are — the token exists so that
 your requests can be told apart from everyone else's, not so that you can be
-identified. Edits made with it are recorded under a name it gives you.
+identified.
 
-  findopera login --new
-  findopera login --new --label laptop --email you@example.com
+You do have to say what to call yourself, which is not the same as proving
+anything. --username is public and appears on every edit you make, so that a
+reader who thinks a change looks wrong can see whose it was. Letters, digits
+and hyphens, and not meant to be changed afterwards.
 
---email is optional and never verified. It is somewhere to reach you if
-something you are doing turns out to be blocked, and is not published.")]
+  findopera login --new --username tosca-1900
+  findopera login --new --username tosca-1900 --label laptop --email you@example.com
+
+--label is private, and only a note to tell your own tokens apart. --email is
+optional and never verified — somewhere to reach you if something you are
+doing turns out to be blocked. Neither is ever published.")]
     Login(LoginArgs),
 
     /// Forget the stored token.
@@ -974,7 +989,25 @@ struct LoginArgs {
     /// Ask findopera.com for a new token instead of reading one.
     #[arg(long)]
     new: bool,
-    /// What to call the new token, so it can be told from your others.
+    /// What to call yourself. Public, and shown on every edit you make.
+    ///
+    /// Letters, digits and hyphens, up to 39 of them, with no hyphen at either
+    /// end and none doubled. Compared without regard to case, so a name is
+    /// taken whichever way it is capitalised. It is not meant to be changed,
+    /// so it is worth a moment's thought.
+    ///
+    /// Required with `--new`: the server will not issue a token without one.
+    #[arg(
+        long,
+        value_name = "NAME",
+        requires = "new",
+        required_if_eq("new", "true")
+    )]
+    username: Option<String>,
+    /// A private note for this token, so it can be told from your others.
+    ///
+    /// Never published, and not shown back to you yet -- nothing lists your
+    /// tokens. Name the machine or the agent that will hold it.
     #[arg(long, value_name = "TEXT", requires = "new")]
     label: Option<String>,
     /// Optional address to reach you on, if something you do gets blocked.
@@ -2060,9 +2093,7 @@ fn cmd_feedback(ui: &mut Session, args: FeedbackArgs) -> i32 {
         Err(code) => return code,
     };
     let payload = match api.post(
-        "mutation Say($kind: FeedbackKind!, $message: String!, $email: String, $url: String) {\n\
-         \x20 submitFeedback(kind: $kind, message: $message, email: $email, url: $url)\n\
-         }",
+        SAY,
         Some(serde_json::json!({
             "kind": args.kind,
             "message": message,
@@ -2096,11 +2127,18 @@ fn request_token(ui: &mut Session, args: &LoginArgs) -> Result<(String, String),
     // Anonymous by necessity: this is how a caller stops being anonymous, so
     // needing a token to ask for one would be a closed loop.
     let api = api::Client::new(&args.endpoint, None);
+    // The name is not validated here, deliberately. The rule belongs to the
+    // server, which states it in a message written for a person, and checks it
+    // before it charges anything against the five-an-hour budget -- so a name
+    // it refuses costs a round trip and nothing else. A second copy of the rule
+    // in Rust would buy no better error and would be one more thing to drift.
     let payload = match api.post(
-        "mutation NewToken($label: String, $email: String) {\n\
-         \x20 createAccessToken(label: $label, email: $email) { token username }\n\
-         }",
-        Some(serde_json::json!({ "label": args.label, "email": args.email })),
+        NEW_TOKEN,
+        Some(serde_json::json!({
+            "username": args.username,
+            "label": args.label,
+            "email": args.email,
+        })),
     ) {
         Ok(p) => p,
         Err(e) => {

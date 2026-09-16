@@ -1,0 +1,17 @@
+# What `findopera login --new` asks for.
+#
+# Here rather than inline in src/cli.rs so that it is validated against the
+# schema like every other operation in this directory. It was a Rust string
+# literal until the API required a username, and that is exactly the break
+# codegen exists to catch: the commit that breaks this CLI is, by its nature,
+# in another repo, so nothing here would have run until somebody tried to log
+# in and found they could not.
+#
+# `username` is public and lands on every edit made with the token. `label` is
+# a private note, and `email` is never published.
+mutation NewToken($username: String!, $label: String, $email: String) {
+  createAccessToken(username: $username, label: $label, email: $email) {
+    token
+    username
+  }
+}

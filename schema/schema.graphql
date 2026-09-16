@@ -499,7 +499,11 @@ type AccessToken {
   A lost token is replaced, not recovered.
   """
   token: String @semanticNonNull
-  """The name edits made with this token will be attributed to."""
+  """
+  The name edits made with this token will be attributed to.
+  
+  Public, and shown on every edit you make.
+  """
   username: String @semanticNonNull
 }
 
@@ -603,8 +607,13 @@ type Edit {
   about: it is the last time anything will prompt somebody to look.
   """
   approved: Boolean
-  """Who made the edit."""
-  editor: String @deprecated(reason: "Returns an internal account id, which names nothing a caller\ncan look up. Kept because it is public API; there is nothing to replace it\nwith yet, since who edits is not published.")
+  """
+  The account that made this edit.
+  
+  Null when no account made it: an import from before accounts existed, or a
+  migration. The justification usually names the source in that case.
+  """
+  editor: User
   id: Int @semanticNonNull
   """
   The rational for the edit which was provided by the editor at the time of
@@ -1025,16 +1034,35 @@ type Mutation {
   given editor is the same editor from one request to the next — which is what
   lets an edit be attributed, traffic be shaped per caller, and a run of bad
   changes be found together and undone.
+  
+  You do have to pick a name, which is not the same as proving anything.
   """
   createAccessToken(
     """
     Optional, and never verified. Somewhere to reach you if something you are
-    doing is being blocked — a limit, or a bug at this end. It is not a login
-    and it is not published; leave it out and everything still works.
+    doing is being blocked — a limit, or a bug at this end. It is not a login,
+    and it is never published. Leave it out and everything still works.
     """
     email: String
-    """What to call this token, so it can be told from your others later"""
+    """
+    A private note stored with this token. Never published.
+    
+    Not yet shown back to you either: nothing lists your tokens, so this is
+    write-only for the moment. Give it the name of the machine or the agent
+    that will hold the token, and it will mean something to you when there is
+    somewhere to read it.
+    """
     label: String
+    """
+    What to call yourself. Public, and shown on every edit you make.
+    
+    Letters, digits and hyphens, up to 39 of them, with no hyphen at either end
+    and none doubled. Compared without regard to case, so `Tosca` and `tosca`
+    are the same name and only one of them is free.
+    
+    Worth a moment's thought: it is not meant to be changed.
+    """
+    username: String!
   ): AccessToken @semanticNonNull
   """
   Delete a AlbumCoverArt record by ID.
@@ -2273,6 +2301,29 @@ type Upc {
   a person reads -- is welcome to drop the leading zeros again.
   """
   upc: String @semanticNonNull
+}
+
+"""
+An account: a name, and nothing else.
+
+Not a person, and not verified -- anyone can have one, and nobody is asked to
+prove anything to get it. What an account is for is narrower than it looks:
+it makes the edits of one caller recognisable as one caller's work, so that a
+run of changes can be read, trusted or doubted together.
+
+Usually somebody else's. This is what an edit hands back when asked who made
+it, so the account being described is far more often the one you are reading
+about than the one you are signed in as.
+"""
+type User {
+  """
+  What to call this account.
+  
+  Public, and shown on every edit the account has made. Letters, digits and
+  hyphens, at most 39, with no hyphen at either end and none doubled. Two
+  accounts cannot differ by case alone.
+  """
+  username: String @semanticNonNull
 }
 
 type WikipediaImage {
