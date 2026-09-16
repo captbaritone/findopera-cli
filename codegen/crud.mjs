@@ -127,6 +127,13 @@ export function crud(schema, getOperations) {
     // Only types with the whole set; anything partial is a special case and
     // does not belong in a uniform command.
     if (!mutations[`update${graphql}`] || !mutations[`delete${graphql}`]) continue;
+    if (!mutations[`undelete${graphql}`]) {
+      throw new Error(
+        `${graphql} can be deleted and not undeleted. The server generates ` +
+          `the two together, so this is a schema that is half-updated rather ` +
+          `than a type that is meant to be one-way.`,
+      );
+    }
     const root = `get${graphql}ById`;
     if (!queries[root]) continue;
 
@@ -165,6 +172,10 @@ export function crud(schema, getOperations) {
       add: name,
       update: `update${graphql}`,
       remove: `delete${graphql}`,
+      // Every type that can be removed can be put back. The server generates
+      // the pair together, so looking for one and assuming the other would
+      // only hide a mismatch.
+      restore: `undelete${graphql}`,
       // Only some types can be merged, so this is looked for rather than
       // assumed. A type without one is not a gap to be filled in later: the
       // server merges the things two records can turn out to be the same of,
@@ -208,6 +219,8 @@ export function crud(schema, getOperations) {
   L.push("    pub add: &'static str,");
   L.push("    pub update: &'static str,");
   L.push("    pub remove: &'static str,");
+  L.push("    /// The mutation that puts one back, deleted or merged away.");
+  L.push("    pub restore: &'static str,");
   L.push("    /// The mutation that merges one of these away, where there is one.");
   L.push("    pub merge: Option<&'static str>,");
   L.push("    /// The GraphQL input object a create takes.");
@@ -251,6 +264,7 @@ export function crud(schema, getOperations) {
     L.push(`        add: ${rustStr(t.add)},`);
     L.push(`        update: ${rustStr(t.update)},`);
     L.push(`        remove: ${rustStr(t.remove)},`);
+    L.push(`        restore: ${rustStr(t.restore)},`);
     L.push(
       `        merge: ${t.merge ? `Some(${rustStr(t.merge)})` : "None"},`,
     );

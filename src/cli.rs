@@ -275,6 +275,30 @@ prefer merge: a merge leaves the old id pointing at the survivor, and a
 delete does not.")]
     Delete(DeleteArgs),
 
+    /// Put a deleted or merged record back.
+    #[command(long_about = "\
+Put a record back, under the same id.
+
+  findopera undelete singer 13282 -m 'Reverting edit 161962, deleted in error.'
+
+Nothing was ever lost. A delete writes a new version of the row with every
+column as it stood and a flag set, so this is that row again — and the same
+id, which is the part that matters. Creating a replacement mints a new id and
+leaves every link made before the delete pointing at nothing, including the
+recording ids this program writes into your library.
+
+It takes merged records too, and the id stops redirecting. What it does not
+do is unpick the merge: anything moved onto the survivor by hand stays there.
+Those are judgements somebody made, and this puts a row back rather than
+reversing an opinion.
+
+No --yes. `delete` and `merge` ask for one because they take something away;
+this is the other direction.
+
+It refuses a record that is not deleted, and one whose unique value another
+live record has taken since — clear it from that record first.")]
+    Undelete(UndeleteArgs),
+
     /// Fold one record into another describing the same performance.
     #[command(
         long_about = "\
@@ -674,6 +698,26 @@ struct EditArgs {
 }
 
 #[derive(Args)]
+struct UndeleteArgs {
+    /// What kind of record.
+    #[arg(value_name = "TYPE")]
+    kind: String,
+    /// Its id.
+    #[arg(value_name = "ID")]
+    id: String,
+    /// Source and context for this change, for the record's history.
+    #[arg(long, short = 'm', value_name = "TEXT")]
+    message: String,
+    /// Print the result as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+#[derive(Args)]
 struct DeleteArgs {
     /// What kind of record.
     #[arg(value_name = "TYPE")]
@@ -1027,6 +1071,7 @@ pub fn dispatch(ui: &mut Session, cli: Cli) -> i32 {
         Command::Link(args) => cmd_link(ui, args, true),
         Command::Unlink(args) => cmd_link(ui, args, false),
         Command::Delete(args) => cmd_delete(ui, args),
+        Command::Undelete(args) => cmd_undelete(ui, args),
         Command::Merge(args) => cmd_merge(ui, args),
         Command::Describe(args) => cmd_describe(ui, args),
         Command::Search(args) => cmd_search(ui, args),
@@ -1250,6 +1295,43 @@ fn cmd_delete(ui: &mut Session, args: DeleteArgs) -> i32 {
                 );
             } else {
                 note!(ui, "findopera: removed {} {}", kind.name, args.id);
+            }
+            0
+        }
+        Err(e) => failed(ui, &e, args.json),
+    }
+}
+
+fn cmd_undelete(ui: &mut Session, args: UndeleteArgs) -> i32 {
+    let kind = match kind_named(ui, &args.kind) {
+        Ok(k) => k,
+        Err(code) => return code,
+    };
+    if args.message.trim().is_empty() {
+        return refused(
+            ui,
+            "-m needs a source and some context; it goes into the record's history",
+            "NO_JUSTIFICATION",
+            args.json,
+            2,
+        );
+    }
+    // No --yes. `delete` and `merge` ask for one because they take something
+    // away and the reader may not have meant it; putting a row back is the
+    // direction nobody needs protecting from.
+    let api = match client(ui, &args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match api.undelete(kind, &args.id, &args.message) {
+        Ok(()) => {
+            if args.json {
+                emit(
+                    ui,
+                    format_args!("{}", serde_json::json!({ "restored": args.id })),
+                );
+            } else {
+                note!(ui, "findopera: restored {} {}", kind.name, args.id);
             }
             0
         }

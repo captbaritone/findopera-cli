@@ -1345,6 +1345,32 @@ impl Client {
         identifier(&payload["data"][mutation], kind)
     }
 
+    /// Put a record back, deleted or merged away.
+    ///
+    /// The counterweight to `delete`. Nothing was ever lost -- a delete writes
+    /// a new version with every column as it stood and the flag set -- so this
+    /// is the same row again, under the same id. That is the part that
+    /// matters: creating a replacement mints a new id and leaves every link
+    /// made before the delete pointing at nothing.
+    ///
+    /// It takes merged records too, and the id stops redirecting. What it does
+    /// not do is unpick the merge: anything moved onto the survivor by hand
+    /// stays there. Those are judgements somebody made, and this restores a
+    /// row rather than reversing an opinion.
+    pub fn undelete(&self, kind: &Type, id: &str, justification: &str) -> Result<(), ApiError> {
+        let document = format!(
+            "mutation Restore($id: String!, $justification: String!) {{\n  \
+             {}(id: $id, justification: $justification)\n}}",
+            kind.restore
+        );
+        self.query_named(
+            &document,
+            "Restore",
+            serde_json::json!({ "id": id, "justification": justification }),
+        )?;
+        Ok(())
+    }
+
     /// Remove a record.
     pub fn delete(&self, kind: &Type, id: &str, justification: &str) -> Result<(), ApiError> {
         let document = format!(

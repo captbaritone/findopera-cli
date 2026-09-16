@@ -18,6 +18,7 @@ Commands:
   link      Attach a UPC to a recording
   unlink    Take a UPC off a recording
   delete    Remove a record
+  undelete  Put a deleted or merged record back
   merge     Fold one record into another describing the same performance
   describe  List the types, or say what one holds
   search    Look up an id by name

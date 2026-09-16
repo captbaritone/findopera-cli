@@ -811,38 +811,43 @@ that a column that held nothing is distinguishable from one that held the
 word "null" or an empty string.
 
 A foreign key is the exception that needs more than rendering: `"13282"` is
-true and useless. `beforeLabel` and `afterLabel` say who that is.
+true and useless. `beforeRecord` and `afterRecord` hand back the record it
+points at, for the caller to name however it names things.
+
+Those two replaced `beforeLabel` and `afterLabel`, which named it here.
+Naming is a presentation choice, and making it once on the server meant
+making it twice in fact: there was a copy for this and a copy for the
+change log, they knew different numbers of types, and a recording answered
+to two different names depending which you reached it through.
 """
 type FieldChange {
   """What this edit made it. Null means the edit cleared the field."""
   after: String
-  """
-  Who `after` names, when this field is a foreign key. Null on the same
-  terms as `beforeLabel`.
-  """
-  afterLabel: String
+  """The record `after` points at. Null on the same terms."""
+  afterRecord: EditableRecord
   """
   What the field held before this edit. Null means the column held NULL, and
   on a record this edit created, means there was nothing there at all.
   """
   before: String
   """
-  Who `before` names, when this field is a foreign key — `"Elena Suliotis"`
-  for a `singerId` of `"13282"`.
+  The record `before` points at, when this field is a foreign key.
   
-  Null when the field is not a foreign key, when the value was null, when
-  the record it pointed at has since been deleted, and when the record is
-  its own name: a UPC is its barcode, and repeating it would explain
-  nothing.
+  What `beforeLabel` above is, before somebody decided what to call it. A
+  name is a presentation choice, and the two places this codebase made that
+  choice had drifted into disagreeing: handing back the record instead lets
+  whoever is drawing it name it the way the rest of their page names things,
+  once.
   
-  Resolved on request rather than alongside the diff, because a review that
-  only wants to see which fields moved should not pay to name them. Within a
-  request these batch through the dataloaders, so a whole cast costs two
-  queries rather than one per singer.
+  `beforeLabel` stays because it is the right answer for a caller that is
+  not drawing a page. An agent reading the edit queue wants
+  `"Elena Suliotis"` in the JSON it already has, not a second query and a
+  switch on `__typename`.
   
-  The record is read as it stands today, the same caveat `record` carries.
+  Null on the same terms as `beforeLabel`: not a foreign key, a null value,
+  or a record that no longer exists.
   """
-  beforeLabel: String
+  beforeRecord: EditableRecord
   """
   The field's name in the API — `languageId`, not `language_id` — because
   somebody reading a diff is usually on their way to writing the correction.
@@ -1371,6 +1376,253 @@ type Mutation {
     url: String
   ): Boolean @semanticNonNull
   """
+  Put a deleted or merged AlbumCoverArt back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteAlbumCoverArt(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged AppleMusicAlbum back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteAppleMusicAlbum(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged Character back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteCharacter(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged Composer back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteComposer(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged Conductor back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteConductor(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged Language back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteLanguage(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged MusicBrainzRelease back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteMusicBrainzRelease(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged MusicBrainzReleaseGroup back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteMusicBrainzReleaseGroup(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged NaxosAlbum back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteNaxosAlbum(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged Opera back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteOpera(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged Portrayal back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeletePortrayal(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged PrestoMusicAlbum back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeletePrestoMusicAlbum(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged Recording back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteRecording(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged RecordingURL back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteRecordingURL(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged Singer back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteSinger(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged SpotifyAlbum back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteSpotifyAlbum(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged TidalAlbum back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteTidalAlbum(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged Upc back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteUpc(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Put a deleted or merged WikipediaImage back, by id.
+  
+  Returns false when there is no such record at all. A record that is
+  already live is an error rather than a false, because asking to restore
+  something that was never gone means the caller is working from a wrong
+  idea of what happened.
+  """
+  undeleteWikipediaImage(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
   Assuming a UPC and Recording exist, unlink them. Returns true if a link was
   deleted, false if no link existed.
   """
@@ -1810,25 +2062,32 @@ type Query {
   listUpcs(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: UpcSortBy): [Upc!] @semanticNonNull
   listWikipediaImages(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: WikipediaImageSortBy): [WikipediaImage!] @semanticNonNull
   """
-  Every record version, oldest first: the change log, one entry per record
-  rather than one per edit.
+  Every record version, oldest first by default: the change log, one entry
+  per record rather than one per edit.
   
   Each entry says what is true of the record after that version, `isNew` and
   `deletion`, so it can be applied on its own. A consumer
   that stores the `cursor` of the last entry it handled and resumes from it
   later arrives where one that read the whole log at once would.
   
-  Forward only, and nothing is ever inserted behind a cursor, so a stored
-  cursor cannot miss a change.
+  One direction at a time, whichever `order` names, and nothing is ever
+  inserted behind a cursor, so a stored cursor cannot miss a change.
   """
   recordChanges(
     """
-    Resume from the `cursor` of the last entry read. Null starts at the
-    beginning.
+    Resume from the `cursor` of the last entry read. Read in whichever
+    direction `order` names: ascending it means entries after this one,
+    descending, before it. Null starts at whichever end `order` begins from.
     """
     after: String
     """At most this many. Capped at 500."""
     first: Int! = 100
+    """
+    `ASC`, the default, reads the log forwards from the oldest entry, which
+    is what a consumer catching up wants. `DESC` starts at the newest and
+    reads backwards.
+    """
+    order: SortOrder
     """
     Only rows of this table. A cursor belongs to the feed that issued it, so
     read each table with its own cursor; passing one from a differently
@@ -1870,8 +2129,24 @@ type Query {
   ): [Edit!] @semanticNonNull
 }
 
-"""A record that is no longer live, and where it went."""
+"""
+A record that is no longer live, and where it went.
+
+A class rather than the plain object this was, so that naming the survivor
+has a `vc` to look it up with. The shape a caller sees is unchanged.
+"""
 type RecordDeletion {
+  """
+  The surviving record, by name and address.
+  
+  `mergedIntoId` on its own says a merge happened and nothing about what it
+  decided, which is the one thing anybody reading a merge wants: an id is
+  not a singer. Null for a plain deletion.
+  
+  Read past the view, because a survivor can itself have been merged away
+  later and the chain is still worth following.
+  """
+  mergedInto: EditableRecord
   """
   Where this record's id now leads. Null for a plain deletion, which leads
   nowhere.

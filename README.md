@@ -120,8 +120,14 @@ $ echo '{"firstName":"Maria","lastName":"Callas"}' \
     | findopera create singer -m 'https://en.wikipedia.org/wiki/Maria_Callas'
 $ echo '{"died":1977}' | findopera edit singer 133 -m 'https://...'
 $ findopera delete singer 133 -m '...' --yes
+$ findopera undelete singer 133 -m '...'
 $ findopera merge singer 133 --into 456 -m '...' --yes
 ```
+
+Nothing here is one-way. `undelete` puts a record back under the same id, and
+it takes merged records too, so the ids you have written down keep meaning
+what they meant. It asks for no `--yes`: the two verbs that do are the two
+that take something away.
 
 `findopera describe` lists the twenty types. Input is JSON on stdin or from a
 file, and the fields are checked here before anything is sent — a misspelling
