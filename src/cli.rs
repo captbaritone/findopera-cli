@@ -514,7 +514,16 @@ Read a token from standard input and keep it, so that later runs are made as
 you rather than as nobody.
 
   findopera login < token.txt
-  pbpaste | findopera login
+  pbpaste | findopera login          # macOS
+  wl-paste | findopera login         # Linux, Wayland
+  Get-Clipboard | findopera login    # Windows, PowerShell
+
+Or run it with no redirect at all, paste, and press Ctrl-D.
+
+If you already have an account, this is the way in: sign in at
+https://findopera.com/auth and mint a token there for the account you have.
+Your terminal and your browser are then the same editor, and your edits are
+attributed to one name rather than split across two.
 
 It is read from standard input rather than taken as an argument so that it
 does not end up in the shell's history, or visible to anyone who can list
@@ -526,10 +535,15 @@ along with it.
 
 For anything unattended, set FINDOPERA_TOKEN instead and store nothing.
 
-With --new there is nothing to paste: findopera.com issues one on the spot.
-It asks for no account and no proof of who you are — the token exists so that
-your requests can be told apart from everyone else's, not so that you can be
-identified.
+With --new there is nothing to paste: findopera.com makes you an account on
+the spot and hands back a token for it. Nobody is asked to prove who they are
+— the token exists so that your requests can be told apart from everyone
+else's, not so that you can be identified.
+
+It is a *new* account, which is the thing to be careful about. Run it while
+you already have one and you become two editors who cannot be told apart from
+outside, and joining them again is a migration rather than a setting. If you
+have an account, take a token from https://findopera.com/auth instead.
 
 You do have to say what to call yourself, which is not the same as proving
 anything. --username is public and appears on every edit you make, so that a
@@ -986,7 +1000,11 @@ struct FeedbackArgs {
 
 #[derive(Args)]
 struct LoginArgs {
-    /// Ask findopera.com for a new token instead of reading one.
+    /// Register a new account and keep a token for it, instead of reading one.
+    ///
+    /// For somebody who has no account. If you have one, mint a token for it at
+    /// https://findopera.com/auth and pipe that in, or this makes you a second
+    /// identity whose edits are attributed separately.
     #[arg(long)]
     new: bool,
     /// What to call yourself. Public, and shown on every edit you make.
@@ -1179,11 +1197,14 @@ fn cmd_get(ui: &mut Session, args: GetArgs) -> i32 {
         Ok(c) => c,
         Err(code) => return code,
     };
-    let record = match api.get(kind, &args.id) {
-        Ok(r) => r,
-        Err(e) => return failed(ui, &e, args.json),
-    };
+    // Two shapes, two requests. `--json` wants the fields to compute with and
+    // the default wants the record written out, and asking for both would
+    // fetch every record twice to use half of it.
     if args.json {
+        let record = match api.get(kind, &args.id) {
+            Ok(r) => r,
+            Err(e) => return failed(ui, &e, args.json),
+        };
         emit(
             ui,
             format_args!(
@@ -1192,7 +1213,11 @@ fn cmd_get(ui: &mut Session, args: GetArgs) -> i32 {
             ),
         );
     } else {
-        render(ui, &record, 0);
+        let text = match api.get_text(kind, &args.id) {
+            Ok(t) => t,
+            Err(e) => return failed(ui, &e, args.json),
+        };
+        emit(ui, format_args!("{text}"));
     }
     0
 }
@@ -2848,105 +2873,6 @@ fn cmd_template(ui: &mut Session) -> i32 {
     0
 }
 
-/// Print a record as indented lines.
-///
-/// One renderer rather than twenty, because the curation lives in
-/// `schema/get.graphql` — what is fetched is decided there, and this only has
-/// to lay out whatever came back. A per-type renderer would be a second place
-/// to keep in step with the first.
-fn render(ui: &mut Session, value: &serde_json::Value, indent: usize) -> bool {
-    let pad = " ".repeat(indent);
-    let serde_json::Value::Object(map) = value else {
-        return emit(ui, format_args!("{pad}{}", scalar(value)));
-    };
-
-    // Keys are laid out in a column, but only against their own siblings: a
-    // nested object padded to its parent's width reads as though it were part
-    // of it.
-    // Everything that ends up on one line shares the column, which includes an
-    // empty list and a list of plain values — they print inline too, and
-    // leaving them out of the count makes them the only crooked rows.
-    let inline = |v: &serde_json::Value| match v {
-        serde_json::Value::Object(_) => false,
-        serde_json::Value::Array(items) => items.iter().all(|i| !i.is_object()),
-        _ => true,
-    };
-    let width = map
-        .iter()
-        .filter(|(_, v)| inline(v))
-        .map(|(k, _)| k.chars().count())
-        .max()
-        .unwrap_or(0);
-
-    // A record's own values first, then the records it points at. Alphabetical
-    // order alone interleaves them, and a nested block between two scalars
-    // makes both harder to read than either would be alone.
-    let (nested, plain): (Vec<_>, Vec<_>) = map.iter().partition(|(_, v)| {
-        v.is_object() || matches!(v, serde_json::Value::Array(a) if a.iter().any(|i| i.is_object()))
-    });
-
-    for (key, child) in plain.into_iter().chain(nested) {
-        match child {
-            serde_json::Value::Object(_) => {
-                if !emit(ui, format_args!("{pad}{key}")) {
-                    return false;
-                }
-                if !render(ui, child, indent + 2) {
-                    return false;
-                }
-            }
-            serde_json::Value::Array(items) => {
-                if items.is_empty() {
-                    if !emit(ui, format_args!("{pad}{key:width$}  —")) {
-                        return false;
-                    }
-                    continue;
-                }
-                // A list of plain values belongs on one line; a list of records
-                // does not.
-                if items.iter().all(|i| !i.is_object()) {
-                    let joined: Vec<String> = items.iter().map(scalar).collect();
-                    if !emit(ui, format_args!("{pad}{key:width$}  {}", joined.join(", "))) {
-                        return false;
-                    }
-                    continue;
-                }
-                if !emit(ui, format_args!("{pad}{key}")) {
-                    return false;
-                }
-                for item in items {
-                    if !render(ui, item, indent + 2) {
-                        return false;
-                    }
-                    if !emit(ui, format_args!("")) {
-                        return false;
-                    }
-                }
-            }
-            _ => {
-                if !emit(ui, format_args!("{pad}{key:width$}  {}", scalar(child))) {
-                    return false;
-                }
-            }
-        }
-    }
-    true
-}
-
-/// One value, as a person would read it.
-///
-/// An absent value is shown rather than dropped: a field that is empty is
-/// something to fill in, and a reader deciding what to send needs to know the
-/// difference between empty and not a field at all.
-fn scalar(value: &serde_json::Value) -> String {
-    match value {
-        serde_json::Value::Null => "—".to_string(),
-        serde_json::Value::String(s) if s.is_empty() => "—".to_string(),
-        serde_json::Value::String(s) => s.clone(),
-        serde_json::Value::Bool(b) => if *b { "yes" } else { "no" }.to_string(),
-        other => other.to_string(),
-    }
-}
 
 /// The type this command is about.
 fn kind_named(ui: &mut Session, name: &str) -> Result<&'static crud::Type, i32> {
@@ -3197,16 +3123,6 @@ mod tests {
         let why = super::check_input(&serde_json::json!([1, 2]), &[], &[], "singer")
             .expect_err("a list is not an input");
         assert!(why.contains("JSON object"), "got: {why}");
-    }
-
-    #[test]
-    fn absent_values_are_shown_rather_than_dropped() {
-        // A reader deciding what to fill in needs to see that a field exists
-        // and is empty, which is not the same as it not being a field.
-        assert_eq!(super::scalar(&serde_json::Value::Null), "—");
-        assert_eq!(super::scalar(&serde_json::json!("")), "—");
-        assert_eq!(super::scalar(&serde_json::json!(true)), "yes");
-        assert_eq!(super::scalar(&serde_json::json!(1923)), "1923");
     }
 
     #[test]

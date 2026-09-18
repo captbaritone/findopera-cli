@@ -1,4 +1,8 @@
-# What `findopera get <type> <id>` fetches, one operation per type.
+# What `findopera get <type> <id> --json` fetches, one operation per type.
+#
+# These are the structured half. The default prints the server's own
+# rendering, which is the `*Text` operations at the foot of this file; this is
+# what `--json` returns, for a caller computing rather than reading.
 #
 # Curated rather than derived: the schema is cyclic, so "everything" has no
 # meaning, and what is worth seeing differs per type. A recording wants its
@@ -225,4 +229,72 @@ query GetMusicBrainzReleaseGroup($id: String!) {
     id
     recording { id year opera { id title } }
   }
+}
+
+# ---------------------------------------------------------------------------
+# The same records, rendered by the server.
+#
+# `asPlainText` is one field that returns the whole record written out, so the
+# layout lives in the schema and every client gets the same answer. This is
+# what `findopera get` prints; the curated operations above are what `--json`
+# returns, and the two are separate documents on purpose -- selecting both
+# would fetch the record twice to use half of it.
+# ---------------------------------------------------------------------------
+
+query GetRecordingText($id: String!) {
+  getRecordingById(id: $id) { asPlainText }
+}
+query GetOperaText($id: String!) {
+  getOperaById(id: $id) { asPlainText }
+}
+query GetSingerText($id: String!) {
+  getSingerById(id: $id) { asPlainText }
+}
+query GetConductorText($id: String!) {
+  getConductorById(id: $id) { asPlainText }
+}
+query GetComposerText($id: String!) {
+  getComposerById(id: $id) { asPlainText }
+}
+query GetCharacterText($id: String!) {
+  getCharacterById(id: $id) { asPlainText }
+}
+query GetPortrayalText($id: String!) {
+  getPortrayalById(id: $id) { asPlainText }
+}
+query GetLanguageText($id: String!) {
+  getLanguageById(id: $id) { asPlainText }
+}
+query GetUpcText($id: String!) {
+  getUpcById(id: $id) { asPlainText }
+}
+query GetRecordingURLText($id: String!) {
+  getRecordingURLById(id: $id) { asPlainText }
+}
+query GetAlbumCoverArtText($id: String!) {
+  getAlbumCoverArtById(id: $id) { asPlainText }
+}
+query GetWikipediaImageText($id: String!) {
+  getWikipediaImageById(id: $id) { asPlainText }
+}
+query GetSpotifyAlbumText($id: String!) {
+  getSpotifyAlbumById(id: $id) { asPlainText }
+}
+query GetAppleMusicAlbumText($id: String!) {
+  getAppleMusicAlbumById(id: $id) { asPlainText }
+}
+query GetTidalAlbumText($id: String!) {
+  getTidalAlbumById(id: $id) { asPlainText }
+}
+query GetNaxosAlbumText($id: String!) {
+  getNaxosAlbumById(id: $id) { asPlainText }
+}
+query GetPrestoMusicAlbumText($id: String!) {
+  getPrestoMusicAlbumById(id: $id) { asPlainText }
+}
+query GetMusicBrainzReleaseText($id: String!) {
+  getMusicBrainzReleaseById(id: $id) { asPlainText }
+}
+query GetMusicBrainzReleaseGroupText($id: String!) {
+  getMusicBrainzReleaseGroupById(id: $id) { asPlainText }
 }

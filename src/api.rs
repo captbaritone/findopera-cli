@@ -1220,6 +1220,31 @@ impl Client {
         Ok(record.clone())
     }
 
+    /// One record, rendered by the server.
+    ///
+    /// `asPlainText` is a field, so the layout lives in the schema and this
+    /// asks for it rather than owning a copy. The CLI is Rust and cannot
+    /// import a line of the renderer; going through the API is what lets it
+    /// have the same answer anyway, which is the same argument that already
+    /// applied to `/recording/:id.txt`.
+    ///
+    /// A separate document from the curated one above rather than another
+    /// field on it: selecting both would fetch every record twice over to use
+    /// half of what came back.
+    pub fn get_text(&self, kind: &Type, id: &str) -> Result<String, ApiError> {
+        let operation = format!("{}Text", kind.get);
+        let payload = self.query_named(GETS, &operation, serde_json::json!({ "id": id }))?;
+        let record = &payload["data"][kind.root];
+        if record.is_null() {
+            return Err(ApiError::Refused(Refusal(vec![Complaint {
+                message: format!("there is no {} with the id {id}", kind.name),
+                code: Some("NOT_FOUND".to_string()),
+                path: Vec::new(),
+            }])));
+        }
+        Ok(record["asPlainText"].as_str().unwrap_or_default().to_string())
+    }
+
     /// Add a record, and hand back the id it was given.
     ///
     /// Every type answers to `id` now, which is what lets one line of GraphQL
