@@ -30,6 +30,11 @@ const DOCUMENTS = [
   // precisely the kind of upstream move this file exists to notice.
   "schema/token.graphql",
   "schema/feedback.graphql",
+  // Generated, and every mutation this binary sends. Checking these against
+  // the live schema is the point of the file: `undelete*` changing from a
+  // Boolean to a record is exactly the move that broke every restore while
+  // they were still `format!()` templates nothing could see.
+  "schema/mutations.graphql",
 ];
 
 const at = (p) => new URL(`../${p}`, import.meta.url);

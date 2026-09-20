@@ -23,7 +23,7 @@ findopera: singer 133 is now singer 456
 ## Requests
 
 ```
-Merge
+MergeSinger
   {"id":"133","intoId":"456","justification":"same person, two spellings"}
 ```
 

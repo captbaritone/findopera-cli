@@ -12,6 +12,7 @@ import { dirname, resolve } from "node:path";
 import { buildSchema, parse, validate, getNamedType } from "graphql";
 
 import { crud } from "./crud.mjs";
+import { mutations } from "./mutations.mjs";
 import { walk } from "./walk.mjs";
 import { emit } from "./emit.mjs";
 import { snake } from "./schema.mjs";
@@ -35,6 +36,9 @@ if (errors.length) {
 // These generate no model, but they are still strings this binary sends, so
 // they are validated here too: a field renamed upstream should fail the build
 // rather than someone's search.
+//
+// `mutations.graphql` is written further down, from the type table, and so is
+// validated separately once it exists.
 for (const file of [
   "schema/search.graphql",
   "schema/get.graphql",
@@ -96,6 +100,20 @@ for (const [type, operation] of getOperations) {
   }
 }
 writeFileSync(at("src/model/crud.rs"), crud(schema, getOperations));
+
+// Written from the same table, then validated like anything else in `schema/`.
+// Generated rather than hand-kept because it is a hundred operations: twenty
+// types times five verbs, each naming an input object only the schema knows.
+const mutationsSrc = mutations(schema, getOperations);
+writeFileSync(at("schema/mutations.graphql"), mutationsSrc);
+{
+  const errors = validate(schema, parse(mutationsSrc));
+  if (errors.length) {
+    console.error("schema/mutations.graphql does not validate against the schema:");
+    for (const e of errors) console.error("  " + e.message);
+    process.exit(1);
+  }
+}
 
 const overlay = (await import(at("schema/fields.mjs"))).default;
 

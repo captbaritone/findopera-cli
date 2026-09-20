@@ -115,7 +115,14 @@ function composite(schema, mutations, graphql) {
   return { mutation: name, extras };
 }
 
-export function crud(schema, getOperations) {
+/**
+ * The types, before anything is written out.
+ *
+ * Split from `crud` so that `mutations.mjs` derives its documents from the
+ * same table the Rust is built from. Two walks of the schema could disagree;
+ * one table cannot disagree with itself.
+ */
+export function table(schema, getOperations) {
   const mutations = schema.getMutationType().getFields();
   const queries = schema.getQueryType().getFields();
 
@@ -192,6 +199,11 @@ export function crud(schema, getOperations) {
     });
   }
   types.sort((a, b) => a.name.localeCompare(b.name));
+  return types;
+}
+
+export function crud(schema, getOperations) {
+  const types = table(schema, getOperations);
 
   const L = [];
   L.push("//! The types the CRUD commands work through.");

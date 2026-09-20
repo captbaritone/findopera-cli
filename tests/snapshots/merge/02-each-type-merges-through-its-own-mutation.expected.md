@@ -23,7 +23,7 @@ findopera: opera 12 is now opera 34
 ## Requests
 
 ```
-Merge
+MergeOpera
   {"id":"12","intoId":"34","justification":"https://... — one work, catalogued twice"}
 ```
 

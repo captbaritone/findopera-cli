@@ -5,7 +5,7 @@ way round would merge the survivor into the duplicate, and nothing
 downstream could tell. The `Requests` section below is what makes that
 visible: `id` is the loser, `intoId` the survivor.
 
-## Answer Merge
+## Answer MergeSinger
 
 ```json
 {"data":{"mergeSinger":{"id":"456"}}}

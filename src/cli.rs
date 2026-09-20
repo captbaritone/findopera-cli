@@ -2873,7 +2873,6 @@ fn cmd_template(ui: &mut Session) -> i32 {
     0
 }
 
-
 /// The type this command is about.
 fn kind_named(ui: &mut Session, name: &str) -> Result<&'static crud::Type, i32> {
     if let Some(t) = crud::TYPES.iter().find(|t| t.name == name) {
