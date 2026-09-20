@@ -339,14 +339,22 @@ Examples:
 A list of recordings you keep on findopera.com.
 
   findopera collection list
+  findopera collection show 1
   findopera collection create 'Main library'
   findopera collection add 264 1247 --to 3
   findopera collection remove 264 --from 3
 
 Every one of these names a list by its id rather than by its name, because
 nothing stops two lists sharing a name. `collection list` is where an id comes
-from, and prints what each one holds so that picking the right one does not
-mean opening the website.
+from; it says how much each one holds, and `collection show` prints what that
+is, so neither question means opening the website.
+
+  findopera collection show 3
+  findopera collection show 3 --offset 50
+
+`show` pages, and `search` does not, which is the difference between the two
+ways of reading a list. A search is narrowed until the answer fits; walking a
+list you already chose has to be able to reach the end of it.
 
 Ids can be read from standard input by passing `-` in their place, which is
 what makes this worth scripting:
@@ -893,7 +901,7 @@ struct Reaching {
 /// What to do with one of your lists.
 #[derive(Subcommand)]
 enum Collecting {
-    /// The lists this account keeps.
+    /// The lists this account keeps, and how much each holds.
     List(CollectionListArgs),
     /// Start a list.
     Create(CollectionCreateArgs),
@@ -907,6 +915,8 @@ enum Collecting {
     Rename(CollectionRenameArgs),
     /// Delete a list for good. The recordings in it are untouched.
     Purge(CollectionPurgeArgs),
+    /// What a list holds.
+    Show(CollectionShowArgs),
 }
 
 #[derive(Args)]
@@ -988,6 +998,24 @@ struct CollectionPurgeArgs {
     /// Say so out loud. Nothing is purged without it.
     #[arg(long)]
     yes: bool,
+    #[command(flatten)]
+    reaching: Reaching,
+}
+
+#[derive(Args)]
+struct CollectionShowArgs {
+    /// The list's id.
+    #[arg(value_name = "ID")]
+    id: i64,
+    /// How many to show, up to 200.
+    #[arg(long, default_value_t = 50, value_name = "N")]
+    first: u32,
+    /// How many to step over first, for walking a long list.
+    #[arg(long, default_value_t = 0, value_name = "N")]
+    offset: u32,
+    /// Separate the columns with a tab instead of padding, for piping.
+    #[arg(long)]
+    tabs: bool,
     #[command(flatten)]
     reaching: Reaching,
 }
@@ -1798,6 +1826,7 @@ fn cmd_collection(ui: &mut Session, args: CollectionArgs) -> i32 {
         Collecting::Set(a) => cmd_collection_set(ui, a),
         Collecting::Rename(a) => cmd_collection_rename(ui, a),
         Collecting::Purge(a) => cmd_collection_purge(ui, a),
+        Collecting::Show(a) => cmd_collection_show(ui, a),
     }
 }
 
@@ -1990,6 +2019,110 @@ fn cmd_collection_purge(ui: &mut Session, a: CollectionPurgeArgs) -> i32 {
         }
         Err(e) => failed(ui, &e, a.reaching.json),
     }
+}
+
+/// What a list holds.
+///
+/// `search recording --in-collection <id>` answers a narrower version of this
+/// question and was the only way to ask it, which was the wrong shape: the
+/// place to look is under the noun, and the two are different jobs. A search
+/// finds something in a list; this walks the list from end to end, which is
+/// what auditing one takes -- and why this pages and a search does not.
+fn cmd_collection_show(ui: &mut Session, a: CollectionShowArgs) -> i32 {
+    if a.first > api::MAX_FIRST {
+        return refused(
+            ui,
+            &format!(
+                "--first is {} at most, and {} was asked for. Walk the list with --offset \
+                 instead.",
+                api::MAX_FIRST,
+                a.first
+            ),
+            "TOO_MANY",
+            a.reaching.json,
+            2,
+        );
+    }
+    let api = match client_signed_in(ui, &a.reaching) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    // Named before it is listed, so that the answer to "which list is this"
+    // does not depend on remembering what the number meant. It also turns an
+    // id that is not yours into one clear refusal rather than an empty page.
+    let list = match one_collection(&api, a.id) {
+        Ok(c) => c,
+        Err(e) => return failed(ui, &e, a.reaching.json),
+    };
+
+    let criteria = api::Criteria {
+        in_collection: Some(a.id),
+        first: a.first,
+        offset: a.offset,
+        ..Default::default()
+    };
+    let results = match api.search(api::Kind::Recording, &criteria) {
+        Ok(r) => r,
+        Err(e) => return failed(ui, &e, a.reaching.json),
+    };
+
+    if a.reaching.json {
+        let rows: Vec<serde_json::Value> = results
+            .found
+            .iter()
+            .map(|f| serde_json::json!({ "id": f.id, "name": f.name, "about": f.about }))
+            .collect();
+        let body = serde_json::json!({
+            "collection": { "id": list.id, "name": list.name, "entries": list.entries },
+            "recordings": rows,
+            "offset": a.offset,
+            "truncated": results.more,
+        });
+        emit(
+            ui,
+            format_args!(
+                "{}",
+                serde_json::to_string_pretty(&body).unwrap_or_default()
+            ),
+        );
+        return 0;
+    }
+
+    if results.found.is_empty() {
+        // Two different empties, and which one it is decides what to do next.
+        if a.offset > 0 {
+            note!(
+                ui,
+                "findopera: \"{}\" ({}) holds {}, so there is nothing at {}",
+                list.name,
+                list.id,
+                list.entries,
+                a.offset
+            );
+        } else {
+            note!(ui, "findopera: \"{}\" ({}) is empty", list.name, list.id);
+        }
+        return 1;
+    }
+
+    if !print_found(ui, &results.found, a.tabs) {
+        return 0;
+    }
+    let shown = results.found.len() as u32;
+    let seen = a.offset + shown;
+    // Said on stderr, after the list, so it cannot be mistaken for one of the
+    // rows -- and said with the numbers, because the next command is built
+    // out of them.
+    if results.more || seen < list.entries as u32 {
+        note!(
+            ui,
+            "findopera: {}-{} of {}. The next are `--offset {seen}`.",
+            a.offset + 1,
+            seen,
+            list.entries
+        );
+    }
+    0
 }
 
 fn cmd_collection_hold(
@@ -2510,6 +2643,9 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
                     year: a.year,
                     upc: a.upc,
                     first,
+                    // A search is narrowed, not paged; only `collection show`
+                    // walks past the first page.
+                    offset: 0,
                 },
             )
         }
@@ -2588,22 +2724,8 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
         return 1;
     }
 
-    let id_width = found.iter().map(|f| f.id.len()).max().unwrap_or(0);
-    let name_width = found
-        .iter()
-        .map(|f| f.name.chars().count())
-        .max()
-        .unwrap_or(0);
-    for f in found {
-        let line = if looking.tabs {
-            format!("{}\t{}\t{}", f.id, f.name, f.about)
-        } else {
-            let pad = name_width.saturating_sub(f.name.chars().count());
-            format!("{:>id_width$}  {}{:pad$}  {}", f.id, f.name, "", f.about)
-        };
-        if !emit(ui, format_args!("{}", line.trim_end())) {
-            return 0;
-        }
+    if !print_found(ui, found, looking.tabs) {
+        return 0;
     }
     // Said after the results, and on stderr, so it cannot be mistaken for one
     // of them. Without it a full page reads as the whole answer, and something
@@ -2617,6 +2739,32 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
         );
     }
     0
+}
+
+/// Results as columns, padded to each other or separated by tabs.
+///
+/// One implementation for `search` and `collection show`, because two would
+/// drift and the rows are the same rows. False once the reader has gone away,
+/// which is the caller's cue to stop rather than to report anything.
+fn print_found(ui: &mut Session, found: &[api::Found], tabs: bool) -> bool {
+    let id_width = found.iter().map(|f| f.id.len()).max().unwrap_or(0);
+    let name_width = found
+        .iter()
+        .map(|f| f.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    for f in found {
+        let line = if tabs {
+            format!("{}\t{}\t{}", f.id, f.name, f.about)
+        } else {
+            let pad = name_width.saturating_sub(f.name.chars().count());
+            format!("{:>id_width$}  {}{:pad$}  {}", f.id, f.name, "", f.about)
+        };
+        if !emit(ui, format_args!("{}", line.trim_end())) {
+            return false;
+        }
+    }
+    true
 }
 
 /// A kind that is looked up by name and nothing else.

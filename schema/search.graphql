@@ -79,8 +79,12 @@ query SearchCharacters($query: String!, $first: Int!) {
   }
 }
 
-query SearchRecordings($filter: RecordingFilterInput!, $first: Int!) {
-  filterRecordings(filter: $filter, first: $first) {
+# `offset` is declared for `collection show`, which walks a list from end to
+# end. `search` does not offer it on purpose -- narrowing is the better answer
+# to too many matches -- but enumerating a list somebody already chose is a
+# different question, and it has to be able to reach the far side of a page.
+query SearchRecordings($filter: RecordingFilterInput!, $first: Int!, $offset: Int!) {
+  filterRecordings(filter: $filter, first: $first, offset: $offset) {
     id
     year
     opera {

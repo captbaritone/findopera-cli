@@ -491,8 +491,21 @@ is a question about your library answered by the server — so it is as current
 as your last `organize --write`, and needs no disk access at all. It is the
 same filter as `--in-collection <id>`, with the number read from the settings.
 
-`findopera collection` manages the lists themselves — `list`, `create`, `add`,
-`remove`, `set`, `rename` and `purge`. None of them takes `-m`: a list belongs
+`findopera collection` manages the lists themselves — `list`, `show`, `create`,
+`add`, `remove`, `set`, `rename` and `purge`. `list` says how much each one
+holds and `show` prints what that is, a page at a time:
+
+```console
+$ findopera collection show 1 --first 3
+12189  Alice's Adventures Under Ground  2021  de Ridder  Boyle, Presland, Summers
+10079  Pelléas et Mélisande             2021  Roth  Behr, Santoni, Duhamel
+10776  Les Boréades                     2020  Luks  Cachet, Vidal, Kristjánsson
+findopera: 1-3 of 4793. The next are `--offset 3`.
+```
+
+`show` pages and `search` does not, which is the difference between the two
+ways of reading a list: a search is narrowed until the answer fits, and
+walking a list you already chose has to reach the end of it. None of them takes `-m`: a list belongs
 to your account rather than to the shared catalog, so there is nothing to
 justify to anybody. For the same reason none of it is versioned — there is no
 `undelete` for a list — which is why `purge` is not called `delete`, and why

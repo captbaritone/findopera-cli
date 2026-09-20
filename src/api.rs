@@ -1091,6 +1091,9 @@ pub struct Criteria {
     /// A barcode off the box, however it is written.
     pub upc: Option<String>,
     pub first: u32,
+    /// How many to step over first. Only `collection show` sets it; a search
+    /// is narrowed rather than paged.
+    pub offset: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1196,7 +1199,7 @@ impl Client {
             if let Some(upc) = &criteria.upc {
                 filter.insert("upc".into(), upc.clone().into());
             }
-            serde_json::json!({ "filter": filter, "first": first })
+            serde_json::json!({ "filter": filter, "first": first, "offset": criteria.offset })
         } else {
             serde_json::json!({ "query": criteria.text, "first": first })
         };
