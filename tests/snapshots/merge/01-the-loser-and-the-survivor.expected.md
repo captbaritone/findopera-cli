@@ -24,7 +24,7 @@ findopera: singer 133 is now singer 456
 
 ```
 MergeSinger
-  {"id":"133","intoId":"456","justification":"same person, two spellings"}
+  {"id":"133","intoId":"456","justification":"https://en.wikipedia.org/wiki/Maria_Callas — one person, two spellings"}
 ```
 
 ## Exit

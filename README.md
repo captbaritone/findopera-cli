@@ -118,10 +118,10 @@ $ findopera describe singer --json   # the same, as a JSON Schema
 
 $ echo '{"firstName":"Maria","lastName":"Callas"}' \
     | findopera create singer -m 'https://en.wikipedia.org/wiki/Maria_Callas'
-$ echo '{"died":1977}' | findopera edit singer 133 -m 'https://...'
-$ findopera delete singer 133 -m '...' --yes
-$ findopera undelete singer 133 -m '...'
-$ findopera merge singer 133 --into 456 -m '...' --yes
+$ echo '{"died":1977}' | findopera edit singer 133 -m 'https://en.wikipedia.org/wiki/Maria_Callas — died 1977'
+$ findopera delete singer 133 -m 'https://findopera.com/singer/456 — same person, already here' --yes
+$ findopera undelete singer 133 -m 'https://en.wikipedia.org/wiki/Maria_Callas — not a duplicate after all'
+$ findopera merge singer 133 --into 456 -m 'https://en.wikipedia.org/wiki/Maria_Callas — one person, two spellings' --yes
 ```
 
 Nothing here is one-way. `undelete` puts a record back under the same id, and
@@ -134,8 +134,20 @@ file, and the fields are checked here before anything is sent — a misspelling
 is answered in the terms you used rather than as a GraphQL error about an input
 type you never mentioned.
 
-Every change needs `-m`: a source, ideally a URL, and enough context for
-someone reading the history later to judge it. The server requires one.
+Every change needs `-m`, and what belongs in it is a URL:
+
+```bash
+-m 'https://en.wikipedia.org/wiki/Maria_Callas — born 1923, died 1977'
+```
+
+That message is the whole of what a reviewer gets. They were not there and
+cannot ask, so `-m 'cast corroborated by the work discography and release
+credits'` leaves an edit that may be perfectly correct with no way to tell.
+Both describe a real source; only one can be opened. Say what the page settles
+as well, where a link alone would not make it obvious.
+
+The server requires a message and refuses without one. Nothing checks that it
+holds a URL — which is why it is worth saying.
 
 The queries live in [`schema/get.graphql`](schema/get.graphql), curated per
 type and validated against the schema by codegen. The table of types and their
@@ -182,7 +194,7 @@ than deleting it, which is the difference that matters — the losing id keeps
 resolving, to the survivor:
 
 ```bash
-$ findopera merge singer 133 --into 456 -m 'same person, two spellings' --yes
+$ findopera merge singer 133 --into 456 -m 'https://en.wikipedia.org/wiki/Maria_Callas — one person, two spellings' --yes
 456
 ```
 
@@ -210,9 +222,9 @@ A recording and a UPC are joined rather than owned, so they have their own
 verbs:
 
 ```bash
-$ findopera create upc <<< '{"upc":"0013491103020"}' -m 'back of the box'
-$ findopera link recording 264 --upc '0013-491 103020' -m 'Decca reissue'
-$ findopera unlink recording 264 --upc 0013491103020 -m 'wrong release'
+$ findopera create upc <<< '{"upc":"0013491103020"}' -m 'https://www.discogs.com/release/1234567 — barcode on the back of the box'
+$ findopera link recording 264 --upc '0013-491 103020' -m 'https://www.discogs.com/release/1234567 — the 1997 Decca reissue'
+$ findopera unlink recording 264 --upc 0013491103020 -m 'https://www.discogs.com/release/7654321 — this barcode is the 2002 set, not this one'
 ```
 
 The UPC has to exist first — nothing conjures one from a typo. Punctuation in

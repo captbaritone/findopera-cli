@@ -10,5 +10,5 @@ other half of the claim: no round trip was spent finding out.
 ## Run
 
 ```console
-$ findopera merge upc 1 --into 2 -m 'a reason' --yes
+$ findopera merge upc 1 --into 2 -m 'https://example.com/whatever — a reason' --yes
 ```

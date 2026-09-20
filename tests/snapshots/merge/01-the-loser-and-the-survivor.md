@@ -14,5 +14,5 @@ visible: `id` is the loser, `intoId` the survivor.
 ## Run
 
 ```console
-$ findopera merge singer 133 --into 456 -m 'same person, two spellings' --yes
+$ findopera merge singer 133 --into 456 -m 'https://en.wikipedia.org/wiki/Maria_Callas — one person, two spellings' --yes
 ```

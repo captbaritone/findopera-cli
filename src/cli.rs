@@ -235,9 +235,22 @@ Add a record from a JSON object on standard input, or from a file.
 before anything is sent, so a misspelling is answered in the terms you used
 rather than as a GraphQL error about a type you never mentioned.
 
-Every change needs -m: a source, ideally a URL, and enough context for someone
-reading the history later to judge it. The server requires one and will refuse
-without it.")]
+Every change needs -m, and what goes in it is a URL:
+
+  -m 'https://en.wikipedia.org/wiki/Maria_Callas — born 1923, died 1977'
+
+That is the whole of what a reviewer gets. They were not there when you made
+the change and cannot ask, so a message naming a source they cannot reach —
+
+  -m 'cast corroborated by the work discography and release credits'
+
+— leaves an edit that may be perfectly correct with no way to tell. Both of
+those describe real sources. Only one of them can be checked.
+
+Say what the page settles, too, where it is not obvious: a link to a long
+article is better than nothing and worse than a link with the sentence that
+matters beside it. The server requires a message and will refuse without one;
+nothing checks that it holds a URL, which is why it is worth saying here.")]
     Create(CreateArgs),
 
     /// Change a record.
@@ -245,9 +258,10 @@ without it.")]
 Change some fields of a record, from a JSON object on standard input or a
 file. Only the fields present are touched.
 
-  echo '{\"died\":1977}' | findopera edit singer 133 -m 'https://...'
+  echo '{\"died\":1977}' | findopera edit singer 133 -m 'https://en.wikipedia.org/wiki/Maria_Callas — died 1977'
 
-Every change needs -m, as `create` does.")]
+Every change needs -m, as `create` does: the URL you read it from, and what
+that page settles.")]
     Edit(EditArgs),
 
     /// Attach a UPC to a recording.
@@ -255,7 +269,7 @@ Every change needs -m, as `create` does.")]
 Attach a barcode to a recording, so that the release and the performance know
 about each other.
 
-  findopera link recording 264 --upc 0013491103020 -m 'back of the box'
+  findopera link recording 264 --upc 0013491103020 -m 'https://www.discogs.com/release/1234567 — barcode on the back of the box'
 
 The UPC has to exist already — `findopera create upc` makes one — because a
 barcode conjured out of a typo is worse than a missing link. Barcodes are
@@ -268,7 +282,7 @@ and guessing at that is not the same as finding it.")]
 Detach a barcode from a recording. The UPC record itself stays; only the
 connection between the two goes.
 
-  findopera unlink recording 264 --upc 0013491103020 -m 'wrong release'")]
+  findopera unlink recording 264 --upc 0013491103020 -m 'https://www.discogs.com/release/7654321 — this barcode is the 2002 set'")]
     Unlink(LinkArgs),
 
     /// Remove a record.
@@ -288,7 +302,7 @@ delete does not.")]
     #[command(long_about = "\
 Put a record back, under the same id.
 
-  findopera undelete singer 13282 -m 'Reverting edit 161962, deleted in error.'
+  findopera undelete singer 13282 -m 'https://findopera.com/singer/13282/history — edit 161962 deleted this in error'
 
 Nothing was ever lost. A delete writes a new version of the row with every
 column as it stood and a flag set, so this is that row again — and the same
@@ -314,7 +328,7 @@ live record has taken since — clear it from that record first.")]
 Merge a record into another, in favour of the second, for when two of them
 turn out to describe the same singer, opera or performance.
 
-  findopera merge singer 133 --into 456 -m 'https://... — same person, two spellings'
+  findopera merge singer 133 --into 456 -m 'https://en.wikipedia.org/wiki/Maria_Callas — one person, two spellings'
 
 The first id loses. Its record goes, keeping its history, and anyone arriving
 with that id afterwards is sent to the survivor instead, so a link written
@@ -329,8 +343,8 @@ Not every type can be merged. `findopera describe <type>` says whether one
 can, and like `delete` this asks for --yes as well as a reason.",
         after_help = "\
 Examples:
-  findopera merge singer 133 --into 456 -m 'same person, two spellings' --yes
-  findopera merge opera 12 --into 34 -m 'https://...' --yes --json"
+  findopera merge singer 133 --into 456 -m 'https://en.wikipedia.org/wiki/Maria_Callas — one person, two spellings' --yes
+  findopera merge opera 12 --into 34 -m 'https://en.wikipedia.org/wiki/La_boheme — one work, catalogued twice' --yes --json"
     )]
     Merge(MergeArgs),
 
@@ -748,7 +762,13 @@ struct CreateArgs {
     /// A JSON object. Omit to read it from standard input.
     #[arg(long, short = 'i', value_name = "FILE")]
     input: Option<PathBuf>,
-    /// Source and context for this change, for the record's history.
+    /// Where this came from, as a URL, for the record's history.
+    ///
+    /// A reviewer sees this and nothing else, so it has to carry a link they
+    /// can open: "corroborated by the release credits" names a source nobody
+    /// else can reach, and leaves a correct edit unverifiable. Paste the page
+    /// you read — a Wikipedia article, a label's listing, a scan of the
+    /// booklet — and say what it settles if that is not obvious.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Print the result as JSON.
@@ -771,7 +791,13 @@ struct EditArgs {
     /// A JSON object of the fields to change. Omit to read from standard input.
     #[arg(long, short = 'i', value_name = "FILE")]
     input: Option<PathBuf>,
-    /// Source and context for this change, for the record's history.
+    /// Where this came from, as a URL, for the record's history.
+    ///
+    /// A reviewer sees this and nothing else, so it has to carry a link they
+    /// can open: "corroborated by the release credits" names a source nobody
+    /// else can reach, and leaves a correct edit unverifiable. Paste the page
+    /// you read — a Wikipedia article, a label's listing, a scan of the
+    /// booklet — and say what it settles if that is not obvious.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Print the result as JSON.
@@ -791,7 +817,13 @@ struct UndeleteArgs {
     /// Its id.
     #[arg(value_name = "ID")]
     id: String,
-    /// Source and context for this change, for the record's history.
+    /// Where this came from, as a URL, for the record's history.
+    ///
+    /// A reviewer sees this and nothing else, so it has to carry a link they
+    /// can open: "corroborated by the release credits" names a source nobody
+    /// else can reach, and leaves a correct edit unverifiable. Paste the page
+    /// you read — a Wikipedia article, a label's listing, a scan of the
+    /// booklet — and say what it settles if that is not obvious.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Print the result as JSON.
@@ -811,7 +843,13 @@ struct DeleteArgs {
     /// Its id.
     #[arg(value_name = "ID")]
     id: String,
-    /// Source and context for this change, for the record's history.
+    /// Where this came from, as a URL, for the record's history.
+    ///
+    /// A reviewer sees this and nothing else, so it has to carry a link they
+    /// can open: "corroborated by the release credits" names a source nobody
+    /// else can reach, and leaves a correct edit unverifiable. Paste the page
+    /// you read — a Wikipedia article, a label's listing, a scan of the
+    /// booklet — and say what it settles if that is not obvious.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Say so out loud. Nothing is removed without it.
@@ -837,7 +875,13 @@ struct MergeArgs {
     /// The id that survives, and keeps its own fields.
     #[arg(long, value_name = "ID")]
     into: String,
-    /// Source and context for this change, for the record's history.
+    /// Where this came from, as a URL, for the record's history.
+    ///
+    /// A reviewer sees this and nothing else, so it has to carry a link they
+    /// can open: "corroborated by the release credits" names a source nobody
+    /// else can reach, and leaves a correct edit unverifiable. Paste the page
+    /// you read — a Wikipedia article, a label's listing, a scan of the
+    /// booklet — and say what it settles if that is not obvious.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Say so out loud. Nothing is merged without it.
@@ -871,7 +915,13 @@ struct LinkRecordingArgs {
     /// The barcode, which must already be a UPC record.
     #[arg(long, value_name = "CODE")]
     upc: String,
-    /// Source and context for this change, for the record's history.
+    /// Where this came from, as a URL, for the record's history.
+    ///
+    /// A reviewer sees this and nothing else, so it has to carry a link they
+    /// can open: "corroborated by the release credits" names a source nobody
+    /// else can reach, and leaves a correct edit unverifiable. Paste the page
+    /// you read — a Wikipedia article, a label's listing, a scan of the
+    /// booklet — and say what it settles if that is not obvious.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Print the result as JSON.
@@ -1478,7 +1528,9 @@ fn cmd_create(ui: &mut Session, args: CreateArgs) -> i32 {
     if args.message.trim().is_empty() {
         return refused(
             ui,
-            "-m needs a source and some context; it goes into the record's history",
+            "-m goes into the record's history, where it is all a reviewer gets. Give the \
+             URL you read this from — \
+             `-m 'https://en.wikipedia.org/wiki/Maria_Callas — born 1923'`",
             "NO_JUSTIFICATION",
             args.json,
             2,
@@ -1525,7 +1577,9 @@ fn cmd_edit(ui: &mut Session, args: EditArgs) -> i32 {
     if args.message.trim().is_empty() {
         return refused(
             ui,
-            "-m needs a source and some context; it goes into the record's history",
+            "-m goes into the record's history, where it is all a reviewer gets. Give the \
+             URL you read this from — \
+             `-m 'https://en.wikipedia.org/wiki/Maria_Callas — born 1923'`",
             "NO_JUSTIFICATION",
             args.json,
             2,
@@ -1570,7 +1624,9 @@ fn cmd_delete(ui: &mut Session, args: DeleteArgs) -> i32 {
     if args.message.trim().is_empty() {
         return refused(
             ui,
-            "-m needs a source and some context; it goes into the record's history",
+            "-m goes into the record's history, where it is all a reviewer gets. Give the \
+             URL you read this from — \
+             `-m 'https://en.wikipedia.org/wiki/Maria_Callas — born 1923'`",
             "NO_JUSTIFICATION",
             args.json,
             2,
@@ -1616,7 +1672,9 @@ fn cmd_undelete(ui: &mut Session, args: UndeleteArgs) -> i32 {
     if args.message.trim().is_empty() {
         return refused(
             ui,
-            "-m needs a source and some context; it goes into the record's history",
+            "-m goes into the record's history, where it is all a reviewer gets. Give the \
+             URL you read this from — \
+             `-m 'https://en.wikipedia.org/wiki/Maria_Callas — born 1923'`",
             "NO_JUSTIFICATION",
             args.json,
             2,
@@ -1674,7 +1732,9 @@ fn cmd_merge(ui: &mut Session, args: MergeArgs) -> i32 {
     if args.message.trim().is_empty() {
         return refused(
             ui,
-            "-m needs a source and some context; it goes into the record's history",
+            "-m goes into the record's history, where it is all a reviewer gets. Give the \
+             URL you read this from — \
+             `-m 'https://en.wikipedia.org/wiki/Maria_Callas — born 1923'`",
             "NO_JUSTIFICATION",
             args.json,
             2,
@@ -2246,7 +2306,9 @@ fn cmd_link(ui: &mut Session, args: LinkArgs, on: bool) -> i32 {
     if a.message.trim().is_empty() {
         return refused(
             ui,
-            "-m needs a source and some context; it goes into the record's history",
+            "-m goes into the record's history, where it is all a reviewer gets. Give the \
+             URL you read this from — \
+             `-m 'https://en.wikipedia.org/wiki/Maria_Callas — born 1923'`",
             "NO_JUSTIFICATION",
             a.json,
             2,

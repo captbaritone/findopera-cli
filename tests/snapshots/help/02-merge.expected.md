@@ -9,7 +9,8 @@
 Merge a record into another, in favour of the second, for when two of them
 turn out to describe the same singer, opera or performance.
 
-  findopera merge singer 133 --into 456 -m 'https://... — same person, two spellings'
+  findopera merge singer 133 --into 456 -m 'https://en.wikipedia.org/wiki/Maria_Callas — one person,
+  two spellings'
 
 The first id loses. Its record goes, keeping its history, and anyone arriving
 with that id afterwards is sent to the survivor instead, so a link written
@@ -37,7 +38,12 @@ Options:
           The id that survives, and keeps its own fields
 
   -m, --message <TEXT>
-          Source and context for this change, for the record's history
+          Where this came from, as a URL, for the record's history.
+          
+          A reviewer sees this and nothing else, so it has to carry a link they can open:
+          "corroborated by the release credits" names a source nobody else can reach, and leaves a
+          correct edit unverifiable. Paste the page you read — a Wikipedia article, a label's
+          listing, a scan of the booklet — and say what it settles if that is not obvious.
 
       --yes
           Say so out loud. Nothing is merged without it
@@ -55,8 +61,10 @@ Options:
           Print help (see a summary with '-h')
 
 Examples:
-  findopera merge singer 133 --into 456 -m 'same person, two spellings' --yes
-  findopera merge opera 12 --into 34 -m 'https://...' --yes --json
+  findopera merge singer 133 --into 456 -m 'https://en.wikipedia.org/wiki/Maria_Callas — one person,
+  two spellings' --yes
+  findopera merge opera 12 --into 34 -m 'https://en.wikipedia.org/wiki/La_boheme — one work,
+  catalogued twice' --yes --json
 ```
 
 ## stderr
