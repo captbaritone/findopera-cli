@@ -65,6 +65,14 @@ Options:
           Reads `[collection]` from the findopera.toml beside you and asks for that list, so what
           counts as held is whatever `organize --write` last put there. Nothing on the disk is read.
 
+      --offset <N>
+          How many to step over first, for walking past a full page.
+          
+          Recordings only: the catalog's other searches take a count and nothing else, so there is
+          nowhere for this to go on them.
+          
+          [default: 0]
+
       --config <FILE>
           Which settings file --local should read.
           

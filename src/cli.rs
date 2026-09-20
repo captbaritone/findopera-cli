@@ -424,9 +424,14 @@ nothing else, so `findopera search singer --help` is short.
 Searching is case and accent insensitive and matches part of a name, so
 `boheme` finds `La Bohème`.
 
-Only the first --first matches are shown, 10 by default. When there are more,
-it says so — there is no way to page through them, because narrowing is the
-better answer, but a full page should never be mistaken for the whole of it.
+Only the first --first matches are shown, 10 by default, and 200 is the most
+that can be asked for at once. When there are more it says so, and says which
+--offset reaches the next of them — narrowing is still the better answer to a
+search, but a full page should never be mistaken for the whole of it, and
+something that has to be walked should be walkable.
+
+--offset is on recordings alone. The catalog's other searches take a count and
+nothing else, so there is nowhere for it to go on them.
 
 Composers, singers, conductors and characters are what a recording is made of,
 and their ids are what it takes to describe a new one.",
@@ -1133,6 +1138,12 @@ struct SearchRecordingArgs {
     /// put there. Nothing on the disk is read.
     #[arg(long, conflicts_with = "in_collection")]
     local: bool,
+    /// How many to step over first, for walking past a full page.
+    ///
+    /// Recordings only: the catalog's other searches take a count and
+    /// nothing else, so there is nowhere for this to go on them.
+    #[arg(long, default_value_t = 0, value_name = "N")]
+    offset: u32,
     /// Which settings file --local should read.
     ///
     /// Nothing searches up the tree, so without this it is the findopera.toml
@@ -2643,9 +2654,7 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
                     year: a.year,
                     upc: a.upc,
                     first,
-                    // A search is narrowed, not paged; only `collection show`
-                    // walks past the first page.
-                    offset: 0,
+                    offset: a.offset,
                 },
             )
         }
@@ -2714,6 +2723,16 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
         return i32::from(found.is_empty());
     }
     if found.is_empty() {
+        // Walked past the end is a different nothing from found nothing, and
+        // advice about spelling would be wrong for it.
+        if criteria.offset > 0 {
+            note!(
+                ui,
+                "findopera: nothing at --offset {}; the matches run out before there",
+                criteria.offset
+            );
+            return 1;
+        }
         note!(ui, "findopera: nothing found");
         // Partial names match, so a search that finds nothing is usually
         // spelled differently rather than absent.
@@ -2731,12 +2750,29 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
     // of them. Without it a full page reads as the whole answer, and something
     // that matched perfectly well looks like it does not exist.
     if results.more {
-        note!(
-            ui,
-            "findopera: these are the first {}, and there are more. Narrow the search, or \
-             raise --first.",
-            found.len()
-        );
+        let seen = criteria.offset + found.len() as u32;
+        let range = if criteria.offset == 0 {
+            format!("the first {}", found.len())
+        } else {
+            format!("{}-{seen}", criteria.offset + 1)
+        };
+        // --offset is offered only where the catalog offers one, which is
+        // recordings: the other searches take a count and nothing else, so
+        // naming the flag there would send somebody after a flag that is not
+        // on the command.
+        if kind == api::Kind::Recording {
+            note!(
+                ui,
+                "findopera: these are {range}, and there are more. Narrow the search, raise \
+                 --first, or step past them with --offset {seen}."
+            );
+        } else {
+            note!(
+                ui,
+                "findopera: these are {range}, and there are more. Narrow the search, or \
+                 raise --first."
+            );
+        }
     }
     0
 }

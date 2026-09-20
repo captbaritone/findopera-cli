@@ -291,16 +291,22 @@ A search shows the first `--first` matches, 10 by default, and says so when
 there are more:
 
 ```
-findopera: these are the first 3, and there are more. Narrow the search, or raise --first.
+findopera: these are the first 3, and there are more. Narrow the search, raise --first, or step past them with --offset 3.
 ```
 
 At most 200 can be asked for at once; the server refuses more, and so does the
-CLI, before spending the request. There is no way to page through them, on
-purpose — narrowing is a better
-answer than paging, and a result you had to walk to is one you could have asked
-for. What matters is that a full page is never mistaken for the whole answer:
-something that matched perfectly well would look like it does not exist.
-`--json` carries the same fact as `truncated`, beside `results`.
+CLI, before spending the request. Past that, `--offset` steps on — and the
+line above names the one that reaches the next page, so paging is a matter of
+running what it printed rather than counting. Narrowing is still the better
+answer to a search, and a result you had to walk to is usually one you could
+have asked for; what matters is that a full page is never mistaken for the
+whole answer, since something that matched perfectly well would look like it
+does not exist. `--json` carries the same fact as `truncated`, beside
+`results`.
+
+`--offset` is on recordings alone, because `filterRecordings` is the only one
+of the catalog's searches that takes one; the rest accept a count and nothing
+else.
 
 The other kinds exist because a recording is made of them: describing a new one
 through the API means naming its opera, its conductor, and a singer and
