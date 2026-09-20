@@ -444,6 +444,60 @@ to have two of it.
 
 Nothing is moved or removed, so a renamed source leaves its old entry behind.
 
+## The collection, on findopera.com too
+
+A library is a set of recordings, and so is a list on findopera.com — the same
+set, in two places. Point `findopera.toml` at one and `organize --write` keeps
+it true:
+
+```toml
+[collection]
+url = "https://findopera.com/collection/1"
+```
+
+`findopera init --collection 'Main library'` starts the list and writes that
+block for you. Otherwise `findopera collection create` prints an address to
+paste in.
+
+The address rather than the number, because that is what the browser has on
+the clipboard when you are looking at the list. It is the number inside it
+that matters: renaming a list leaves its id and its contents alone, so this
+keeps pointing at the right one afterwards.
+
+Each `organize --write` sends the whole set, so the list matches the tree
+rather than accumulating:
+
+```console
+$ findopera organize ~/Music --write
++ ~/Music/Sosarme  Handel/Sosarme
+findopera: 1 built, 240 already there, 0 left alone
+findopera: "Local Library" (1) now holds 241, and held 240
+```
+
+Two rips of one performance are two folders and one entry, the same collapse
+the index makes. A run that finds nothing will not empty the list — an
+unplugged disk is not an answer — but one that finds fewer will remove the
+rest, because the tree is what the list is a copy of.
+
+And because the catalog now knows what you have, it can be asked:
+
+```bash
+$ findopera search recording tosca --local
+264  Tosca  1953  Sabata  Callas, di Stefano, Gobbi
+```
+
+`--local` reads the `[collection]` beside you and narrows to that list, which
+is a question about your library answered by the server — so it is as current
+as your last `organize --write`, and needs no disk access at all. It is the
+same filter as `--in-collection <id>`, with the number read from the settings.
+
+`findopera collection` manages the lists themselves — `list`, `create`, `add`,
+`remove`, `set`, `rename` and `purge`. None of them takes `-m`: a list belongs
+to your account rather than to the shared catalog, so there is nothing to
+justify to anybody. For the same reason none of it is versioned — there is no
+`undelete` for a list — which is why `purge` is not called `delete`, and why
+`set` says what it is about to take away.
+
 ## Two rips of one recording
 
 A FLAC rip and an MP3 rip of the same performance are the same *recording*, so

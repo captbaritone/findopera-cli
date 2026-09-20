@@ -724,7 +724,7 @@ type Collection {
   """What the owner calls it."""
   name: String @semanticNonNull
   """
-  What is in it, most recently recorded first.
+  What is in it, most recently saved first.
   
   The same search as `filterRecordings`, narrowed to this collection: every
   filter that works against the catalog works inside a list, so "the
@@ -742,6 +742,7 @@ type Collection {
     """Skip this many."""
     offset: Int! = 0
   ): [Recording!] @semanticNonNull
+  url: String @semanticNonNull
 }
 
 type Composer {
@@ -1545,11 +1546,6 @@ type Mutation {
   removeRecordingFromCollection(collectionId: Int!, recordingId: Int!): Collection @semanticNonNull
   """Give one a different name. Its id and its contents are unchanged."""
   renameCollection(id: Int!, name: String!): Collection @semanticNonNull
-  """
-  Put a recording in the list saves go to, making that list if there is
-  none.
-  """
-  saveRecording(recordingId: Int!): Collection @semanticNonNull
   """Make a list and put this recording in it, in one step."""
   saveRecordingToNewCollection(name: String!, recordingId: Int!): Collection @semanticNonNull
   """
@@ -1946,11 +1942,6 @@ type Mutation {
     recordingId: String!
     upc: String!
   ): Boolean @semanticNonNull
-  """
-  Take a recording out of the list saves go to. Null if there is no such
-  list, which is not an error.
-  """
-  unsaveRecording(recordingId: Int!): Collection
   """Update a AlbumCoverArt record by ID."""
   updateAlbumCoverArt(
     id: String!
@@ -2558,12 +2549,6 @@ type Recording {
   orchestra: String
   portrayals: [Portrayal!] @semanticNonNull
   relatedUrls: [RecordingURL!] @semanticNonNull
-  """
-  Whether this recording is in the collection the viewer's saves concern --
-  the one they nominated, or the only one they keep. False when nobody is
-  signed in, and when they keep several and have nominated none.
-  """
-  savedByViewer: Boolean @semanticNonNull
   upcs: [Upc!] @semanticNonNull
   url: String @semanticNonNull
   year: Int

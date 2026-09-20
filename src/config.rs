@@ -82,6 +82,60 @@ pub struct Config {
     /// A list of the collection, left at the destination for someone to read.
     #[serde(default)]
     pub index: Option<Index>,
+    /// The list on findopera.com this library is a copy of.
+    #[serde(default)]
+    pub collection: Option<CollectionRef>,
+}
+
+/// Which list `organize --write` keeps in step with this library.
+///
+/// A list is named by its id, never by its name: renaming one is a supported
+/// thing to do and the schema promises the id and contents survive it, so a
+/// setting keyed on the name would break on an ordinary operation. The id is
+/// the identity.
+///
+/// An address rather than the bare number, and only an address: two ways of
+/// naming one list is a question for whoever reads the file and a branch for
+/// whoever maintains it, in exchange for nothing. This is also the spelling a
+/// browser puts on the clipboard.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct CollectionRef {
+    /// The list's page, as the address bar gives it.
+    pub url: String,
+}
+
+/// The id inside a collection's address.
+///
+/// Read out of the path rather than matched against a whole address, so that
+/// a trailing slash, a query string, a port, or a findopera running somewhere
+/// other than findopera.com all still work. What it insists on is the
+/// `collection` segment: a bare number would be a typo as easily as an id,
+/// and pointing a sync at the wrong list is the expensive mistake here.
+fn id_in_url(url: &str) -> Option<i64> {
+    let mut parts = url
+        .split(['/', '?', '#'])
+        .filter(|p| !p.is_empty())
+        .peekable();
+    while let Some(part) = parts.next() {
+        if part.eq_ignore_ascii_case("collection") {
+            return parts.peek().and_then(|n| n.parse().ok());
+        }
+    }
+    None
+}
+
+impl CollectionRef {
+    /// The list this address names.
+    pub fn resolve(&self) -> Result<i64, String> {
+        id_in_url(&self.url).ok_or_else(|| {
+            format!(
+                "`{}` does not look like a list's address. It should have a `collection` part \
+                 with the list's number after it, as in https://findopera.com/collection/1",
+                self.url
+            )
+        })
+    }
 }
 
 /// What to write, and what each line should say.
@@ -214,6 +268,16 @@ impl Config {
                 });
             }
         }
+        // Checked here rather than where it is used, because where it is used
+        // is the far end of a build: an address with a typo in it should be a
+        // refusal before any folders are made, naming the file it is in, and
+        // not a surprise after the tree is finished.
+        if let Some(reference) = &config.collection {
+            reference.resolve().map_err(|why| ConfigError::Invalid {
+                path: path.to_path_buf(),
+                why,
+            })?;
+        }
         Ok(config)
     }
 }
@@ -241,7 +305,7 @@ fn explain(message: &str) -> String {
 ///
 /// Every setting is present and explained, so nobody has to start from an
 /// empty file wondering what the keys are.
-pub fn starter() -> String {
+pub fn starter(collection: Option<&str>) -> String {
     // The syntax is described once, in the template module, and quoted here.
     // Two copies of it would eventually say different things.
     let syntax = crate::SYNTAX
@@ -374,6 +438,87 @@ Composer, first - Opera (year.month.day) Conductor \[singers\] \[rips\] (findope
 template = '''
 {{composer.lastName}}, {{composer.firstName}} - {{opera.title}}[ ({{year}}[.{{month}}][.{{day}}])] {{conductor.lastName}}[ \[{{singers.lastNames}}\]][ \[{{variants}}\]] (findopera {{id}}) — {{path}}
 '''
+
+# The list on findopera.com this library is a copy of.
+#
+# With this set, `findopera organize --write` makes that list hold exactly the
+# recordings the tree holds — so the catalog knows what you have, and
+# `findopera search recording --local` can ask it.
+#
+# The address is the one in the browser's bar when you are looking at the
+# list, and `findopera collection create` prints it for a list it has just
+# made.
+#
+# It is the number that matters, not the name: renaming a list leaves its id
+# and its contents alone, so this keeps pointing at the right one afterwards.
+#
+# A run that finds no recordings at all will not empty the list — an unplugged
+# disk is not an answer — but one that finds fewer will remove the rest. The
+# tree is what the list is a copy of.
+#
 "#;
-    format!("{head}{syntax}{rest}")
+    // Commented out unless a list has actually been made, because a setting
+    // that points at nothing is worse than one that is not there: the first
+    // run would refuse, naming an address nobody chose.
+    let list = match collection {
+        Some(url) => format!("[collection]\nurl = \"{url}\"\n"),
+        None => "# [collection]\n# url = \"https://findopera.com/collection/1\"\n".to_string(),
+    };
+    format!("{head}{syntax}{rest}{list}")
+}
+
+#[cfg(test)]
+mod collection_tests {
+    use super::{id_in_url, CollectionRef};
+
+    fn from(url: &str) -> CollectionRef {
+        CollectionRef {
+            url: url.to_string(),
+        }
+    }
+
+    #[test]
+    fn an_address_is_read_for_its_id() {
+        // The shape the site gives today, and the shapes a clipboard tends to
+        // add to it. None of these should need explaining to somebody who
+        // copied the page they were looking at.
+        for url in [
+            "https://findopera.com/collection/1",
+            "https://findopera.com/collection/1/",
+            "http://findopera.com/collection/1",
+            "findopera.com/collection/1",
+            "/collection/1",
+            "https://findopera.com/collection/1?from=somewhere",
+            "https://findopera.com/collection/1#top",
+            // A findopera somewhere else, which is what --endpoint is for.
+            "http://localhost:3000/collection/1",
+        ] {
+            assert_eq!(id_in_url(url), Some(1), "could not read {url}");
+        }
+    }
+
+    #[test]
+    fn something_that_is_not_a_list_is_refused() {
+        // A bare number is the interesting one: it would be a perfectly good
+        // id and a perfectly good typo, and syncing to the wrong list replaces
+        // its contents. The `collection` part is what makes it an address.
+        for url in [
+            "1",
+            "https://findopera.com/",
+            "https://findopera.com/singer/2/peter-glossop",
+            "https://findopera.com/collection/",
+            "https://findopera.com/collection/not-a-number",
+        ] {
+            assert_eq!(id_in_url(url), None, "{url} should not read as a list");
+        }
+    }
+
+    #[test]
+    fn an_address_resolves_and_a_number_alone_does_not() {
+        assert_eq!(from("https://findopera.com/collection/7").resolve(), Ok(7));
+        // The whole reason for insisting on the `collection` part: a bare
+        // number is as likely to be a typo as an id, and the sync replaces
+        // whatever list it is pointed at.
+        assert!(from("7").resolve().is_err());
+    }
 }

@@ -1098,6 +1098,19 @@ struct SearchRecordingArgs {
     /// token, since a list belongs to an account.
     #[arg(long, value_name = "ID")]
     in_collection: Option<i64>,
+    /// Only what this library holds.
+    ///
+    /// Reads `[collection]` from the findopera.toml beside you and asks for
+    /// that list, so what counts as held is whatever `organize --write` last
+    /// put there. Nothing on the disk is read.
+    #[arg(long, conflicts_with = "in_collection")]
+    local: bool,
+    /// Which settings file --local should read.
+    ///
+    /// Nothing searches up the tree, so without this it is the findopera.toml
+    /// in the current folder.
+    #[arg(long, value_name = "FILE", requires = "local")]
+    config: Option<PathBuf>,
     /// Recorded within two years of this.
     #[arg(long, value_name = "YEAR")]
     year: Option<i64>,
@@ -1246,6 +1259,17 @@ struct InitArgs {
     /// Directory to write findopera.toml into.
     #[arg(value_name = "DIR", default_value = ".")]
     dir: PathBuf,
+    /// Start a list on findopera.com, and point the settings at it.
+    ///
+    /// Without this the settings are written with the list commented out, to
+    /// be filled in by hand later. This is the only part of `init` that
+    /// touches the network, so it needs a token.
+    #[arg(long, value_name = "NAME")]
+    collection: Option<String>,
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
 }
 
 /// Write one result line, reporting whether stdout is still listening.
@@ -1743,7 +1767,7 @@ fn recording_ids(given: &[String]) -> Result<Vec<i64>, String> {
 fn changed(ui: &mut Session, c: &api::Collection, json: bool) -> i32 {
     if json {
         let body = serde_json::json!({
-            "collection": { "id": c.id, "name": c.name, "entries": c.entries },
+            "collection": { "id": c.id, "name": c.name, "entries": c.entries, "url": c.url },
         });
         emit(
             ui,
@@ -1790,7 +1814,7 @@ fn cmd_collection_list(ui: &mut Session, a: CollectionListArgs) -> i32 {
     if a.reaching.json {
         let rows: Vec<serde_json::Value> = lists
             .iter()
-            .map(|c| serde_json::json!({ "id": c.id, "name": c.name, "entries": c.entries }))
+            .map(|c| serde_json::json!({ "id": c.id, "name": c.name, "entries": c.entries, "url": c.url }))
             .collect();
         let body = serde_json::json!({ "collections": rows });
         emit(
@@ -1858,7 +1882,7 @@ fn cmd_collection_create(ui: &mut Session, a: CollectionCreateArgs) -> i32 {
         Ok(c) => {
             if a.reaching.json {
                 let body = serde_json::json!({
-                    "collection": { "id": c.id, "name": c.name, "entries": c.entries },
+                    "collection": { "id": c.id, "name": c.name, "entries": c.entries, "url": c.url },
                 });
                 emit(
                     ui,
@@ -1868,13 +1892,10 @@ fn cmd_collection_create(ui: &mut Session, a: CollectionCreateArgs) -> i32 {
                     ),
                 );
             } else {
-                // The id, because it is what every other command here takes.
-                note!(
-                    ui,
-                    "findopera: started \"{}\", which is list {}",
-                    c.name,
-                    c.id
-                );
+                // The address, because that is what `[collection]` in the
+                // settings takes; the id is inside it for anything wanting
+                // the number instead.
+                note!(ui, "findopera: started \"{}\" at {}", c.name, c.url);
             }
             0
         }
@@ -1907,7 +1928,7 @@ fn cmd_collection_rename(ui: &mut Session, a: CollectionRenameArgs) -> i32 {
         Ok(c) => {
             if a.reaching.json {
                 let body = serde_json::json!({
-                    "collection": { "id": c.id, "name": c.name, "entries": c.entries },
+                    "collection": { "id": c.id, "name": c.name, "entries": c.entries, "url": c.url },
                 });
                 emit(
                     ui,
@@ -2469,16 +2490,23 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
         Searching::Recording(a) => {
             let text = a.looking.query.join(" ");
             let first = a.looking.first;
+            // Before the args are taken apart, and before any request: a
+            // --local that cannot say which list it means is a settings
+            // problem, and should be one without asking the server anything.
+            let in_collection = match local_collection(ui, &a) {
+                Ok(id) => id,
+                Err(code) => return code,
+            };
             (
                 api::Kind::Recording,
                 a.looking,
                 api::Criteria {
                     text,
+                    in_collection,
                     singers: a.singer,
                     conductor: a.conductor,
                     composer: a.composer,
                     character: a.character,
-                    in_collection: a.in_collection,
                     year: a.year,
                     upc: a.upc,
                     first,
@@ -2978,12 +3006,26 @@ fn cmd_organize(ui: &mut Session, args: OrganizeArgs) -> i32 {
     };
 
     let (gone, done) = apply::reconcile(&previous, &plan, &destination, link, dry_run);
+    let mut sync_failed = false;
+    // Gathered during the build and acted on after it, so that what the list
+    // now holds is said after what was built rather than in the middle of it.
+    let mut held: Option<std::collections::BTreeSet<i64>> = None;
 
     if !dry_run {
         // Written after the fact, so a run that died halfway leaves a record
         // of what was there before rather than what it meant to make.
         let mut keeping = apply::built(&plan, &done, link);
         keeping.sort_by(|a, b| a.path.cmp(&b.path));
+        // Taken before the record is handed over, and collapsed to one entry
+        // per recording the way the index is: two rips of a performance are
+        // two folders on a disk and one recording to anybody asking whether
+        // you have it.
+        held = Some(
+            keeping
+                .iter()
+                .filter_map(|b| b.id.parse::<i64>().ok())
+                .collect::<std::collections::BTreeSet<_>>(),
+        );
         if let Err(why) = crate::state::save(&destination, keeping) {
             note!(ui, "findopera: {why}");
             note!(
@@ -3087,13 +3129,191 @@ fn cmd_organize(ui: &mut Session, args: OrganizeArgs) -> i32 {
             format!(", {removed} removed")
         }
     );
+    // And last, the copy of this library that lives on findopera.com. After
+    // the tree, after the record, and after the summary, because those are
+    // what this command is for: a list that did not get updated is worth
+    // saying so about, and worth an exit code, but it is not worth failing a
+    // build that already happened.
+    if let (Some(ids), Some(reference)) = (
+        &held,
+        p.settings.as_ref().and_then(|s| s.collection.as_ref()),
+    ) {
+        sync_failed = sync_collection(ui, reference, ids, &args);
+    }
+
     // Only worth saying when there is something to write; a run that found
     // everything already in place has nothing to offer.
     if dry_run && made > 0 {
         note!(ui, "findopera: nothing was written. To build it, run:");
         note!(ui, "    {}", rerun_with_write(&args));
     }
-    i32::from(done.troubled() || plan.blocked(p.require_variants))
+    let code = i32::from(done.troubled() || plan.blocked(p.require_variants));
+    // The documented meaning of 3 is that the API was unreachable or refused,
+    // which is exactly what happened. Only when the build itself went through,
+    // though: a tree that did not get made is the bigger news, and both are on
+    // stderr either way.
+    if code == 0 && sync_failed {
+        3
+    } else {
+        code
+    }
+}
+
+/// Which list `--local` means, if it was asked for.
+///
+/// `--local` is the same filter as `--in-collection`, with the id read out of
+/// the settings rather than typed. It answers with what the list holds, which
+/// is what the last `organize --write` put there — so it is a question about
+/// this library, answered by the copy of it on findopera.com, and it is only
+/// as current as that copy.
+fn local_collection(ui: &mut Session, a: &SearchRecordingArgs) -> Result<Option<i64>, i32> {
+    if !a.local {
+        return Ok(a.in_collection);
+    }
+    let path = a
+        .config
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(config::FILE_NAME));
+    let settings = match Config::load(&path) {
+        Ok(c) => c,
+        // Said here rather than taken from the error, because the general one
+        // offers `--template`, which belongs to `organize` and would send
+        // somebody looking for a flag this command does not have.
+        Err(config::ConfigError::Missing { path }) => {
+            note!(
+                ui,
+                "findopera: there is no {} here, so --local has no library to ask about.",
+                path.display()
+            );
+            note!(
+                ui,
+                "  help: run --local beside the library's settings, or name them with --config."
+            );
+            return Err(2);
+        }
+        Err(why) => {
+            note!(ui, "findopera: {why}");
+            return Err(2);
+        }
+    };
+    let Some(reference) = settings.collection.as_ref() else {
+        note!(
+            ui,
+            "findopera: {} does not say which list this library is a copy of, so there is \
+             nothing for --local to ask about.",
+            path.display()
+        );
+        note!(
+            ui,
+            "  help: add a [collection] to it, and run `findopera organize --write` to fill \
+             the list in. `findopera init` writes one out with it explained."
+        );
+        return Err(2);
+    };
+    // Already settled when the settings were read; here because resolve is
+    // the only thing that knows how to read an address.
+    match reference.resolve() {
+        Ok(id) => Ok(Some(id)),
+        Err(why) => {
+            note!(ui, "findopera: {why}");
+            Err(2)
+        }
+    }
+}
+
+/// Make the list on findopera.com hold what the tree holds.
+///
+/// Returns whether it failed, which the caller turns into an exit code. The
+/// tree is already built by the time this runs and nothing here can unbuild
+/// it, so every path out of this says what happened and carries on.
+///
+/// `set` rather than a difference of adds and removes: the whole library is
+/// in hand, which is the case the server wrote that mutation for, and it
+/// understands ids that have been merged since they were written down — so a
+/// marker left in a folder eighteen months ago still lands in the right
+/// place.
+fn sync_collection(
+    ui: &mut Session,
+    reference: &config::CollectionRef,
+    held: &std::collections::BTreeSet<i64>,
+    args: &OrganizeArgs,
+) -> bool {
+    let id = match reference.resolve() {
+        Ok(id) => id,
+        Err(why) => {
+            note!(ui, "findopera: {why}");
+            return true;
+        }
+    };
+    let api = match client(ui, &args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(_) => return true,
+    };
+
+    // Read first, for two reasons: the list has to be named in anything said
+    // about it, and its size is what the guard below is measured against.
+    let list = match one_collection(&api, id) {
+        Ok(c) => c,
+        Err(e) => {
+            note!(ui, "findopera: cannot reach list {id}: {e}");
+            return true;
+        }
+    };
+
+    // An empty scan is never an answer. A disk that did not mount, a
+    // destination pointed somewhere new, a library moved out from under the
+    // config -- all of them look exactly like this, and all of them would
+    // take the list with them. Somebody who really means it can say so with
+    // `collection set - --to <id> --yes`.
+    if held.is_empty() && list.entries > 0 {
+        note!(
+            ui,
+            "findopera: nothing was built, so \"{}\" ({}) is left as it was, holding {}.",
+            list.name,
+            list.id,
+            list.entries
+        );
+        note!(
+            ui,
+            "    An empty library is not usually what an empty library means. If it is, \
+             `findopera collection set - --to {} --yes` empties the list.",
+            list.id
+        );
+        return true;
+    }
+
+    match api.collection_set(id, &held.iter().copied().collect::<Vec<_>>()) {
+        Ok(after) => {
+            // The two numbers, because "synced" alone does not say whether
+            // anything moved, and the direction is the part worth noticing.
+            if list.entries == after.entries {
+                note!(
+                    ui,
+                    "findopera: \"{}\" ({}) still holds {}",
+                    after.name,
+                    after.id,
+                    after.entries
+                );
+            } else {
+                note!(
+                    ui,
+                    "findopera: \"{}\" ({}) now holds {}, and held {}",
+                    after.name,
+                    after.id,
+                    after.entries,
+                    list.entries
+                );
+            }
+            false
+        }
+        Err(e) => {
+            note!(
+                ui,
+                "findopera: the tree is built, but the list was not updated: {e}"
+            );
+            true
+        }
+    }
 }
 
 /// A path as it reads inside the destination.
@@ -3312,7 +3532,32 @@ fn cmd_init(ui: &mut Session, args: InitArgs) -> i32 {
         note!(ui, "findopera: {} is already there", path.display());
         return 2;
     }
-    match std::fs::write(&path, config::starter()) {
+    // Before the file is written, so that a refusal leaves nothing behind to
+    // be half-edited: either there are settings pointing at a real list, or
+    // there are no settings at all.
+    let list = match &args.collection {
+        None => None,
+        Some(name) => {
+            let reaching = Reaching {
+                json: false,
+                endpoint: args.endpoint.clone(),
+                token: args.token.clone(),
+            };
+            let api = match client_signed_in(ui, &reaching) {
+                Ok(c) => c,
+                Err(code) => return code,
+            };
+            match api.collection_create(name.trim()) {
+                Ok(c) => {
+                    note!(ui, "findopera: started \"{}\" at {}", c.name, c.url);
+                    Some(c.url)
+                }
+                Err(e) => return failed(ui, &e, false),
+            }
+        }
+    };
+
+    match std::fs::write(&path, config::starter(list.as_deref())) {
         Ok(()) => {
             println!("{}", path.display());
             note!(

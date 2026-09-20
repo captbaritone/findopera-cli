@@ -59,6 +59,18 @@ Options:
           By the list's id, which `findopera collection list` gives. Needs a token, since a list
           belongs to an account.
 
+      --local
+          Only what this library holds.
+          
+          Reads `[collection]` from the findopera.toml beside you and asks for that list, so what
+          counts as held is whatever `organize --write` last put there. Nothing on the disk is read.
+
+      --config <FILE>
+          Which settings file --local should read.
+          
+          Nothing searches up the tree, so without this it is the findopera.toml in the current
+          folder.
+
       --year <YEAR>
           Recorded within two years of this
 

@@ -1513,6 +1513,12 @@ pub struct Collection {
     pub id: i64,
     pub name: String,
     pub entries: i64,
+    /// Where its page lives, as the server writes it.
+    ///
+    /// From the schema rather than assembled from the id, so the convention
+    /// has one authority. It is also what `[collection]` in the settings
+    /// takes, which makes this the thing to print for somebody setting up.
+    pub url: String,
 }
 
 fn collection(value: &serde_json::Value) -> Collection {
@@ -1520,6 +1526,7 @@ fn collection(value: &serde_json::Value) -> Collection {
         id: value["id"].as_i64().unwrap_or_default(),
         name: text(&value["name"]),
         entries: value["entryCount"].as_i64().unwrap_or_default(),
+        url: text(&value["url"]),
     }
 }
 

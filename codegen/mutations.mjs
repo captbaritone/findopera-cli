@@ -210,8 +210,9 @@ export function mutations(schema, getOperations) {
   // the type table's shape has nowhere to put a mutation without one.
   //
   // `entryCount` comes back because the useful thing to say afterwards is how
-  // big the list now is, and `name` because the caller passed an id and a
-  // number is not what anybody calls their list.
+  // big the list now is, `name` because the caller passed an id and a number
+  // is not what anybody calls their list, and `url` because that is what the
+  // settings take and so what somebody setting this up needs to copy.
   for (const [name, mutation] of [
     ["AddRecordingToCollection", "addRecordingToCollection"],
     ["RemoveRecordingFromCollection", "removeRecordingFromCollection"],
@@ -229,7 +230,7 @@ export function mutations(schema, getOperations) {
           ["collectionId", "collectionId"],
           ["recordingId", "recordingId"],
         ],
-        ["id", "name", "entryCount"],
+        ["id", "name", "entryCount", "url"],
       ),
     );
   }
@@ -248,7 +249,7 @@ export function mutations(schema, getOperations) {
       [["name", "String!"]],
       "createCollection",
       [["name", "name"]],
-      ["id", "name", "entryCount"],
+      ["id", "name", "entryCount", "url"],
     ),
   );
   out.push(
@@ -264,7 +265,7 @@ export function mutations(schema, getOperations) {
         ["collectionId", "collectionId"],
         ["recordingIds", "recordingIds"],
       ],
-      ["id", "name", "entryCount"],
+      ["id", "name", "entryCount", "url"],
     ),
   );
 
@@ -281,7 +282,7 @@ export function mutations(schema, getOperations) {
         ["id", "id"],
         ["name", "name"],
       ],
-      ["id", "name", "entryCount"],
+      ["id", "name", "entryCount", "url"],
     ),
   );
   // Returns a Boolean, so it selects nothing -- and unlike `delete<Type>`

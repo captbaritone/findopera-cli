@@ -265,19 +265,19 @@ mutation UnlinkRecordingUpc($recordingId: String!, $upc: String!, $justification
   unlinkRecordingUpc(recordingId: $recordingId, upc: $upc, justification: $justification)
 }
 mutation AddRecordingToCollection($collectionId: Int!, $recordingId: Int!) {
-  addRecordingToCollection(collectionId: $collectionId, recordingId: $recordingId) { id name entryCount }
+  addRecordingToCollection(collectionId: $collectionId, recordingId: $recordingId) { id name entryCount url }
 }
 mutation RemoveRecordingFromCollection($collectionId: Int!, $recordingId: Int!) {
-  removeRecordingFromCollection(collectionId: $collectionId, recordingId: $recordingId) { id name entryCount }
+  removeRecordingFromCollection(collectionId: $collectionId, recordingId: $recordingId) { id name entryCount url }
 }
 mutation CreateCollection($name: String!) {
-  createCollection(name: $name) { id name entryCount }
+  createCollection(name: $name) { id name entryCount url }
 }
 mutation SetCollectionRecordings($collectionId: Int!, $recordingIds: [Int!]!) {
-  setCollectionRecordings(collectionId: $collectionId, recordingIds: $recordingIds) { id name entryCount }
+  setCollectionRecordings(collectionId: $collectionId, recordingIds: $recordingIds) { id name entryCount url }
 }
 mutation RenameCollection($id: Int!, $name: String!) {
-  renameCollection(id: $id, name: $name) { id name entryCount }
+  renameCollection(id: $id, name: $name) { id name entryCount url }
 }
 mutation DeleteCollection($id: Int!) {
   deleteCollection(id: $id)
