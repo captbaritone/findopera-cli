@@ -51,13 +51,49 @@ for (const file of [
 
 // The table of types the CRUD commands work through, derived from the schema
 // and keyed to the curated queries by the type each one returns.
+//
+// Two operations return each type now: the curated field-by-field one, and the
+// `...Text` one that selects only `asPlainText`. Keying on the returned type
+// alone made the second silently win, which put the wrong name in the table --
+// and the wrong name is not a missing field but a working query that selects
+// no `id`, so a create had nothing to report. The Text operations are named
+// after their base rather than mapped, because `get_text` builds the name by
+// suffixing; so they are skipped here and checked below.
 const getDoc = parse(readFileSync(at("schema/get.graphql"), "utf8"));
 const getOperations = new Map();
+const textOperations = new Set();
 for (const def of getDoc.definitions) {
   if (def.kind !== "OperationDefinition") continue;
+  const name = def.name.value;
+  if (name.endsWith("Text")) {
+    textOperations.add(name);
+    continue;
+  }
   const root = def.selectionSet.selections[0].name.value;
   const returned = getNamedType(schema.getQueryType().getFields()[root].type);
-  getOperations.set(returned.name, def.name.value);
+  const already = getOperations.get(returned.name);
+  if (already) {
+    console.error(
+      `schema/get.graphql: ${already} and ${name} both return ${returned.name}, ` +
+        `so the table cannot say which one a get should send.`,
+    );
+    process.exit(1);
+  }
+  getOperations.set(returned.name, name);
+}
+
+// `get_text` sends `${kind.get}Text` without checking that it exists, which is
+// fine only while every curated query has a Text twin. That is an invariant of
+// two files agreeing, so it is worth failing the build over rather than
+// discovering it as an unknown-operation error in somebody's terminal.
+for (const [type, operation] of getOperations) {
+  if (!textOperations.has(`${operation}Text`)) {
+    console.error(
+      `schema/get.graphql: ${type} has ${operation} but no ${operation}Text, ` +
+        `so \`findopera get ${type}\` would send an operation that is not there.`,
+    );
+    process.exit(1);
+  }
 }
 writeFileSync(at("src/model/crud.rs"), crud(schema, getOperations));
 

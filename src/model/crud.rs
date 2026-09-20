@@ -72,14 +72,14 @@ pub const TYPES: &[Type] = &[
         create_input: "CreateAlbumCoverArtInput",
         edit_input: "UpdateAlbumCoverArtInput",
         create: &[
-            InputField { name: "upc", json: "string", required: true, about: "" },
+            InputField { name: "upc", json: "string", required: true, about: "The barcode, always at its full fourteen digits.\n\nUPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three\ndifferent barcodes, and the check digit is the same at every length. This\nreturns the longest, zero-padded, because it is the one form that can hold\nany of them.\n\nAny of the three is accepted wherever a barcode is taken, and answered for\nwith this one. Somewhere less formal than an API -- a page, a link, anything\na person reads -- is welcome to drop the leading zeros again." },
             InputField { name: "imageUrl", json: "string", required: false, about: "" },
             InputField { name: "source", json: "string", required: false, about: "" },
         ],
         edit: &[
             InputField { name: "imageUrl", json: "string", required: false, about: "" },
             InputField { name: "source", json: "string", required: false, about: "" },
-            InputField { name: "upc", json: "string", required: false, about: "" },
+            InputField { name: "upc", json: "string", required: false, about: "The barcode, always at its full fourteen digits.\n\nUPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three\ndifferent barcodes, and the check digit is the same at every length. This\nreturns the longest, zero-padded, because it is the one form that can hold\nany of them.\n\nAny of the three is accepted wherever a barcode is taken, and answered for\nwith this one. Somewhere less formal than an API -- a page, a link, anything\na person reads -- is welcome to drop the leading zeros again." },
         ],
         composite: None,
     },
@@ -337,11 +337,11 @@ pub const TYPES: &[Type] = &[
             InputField { name: "characterId", json: "string", required: true, about: "" },
             InputField { name: "recordingId", json: "string", required: true, about: "" },
             InputField { name: "singerId", json: "string", required: true, about: "" },
-            InputField { name: "noted", json: "boolean", required: false, about: "" },
+            InputField { name: "noted", json: "boolean", required: false, about: "Whether this portrayal is part of the recording's top billing.\n\nThree singers per recording, and the convention is worth stating because\nnothing enforces it and it cannot be worked out from the data. The three\nare the first three in the billing order the release itself prints --\nthe sleeve, the booklet, the label's own listing -- and not a judgement\nabout which roles matter. Recording 88 notes Carreras, van Dam and\nZednik and leaves the title role unflagged, so reading the principals\noff the cast and inferring the answer gives the wrong three.\n\nA singer who doubles a role is flagged on every portrayal they have\nhere. So the count of flagged portrayals can exceed three while the\ncount of flagged singers stays at three: recording 77 has six flagged\nportrayals for three singers, and recording 6417 flags Deborah Polaski\nfor both Cassandre and Didon.\n\nA release that bills more than three gets the first three anyway. If\nthe billing order is genuinely unclear, leaving this alone is better\nthan guessing, because a fourth flag reads as a fact rather than as an\nattempt." },
         ],
         edit: &[
             InputField { name: "characterId", json: "string", required: false, about: "" },
-            InputField { name: "noted", json: "boolean", required: false, about: "" },
+            InputField { name: "noted", json: "boolean", required: false, about: "Whether this portrayal is part of the recording's top billing.\n\nThree singers per recording, and the convention is worth stating because\nnothing enforces it and it cannot be worked out from the data. The three\nare the first three in the billing order the release itself prints --\nthe sleeve, the booklet, the label's own listing -- and not a judgement\nabout which roles matter. Recording 88 notes Carreras, van Dam and\nZednik and leaves the title role unflagged, so reading the principals\noff the cast and inferring the answer gives the wrong three.\n\nA singer who doubles a role is flagged on every portrayal they have\nhere. So the count of flagged portrayals can exceed three while the\ncount of flagged singers stays at three: recording 77 has six flagged\nportrayals for three singers, and recording 6417 flags Deborah Polaski\nfor both Cassandre and Didon.\n\nA release that bills more than three gets the first three anyway. If\nthe billing order is genuinely unclear, leaving this alone is better\nthan guessing, because a fourth flag reads as a fact rather than as an\nattempt." },
             InputField { name: "recordingId", json: "string", required: false, about: "" },
             InputField { name: "singerId", json: "string", required: false, about: "" },
         ],
@@ -528,10 +528,10 @@ pub const TYPES: &[Type] = &[
         create_input: "CreateUpcInput",
         edit_input: "UpdateUpcInput",
         create: &[
-            InputField { name: "upc", json: "string", required: true, about: "" },
+            InputField { name: "upc", json: "string", required: true, about: "The barcode, always at its full fourteen digits.\n\nUPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three\ndifferent barcodes, and the check digit is the same at every length. This\nreturns the longest, zero-padded, because it is the one form that can hold\nany of them.\n\nAny of the three is accepted wherever a barcode is taken, and answered for\nwith this one. Somewhere less formal than an API -- a page, a link, anything\na person reads -- is welcome to drop the leading zeros again." },
         ],
         edit: &[
-            InputField { name: "upc", json: "string", required: false, about: "" },
+            InputField { name: "upc", json: "string", required: false, about: "The barcode, always at its full fourteen digits.\n\nUPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three\ndifferent barcodes, and the check digit is the same at every length. This\nreturns the longest, zero-padded, because it is the one form that can hold\nany of them.\n\nAny of the three is accepted wherever a barcode is taken, and answered for\nwith this one. Somewhere less formal than an API -- a page, a link, anything\na person reads -- is welcome to drop the leading zeros again." },
         ],
         composite: None,
     },

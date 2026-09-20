@@ -187,6 +187,18 @@ union EditableRecord = AlbumCoverArt | AppleMusicAlbum | Character | Composer | 
 input CreateAlbumCoverArtInput {
   imageUrl: String
   source: String
+  """
+  The barcode, always at its full fourteen digits.
+  
+  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
+  different barcodes, and the check digit is the same at every length. This
+  returns the longest, zero-padded, because it is the one form that can hold
+  any of them.
+  
+  Any of the three is accepted wherever a barcode is taken, and answered for
+  with this one. Somewhere less formal than an API -- a page, a link, anything
+  a person reads -- is welcome to drop the leading zeros again.
+  """
   upc: String!
 }
 
@@ -257,6 +269,28 @@ input CreateOperaInput {
 
 input CreatePortrayalInput {
   characterId: String!
+  """
+  Whether this portrayal is part of the recording's top billing.
+  
+  Three singers per recording, and the convention is worth stating because
+  nothing enforces it and it cannot be worked out from the data. The three
+  are the first three in the billing order the release itself prints --
+  the sleeve, the booklet, the label's own listing -- and not a judgement
+  about which roles matter. Recording 88 notes Carreras, van Dam and
+  Zednik and leaves the title role unflagged, so reading the principals
+  off the cast and inferring the answer gives the wrong three.
+  
+  A singer who doubles a role is flagged on every portrayal they have
+  here. So the count of flagged portrayals can exceed three while the
+  count of flagged singers stays at three: recording 77 has six flagged
+  portrayals for three singers, and recording 6417 flags Deborah Polaski
+  for both Cassandre and Didon.
+  
+  A release that bills more than three gets the first three anyway. If
+  the billing order is genuinely unclear, leaving this alone is better
+  than guessing, because a fourth flag reads as a fact rather than as an
+  attempt.
+  """
   noted: Boolean
   recordingId: String!
   singerId: String!
@@ -307,6 +341,18 @@ input CreateTidalAlbumInput {
 }
 
 input CreateUpcInput {
+  """
+  The barcode, always at its full fourteen digits.
+  
+  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
+  different barcodes, and the check digit is the same at every length. This
+  returns the longest, zero-padded, because it is the one form that can hold
+  any of them.
+  
+  Any of the three is accepted wherever a barcode is taken, and answered for
+  with this one. Somewhere less formal than an API -- a page, a link, anything
+  a person reads -- is welcome to drop the leading zeros again.
+  """
   upc: String!
 }
 
@@ -327,22 +373,50 @@ All fields are optional - only provided fields will be used for filtering.
 input RecordingFilterInput {
   """Filter by approximate year (within 2 years of the given year)"""
   approximateYear: Int
+  """
+  A role that somebody sings on the recording, by name. "Which recordings
+  have a Scarpia" is a question about the work rather than about any
+  particular singer. A short fragment; matching is fuzzy and ignores
+  accents.
+  """
+  characterNameSearch: String
+  """
+  The composer of the opera, by name. The catalog holds two operas called La
+  Boheme, by Puccini and by Leoncavallo, so a title alone does not always
+  say which work is meant. A short fragment; matching is fuzzy and ignores
+  accents.
+  """
+  composerNameSearch: String
   """Filter by conductor ID"""
   conductorId: String
   """
-  Filter by conductor's whose name matches the given search string (case-insensitive)
+  Part of the conductor's name. A short fragment, because matching is fuzzy
+  and ignores case and accents.
   """
   conductorNameSearch: String
+  """
+  Only recordings in this collection of the viewer's.
+  
+  Refuses an id that is not a collection the viewer keeps. Not found and not
+  yours are the same refusal, so that walking the ids teaches nothing.
+  """
+  inCollection: Int
   """Filter by opera ID"""
   operaId: String
-  """Filter by opera title search (case-insensitive)"""
+  """
+  Part of the opera's title, as in "Boheme". A short fragment, because
+  matching is fuzzy and ignores case and accents: the stored spelling is
+  often not the one anybody would type.
+  """
   operaTitleSearch: String
   """
   Filter by singer IDs - returns recordings that include ALL specified singers
   """
   singerIds: [String!]
   """
-  Filter by singers whose names match the given search strings - returns recordings that include ALL of them
+  Singers by name. ALL of them must appear on a recording for it to match,
+  so add names to narrow and remove them to widen. Short fragments;
+  matching is fuzzy and ignores accents.
   """
   singerNameSearches: [String!]
   """
@@ -362,6 +436,18 @@ input RecordingPortrayalsInput {
 input UpdateAlbumCoverArtInput {
   imageUrl: String
   source: String
+  """
+  The barcode, always at its full fourteen digits.
+  
+  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
+  different barcodes, and the check digit is the same at every length. This
+  returns the longest, zero-padded, because it is the one form that can hold
+  any of them.
+  
+  Any of the three is accepted wherever a barcode is taken, and answered for
+  with this one. Somewhere less formal than an API -- a page, a link, anything
+  a person reads -- is welcome to drop the leading zeros again.
+  """
   upc: String
 }
 
@@ -432,6 +518,28 @@ input UpdateOperaInput {
 
 input UpdatePortrayalInput {
   characterId: String
+  """
+  Whether this portrayal is part of the recording's top billing.
+  
+  Three singers per recording, and the convention is worth stating because
+  nothing enforces it and it cannot be worked out from the data. The three
+  are the first three in the billing order the release itself prints --
+  the sleeve, the booklet, the label's own listing -- and not a judgement
+  about which roles matter. Recording 88 notes Carreras, van Dam and
+  Zednik and leaves the title role unflagged, so reading the principals
+  off the cast and inferring the answer gives the wrong three.
+  
+  A singer who doubles a role is flagged on every portrayal they have
+  here. So the count of flagged portrayals can exceed three while the
+  count of flagged singers stays at three: recording 77 has six flagged
+  portrayals for three singers, and recording 6417 flags Deborah Polaski
+  for both Cassandre and Didon.
+  
+  A release that bills more than three gets the first three anyway. If
+  the billing order is genuinely unclear, leaving this alone is better
+  than guessing, because a fourth flag reads as a fact rather than as an
+  attempt.
+  """
   noted: Boolean
   recordingId: String
   singerId: String
@@ -482,6 +590,18 @@ input UpdateTidalAlbumInput {
 }
 
 input UpdateUpcInput {
+  """
+  The barcode, always at its full fourteen digits.
+  
+  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
+  different barcodes, and the check digit is the same at every length. This
+  returns the longest, zero-padded, because it is the one form that can hold
+  any of them.
+  
+  Any of the three is accepted wherever a barcode is taken, and answered for
+  with this one. Somewhere less formal than an API -- a page, a link, anything
+  a person reads -- is welcome to drop the leading zeros again.
+  """
   upc: String
 }
 
@@ -508,6 +628,13 @@ type AccessToken {
 }
 
 type AlbumCoverArt {
+  """
+  This Album cover art written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   """
   The value that identifies this record.
@@ -539,6 +666,13 @@ type AlbumCoverArt {
 }
 
 type AppleMusicAlbum {
+  """
+  This Apple Music album written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   id: String @semanticNonNull
   upc: Upc
@@ -547,6 +681,13 @@ type AppleMusicAlbum {
 }
 
 type Character {
+  """
+  This character written out: opera.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   englishName: String
   history: [Edit!] @semanticNonNull
   historyUrl: String @semanticNonNull
@@ -557,7 +698,60 @@ type Character {
   url: String @semanticNonNull
 }
 
+"""
+A list of recordings that one person keeps.
+
+Private, wholly: a collection is reachable only through the account that owns
+it, and that account is only ever the one asking. Nothing here is published,
+nothing appears in the change log, and no other reader can discover that a
+given list exists.
+
+That is narrower than lists usually end up being, and it is the narrow end on
+purpose. Sharing one is a decision with a schema change behind it and it can
+be made later; a list that was public before anybody meant it to be cannot be
+made private again for the people who already read it.
+"""
+type Collection {
+  createdAt: DateTime @semanticNonNull
+  """How many recordings are in it."""
+  entryCount: Int @semanticNonNull
+  id: Int @semanticNonNull
+  """
+  Whether a save with no list named goes here. At most one of an account's
+  collections is.
+  """
+  isDefault: Boolean @semanticNonNull
+  """What the owner calls it."""
+  name: String @semanticNonNull
+  """
+  What is in it, most recently recorded first.
+  
+  The same search as `filterRecordings`, narrowed to this collection: every
+  filter that works against the catalog works inside a list, so "the
+  Karajans I own" is one query rather than a fetch and a scan.
+  
+  A recording merged into another shows as the survivor. A recording deleted
+  outright is absent. The membership row outlives both, so nothing has to be
+  swept up when the catalog changes underneath somebody's list.
+  """
+  recordings(
+    """Narrow it further. Everything `filterRecordings` accepts."""
+    filter: RecordingFilterInput
+    """At most this many. Capped at 200."""
+    first: Int! = 50
+    """Skip this many."""
+    offset: Int! = 0
+  ): [Recording!] @semanticNonNull
+}
+
 type Composer {
+  """
+  This composer written out: operas.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   born: Int
   died: Int
   firstName: String @semanticNonNull
@@ -568,6 +762,7 @@ type Composer {
   id: Int @semanticNonNull
   lastName: String @semanticNonNull
   operaclassId: Int
+  operas: [Opera!] @semanticNonNull
   spotifyArtistId: String
   url: String @semanticNonNull
   wikipediaImage: WikipediaImage
@@ -575,6 +770,13 @@ type Composer {
 }
 
 type Conductor {
+  """
+  This conductor written out: recordings.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   born: Int
   died: Int
   firstName: String @semanticNonNull
@@ -585,6 +787,7 @@ type Conductor {
   id: Int @semanticNonNull
   lastName: String @semanticNonNull
   operaclassId: Int
+  recordings: [Recording!] @semanticNonNull
   spotifyArtistId: String
   url: String @semanticNonNull
   wikipediaImage: WikipediaImage
@@ -598,15 +801,6 @@ Edit model captures metadata about the edit, such as when it was made, who
 made it, and the justification for the edit.
 """
 type Edit {
-  """
-  Where this edit stands: the verdict of its newest review.
-  
-  Null means nobody has reviewed it — which is a different thing from being
-  rejected, and the state a reviewer looks for. An approval is what takes an
-  edit out of that queue, which is why an approval is worth being sure
-  about: it is the last time anything will prompt somebody to look.
-  """
-  approved: Boolean
   """
   The account that made this edit.
   
@@ -623,8 +817,6 @@ type Edit {
   was added/changed, or an explanation of why information was removed.
   """
   justification: String
-  """The most recent review, or null if nobody has reviewed this edit."""
-  latestReview: EditReview
   """
   How many records this edit touched, including any `records` did not
   return.
@@ -657,53 +849,10 @@ type Edit {
     """At most this many records."""
     first: Int! = 100
   ): [EditedRecord!] @semanticNonNull
-  """
-  Every verdict recorded on this edit, oldest first.
-  
-  More than one is normal and is not a conflict: reviews are append-only, so
-  a reviewer who changes their mind, or a person overruling an agent, adds a
-  review rather than replacing one. `approved` is the one that counts.
-  """
-  reviews: [EditReview!] @semanticNonNull
   """Date/time at which the edit was made"""
   timestamp: DateTime @semanticNonNull
   """A stable address for this edit."""
   url: String @semanticNonNull
-}
-
-"""
-A verdict on one edit.
-
-Records here are immutable and anybody may become an editor, so nothing
-stands between a wrong edit and the database except somebody looking
-afterwards and saying so. This is that saying so.
-
-Reviews are append-only. A reviewer who changes their mind, or a second
-reviewer who disagrees, adds a review; the newest one is the edit's
-standing, and the older ones remain as the record of how it was reached.
-"""
-type EditReview {
-  """Whether the edit holds up against the source it cited."""
-  approved: Boolean @semanticNonNull
-  """
-  Why. On a rejection this is the case against the edit, and it is the only
-  thing whoever made it has to learn from.
-  """
-  comment: String
-  """
-  The edit that put this one right — a revert, or a correction.
-  
-  Only meaningful on a rejection, and optional even there: an edit can be
-  wrong before anyone has worked out what it should have said. Naming it is
-  what makes a rejection a repair rather than a complaint, and it is the
-  link that lets the wrong value and the right one be read together.
-  """
-  correction: Edit
-  """The edit being judged."""
-  edit: Edit
-  id: Int @semanticNonNull
-  """When the verdict was recorded."""
-  timestamp: DateTime @semanticNonNull
 }
 
 """
@@ -869,6 +1018,13 @@ type FieldChange {
 
 type Language {
   abbreviation: String @semanticNonNull
+  """
+  This language written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   id: Int @semanticNonNull
   name: String @semanticNonNull
@@ -877,12 +1033,26 @@ type Language {
 }
 
 type MusicBrainzRelease {
+  """
+  This MusicBrainz release written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   id: String @semanticNonNull
   upc: Upc
 }
 
 type MusicBrainzReleaseGroup {
+  """
+  This MusicBrainz release group written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   id: String @semanticNonNull
   recording: Recording
@@ -967,6 +1137,15 @@ type Mutation {
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
   ): Recording @semanticNonNull
+  """
+  Put a recording in a list.
+  
+  Saving the same recording twice is the same save: the primary key says so
+  and `ON CONFLICT DO NOTHING` makes a repeat succeed quietly rather than
+  fail. A caller retrying after a dropped connection wanted the recording in
+  the list, and it is.
+  """
+  addRecordingToCollection(collectionId: Int!, recordingId: Int!): Collection @semanticNonNull
   """Create a new RecordingURL record."""
   addRecordingURL(
     input: CreateRecordingURLInput!
@@ -1064,6 +1243,8 @@ type Mutation {
     """
     username: String!
   ): AccessToken @semanticNonNull
+  """Start a list. The first one an account has becomes its default."""
+  createCollection(name: String!): Collection @semanticNonNull
   """
   Delete a AlbumCoverArt record by ID.
   Returns true if the record was deleted, false if it didn't exist.
@@ -1091,6 +1272,11 @@ type Mutation {
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
   ): Boolean @semanticNonNull
+  """
+  Put one away. Nothing can reach it afterwards, and nothing about the
+  recordings themselves is touched; they were never owned by the list.
+  """
+  deleteCollection(id: Int!): Boolean @semanticNonNull
   """
   Delete a Composer record by ID.
   Returns true if the record was deleted, false if it didn't exist.
@@ -1353,35 +1539,40 @@ type Mutation {
     justification: String!
   ): Singer @semanticNonNull
   """
-  Record a verdict on an edit.
-  
-  Records here are immutable and anybody may become an editor, so nothing
-  stands between a wrong edit and the database except somebody looking
-  afterwards. This is how that looking gets written down.
-  
-  Reviewing an already-reviewed edit is allowed and is not an error: it is how
-  a second reviewer disagrees, and how a person overrules an agent. The newest
-  review is the edit's standing.
-  
-  Requires the `reviewer` role, which is granted by hand rather than handed
-  out by `createAccessToken`.
+  Take one out. Taking out what was never in is not an error: the caller
+  wanted it gone and it is gone.
   """
-  reviewEdit(
-    """Whether the edit holds up against the source it cited"""
-    approved: Boolean!
-    """
-    Why. On a rejection, say what is wrong and what the source actually
-    supports — it is the only thing whoever made the edit has to learn from.
-    """
-    comment: String
-    """
-    Optional, and only meaningful on a rejection: the edit that reverted or
-    corrected this one. Make the correcting edit first, then cite its id here.
-    """
-    correctionEditId: Int
-    """The edit being judged"""
-    editId: Int!
-  ): EditReview @semanticNonNull
+  removeRecordingFromCollection(collectionId: Int!, recordingId: Int!): Collection @semanticNonNull
+  """Give one a different name. Its id and its contents are unchanged."""
+  renameCollection(id: Int!, name: String!): Collection @semanticNonNull
+  """
+  Put a recording in the list saves go to, making that list if there is
+  none.
+  """
+  saveRecording(recordingId: Int!): Collection @semanticNonNull
+  """Make a list and put this recording in it, in one step."""
+  saveRecordingToNewCollection(name: String!, recordingId: Int!): Collection @semanticNonNull
+  """
+  Make the list hold exactly these recordings.
+  
+  For a caller that has a whole list in hand and wants it to match --
+  reconciling against something else, or applying a batch of edits at once --
+  rather than one `add` and one `remove` per difference.
+  
+  Recordings that have been merged are accepted and understood, so the list
+  you read is a list you can send back.
+  """
+  setCollectionRecordings(
+    collectionId: Int!
+    """Exactly what the list should hold afterwards. Empty clears it."""
+    recordingIds: [Int!]!
+  ): Collection @semanticNonNull
+  """
+  Make this the list a save goes to when nobody says where, taking it from
+  whichever list held that job. Nominating the one already nominated is not
+  an error.
+  """
+  setDefaultCollection(id: Int!): Collection @semanticNonNull
   """
   Say something to whoever maintains this.
   
@@ -1406,250 +1597,345 @@ type Mutation {
   """
   Put a deleted or merged AlbumCoverArt back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteAlbumCoverArt(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): AlbumCoverArt
   """
   Put a deleted or merged AppleMusicAlbum back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteAppleMusicAlbum(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): AppleMusicAlbum
   """
   Put a deleted or merged Character back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteCharacter(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): Character
   """
   Put a deleted or merged Composer back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteComposer(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): Composer
   """
   Put a deleted or merged Conductor back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteConductor(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): Conductor
   """
   Put a deleted or merged Language back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteLanguage(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): Language
   """
   Put a deleted or merged MusicBrainzRelease back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteMusicBrainzRelease(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): MusicBrainzRelease
   """
   Put a deleted or merged MusicBrainzReleaseGroup back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteMusicBrainzReleaseGroup(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): MusicBrainzReleaseGroup
   """
   Put a deleted or merged NaxosAlbum back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteNaxosAlbum(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): NaxosAlbum
   """
   Put a deleted or merged Opera back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteOpera(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): Opera
   """
   Put a deleted or merged Portrayal back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeletePortrayal(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): Portrayal
   """
   Put a deleted or merged PrestoMusicAlbum back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeletePrestoMusicAlbum(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): PrestoMusicAlbum
   """
   Put a deleted or merged Recording back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteRecording(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): Recording
   """
   Put a deleted or merged RecordingURL back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteRecordingURL(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): RecordingURL
   """
   Put a deleted or merged Singer back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteSinger(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): Singer
   """
   Put a deleted or merged SpotifyAlbum back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteSpotifyAlbum(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): SpotifyAlbum
   """
   Put a deleted or merged TidalAlbum back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteTidalAlbum(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): TidalAlbum
   """
   Put a deleted or merged Upc back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteUpc(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): Upc
   """
   Put a deleted or merged WikipediaImage back, by id.
   
-  Returns false when there is no such record at all. A record that is
-  already live is an error rather than a false, because asking to restore
-  something that was never gone means the caller is working from a wrong
-  idea of what happened.
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did. That matters most for a merged record:
+  restoring one stops it redirecting, and whether the thing now answering
+  to this id is what the caller expected is the question they asked.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
   """
   undeleteWikipediaImage(
     id: String!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
-  ): Boolean @semanticNonNull
+  ): WikipediaImage
   """
   Assuming a UPC and Recording exist, unlink them. Returns true if a link was
   deleted, false if no link existed.
@@ -1660,6 +1946,11 @@ type Mutation {
     recordingId: String!
     upc: String!
   ): Boolean @semanticNonNull
+  """
+  Take a recording out of the list saves go to. Null if there is no such
+  list, which is not an error.
+  """
+  unsaveRecording(recordingId: Int!): Collection
   """Update a AlbumCoverArt record by ID."""
   updateAlbumCoverArt(
     id: String!
@@ -1796,6 +2087,13 @@ type Mutation {
 }
 
 type NaxosAlbum {
+  """
+  This Naxos album written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   catalogueId: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   """
@@ -1815,6 +2113,13 @@ type NaxosAlbum {
 }
 
 type Opera {
+  """
+  This opera written out: composer, roles, recordings.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   characters: [Character!] @semanticNonNull
   composer: Composer @semanticNonNull
   englishTitle: String
@@ -1824,6 +2129,7 @@ type Opera {
   language: Language
   librettist: String
   operaclassId: Int
+  recordings: [Recording!] @semanticNonNull
   title: String @semanticNonNull
   url: String @semanticNonNull
   wikipediaImage: WikipediaImage
@@ -1842,15 +2148,51 @@ type PageInfo {
 }
 
 type Portrayal {
+  """
+  This portrayal written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   character: Character @semanticNonNull
   history: [Edit!] @semanticNonNull
   id: Int @semanticNonNull
+  """
+  Whether this portrayal is part of the recording's top billing.
+  
+  Three singers per recording, and the convention is worth stating because
+  nothing enforces it and it cannot be worked out from the data. The three
+  are the first three in the billing order the release itself prints --
+  the sleeve, the booklet, the label's own listing -- and not a judgement
+  about which roles matter. Recording 88 notes Carreras, van Dam and
+  Zednik and leaves the title role unflagged, so reading the principals
+  off the cast and inferring the answer gives the wrong three.
+  
+  A singer who doubles a role is flagged on every portrayal they have
+  here. So the count of flagged portrayals can exceed three while the
+  count of flagged singers stays at three: recording 77 has six flagged
+  portrayals for three singers, and recording 6417 flags Deborah Polaski
+  for both Cassandre and Didon.
+  
+  A release that bills more than three gets the first three anyway. If
+  the billing order is genuinely unclear, leaving this alone is better
+  than guessing, because a fourth flag reads as a fact rather than as an
+  attempt.
+  """
   noted: Boolean
   recording: Recording @semanticNonNull
   singer: Singer @semanticNonNull
 }
 
 type PrestoMusicAlbum {
+  """
+  This Presto Music album written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   """
   The value that identifies this record.
@@ -2130,31 +2472,12 @@ type Query {
   searchSingers(first: Int! = 5, query: String!): [Singer!] @semanticNonNull
   searchUpcs(first: Int! = 5, query: String!): [Upc!] @semanticNonNull
   """
-  Edits nobody has reviewed yet, oldest first by default.
+  The account this request is signed in as, or null if it is not signed in.
   
-  The reviewer's work queue. Oldest first so that somebody working through
-  the backlog makes progress rather than being handed whatever is newest.
-  
-  That is the right default and the wrong one for the other job this queue
-  gets asked to do. There are well over a hundred thousand unreviewed edits,
-  most of them years of scraper runs, so somebody auditing what was changed
-  this week cannot reach it from the oldest end — and `afterId` is no help
-  when finding the newest id is the problem. `DESC` is for that.
+  Null is an answer rather than a refusal: almost everything here reads
+  without signing in.
   """
-  unreviewedEdits(
-    """
-    Page by passing the last id you saw. Read in whichever direction `order`
-    names: ascending it means edits after this one, descending, before it.
-    Zero starts at whichever end `order` begins from.
-    """
-    afterId: Int! = 0
-    first: Int! = 50
-    """
-    `ASC`, the default, works the backlog from the oldest unreviewed edit.
-    `DESC` reviews what just happened.
-    """
-    order: SortOrder
-  ): [Edit!] @semanticNonNull
+  viewer: User
 }
 
 """
@@ -2185,6 +2508,13 @@ type RecordDeletion {
 }
 
 type Recording {
+  """
+  This recording written out: opera, conductor, barcodes, where to listen, cast.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   chorus: String
   conductor: Conductor @semanticNonNull
   """
@@ -2210,19 +2540,43 @@ type Recording {
   markerUrl: String @semanticNonNull
   month: Int
   musicBrainzReleaseGroups: [MusicBrainzReleaseGroup!] @semanticNonNull
-  """Returns singers on the recording who received top billing."""
+  """
+  The singers on this recording who received top billing.
+  
+  Three of them, taken in the order the release itself bills them. A singer
+  who doubles a role is flagged on each of their portrayals, so the count of
+  flagged portrayals can exceed three while this list stays at three: it is
+  singers, deduplicated, not portrayals.
+  
+  Nothing enforces the three, and it cannot be recovered from the cast --
+  recording 88 bills Carreras, van Dam and Zednik and leaves the title role
+  unflagged. See `Portrayal.noted`.
+  """
   notedSingers: [Singer!] @semanticNonNull
   opera: Opera @semanticNonNull
   operaclassId: Int
   orchestra: String
   portrayals: [Portrayal!] @semanticNonNull
   relatedUrls: [RecordingURL!] @semanticNonNull
+  """
+  Whether this recording is in the collection the viewer's saves concern --
+  the one they nominated, or the only one they keep. False when nobody is
+  signed in, and when they keep several and have nominated none.
+  """
+  savedByViewer: Boolean @semanticNonNull
   upcs: [Upc!] @semanticNonNull
   url: String @semanticNonNull
   year: Int
 }
 
 type RecordingURL {
+  """
+  This Recording URL written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   id: Int @semanticNonNull
   recording: Recording @semanticNonNull
@@ -2230,6 +2584,13 @@ type RecordingURL {
 }
 
 type Singer {
+  """
+  This singer written out: roles recorded.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   born: Int
   died: Int
   firstName: String @semanticNonNull
@@ -2249,6 +2610,13 @@ type Singer {
 
 type SpotifyAlbum {
   albumName: String
+  """
+  This Spotify album written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   id: String @semanticNonNull
   upc: Upc
@@ -2257,6 +2625,13 @@ type SpotifyAlbum {
 }
 
 type TidalAlbum {
+  """
+  This Tidal album written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   id: String @semanticNonNull
   upc: Upc
@@ -2266,6 +2641,13 @@ type TidalAlbum {
 
 type Upc {
   appleMusicAlbums: [AppleMusicAlbum!] @semanticNonNull
+  """
+  This UPC written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   """
   Indicates a UPC represent a release that includes multiple opera recordings.
   """
@@ -2313,9 +2695,38 @@ run of changes can be read, trusted or doubted together.
 
 Usually somebody else's. This is what an edit hands back when asked who made
 it, so the account being described is far more often the one you are reading
-about than the one you are signed in as.
+about than the one you are signed in as. `viewer` is the exception.
 """
 type User {
+  """
+  The lists this account keeps, oldest first.
+  
+  Empty unless the account asking is the account asked about, which today is
+  the only way to get here at all -- `viewer` is the sole route to a `User`
+  whose collections anybody can see. The check is written anyway, because the
+  day a second route appears is not the day anybody will remember this.
+  """
+  collections: [Collection!] @semanticNonNull
+  """
+  The change log, narrowed to what this account wrote.
+  
+  The same entries as `Query.recordChanges`, in the same order, without any
+  other account's. A cursor from here resumes here: passing one to
+  `Query.recordChanges` silently steps over everything written in between.
+  """
+  recordChanges(
+    """Resume from the `cursor` of the last entry this field returned."""
+    after: String
+    """At most this many. Capped at 500."""
+    first: Int! = 100
+    """
+    `ASC`, the default, reads from this account's oldest change. `DESC`
+    starts at its newest, which is usually the question being asked here.
+    """
+    order: SortOrder
+    """Only rows of this table, read with its own cursor."""
+    table: RecordTable
+  ): EditedRecordConnection @semanticNonNull
   """
   What to call this account.
   
@@ -2327,6 +2738,13 @@ type User {
 }
 
 type WikipediaImage {
+  """
+  This Wikipedia image written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
   history: [Edit!] @semanticNonNull
   """
   The value that identifies this record.
