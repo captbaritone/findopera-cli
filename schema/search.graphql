@@ -8,6 +8,29 @@
 # or something a caller needs in order to make the next request — an id, or
 # enough context to tell two people with the same surname apart.
 
+# The viewer's own lists. Not a search -- there is nothing to match on -- but
+# it belongs here for the reason everything else here does: a collection
+# command takes an id, and this is the only way to learn one. `entryCount` is
+# printed with it, so that the answer to "which list did I mean" does not
+# require opening the website.
+#
+# `isDefault` is deliberately not selected. It marks the list a bare save goes
+# to, which is a notion this CLI does not have and should not appear to: the
+# list it cares about is the one named in findopera.toml, and two different
+# ideas of "the default list" on one screen would be read as one.
+#
+# `viewer` is null when nobody is signed in, which the schema is explicit is an
+# answer rather than a refusal. The caller has to tell the two apart.
+query Collections {
+  viewer {
+    collections {
+      id
+      name
+      entryCount
+    }
+  }
+}
+
 query SearchOperas($query: String!, $first: Int!) {
   searchOperas(query: $query, first: $first) {
     id

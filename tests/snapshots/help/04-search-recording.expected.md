@@ -53,6 +53,12 @@ Options:
           
           About the work rather than the cast: which recordings have a Scarpia, whoever sang him.
 
+      --in-collection <ID>
+          Only what is in this list of yours.
+          
+          By the list's id, which `findopera collection list` gives. Needs a token, since a list
+          belongs to an account.
+
       --year <YEAR>
           Recorded within two years of this
 

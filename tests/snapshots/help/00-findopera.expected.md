@@ -11,27 +11,28 @@ Organize a library of opera recordings, using metadata from findopera.com
 Usage: findopera <COMMAND>
 
 Commands:
-  organize  Work out what each folder should be called, and optionally build it
-  get       Show one record whole
-  create    Add a record
-  edit      Change a record
-  link      Attach a UPC to a recording
-  unlink    Take a UPC off a recording
-  delete    Remove a record
-  undelete  Put a deleted or merged record back
-  merge     Fold one record into another describing the same performance
-  describe  List the types, or say what one holds
-  search    Look up an id by name
-  annotate  Write a recording's notes into a folder
-  template  The template language: its syntax, and every field
-  graphql   Send a GraphQL query to findopera.com and print the response
-  schema    Print the GraphQL schema, or one type from it
-  feedback  Send a note to whoever maintains findopera.com
-  login     Store a token, so that requests say who is making them
-  logout    Forget the stored token
-  self      This program itself: whether it is the current version
-  init      Write a starter findopera.toml, explaining every setting
-  help      Print this message or the help of the given subcommand(s)
+  organize    Work out what each folder should be called, and optionally build it
+  get         Show one record whole
+  create      Add a record
+  edit        Change a record
+  link        Attach a UPC to a recording
+  unlink      Take a UPC off a recording
+  delete      Remove a record
+  undelete    Put a deleted or merged record back
+  merge       Fold one record into another describing the same performance
+  collection  Lists of recordings you keep on findopera.com
+  describe    List the types, or say what one holds
+  search      Look up an id by name
+  annotate    Write a recording's notes into a folder
+  template    The template language: its syntax, and every field
+  graphql     Send a GraphQL query to findopera.com and print the response
+  schema      Print the GraphQL schema, or one type from it
+  feedback    Send a note to whoever maintains findopera.com
+  login       Store a token, so that requests say who is making them
+  logout      Forget the stored token
+  self        This program itself: whether it is the current version
+  init        Write a starter findopera.toml, explaining every setting
+  help        Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help

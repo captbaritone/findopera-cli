@@ -334,6 +334,48 @@ Examples:
     )]
     Merge(MergeArgs),
 
+    /// Lists of recordings you keep on findopera.com.
+    #[command(long_about = "\
+A list of recordings you keep on findopera.com.
+
+  findopera collection list
+  findopera collection create 'Main library'
+  findopera collection add 264 1247 --to 3
+  findopera collection remove 264 --from 3
+
+Every one of these names a list by its id rather than by its name, because
+nothing stops two lists sharing a name. `collection list` is where an id comes
+from, and prints what each one holds so that picking the right one does not
+mean opening the website.
+
+Ids can be read from standard input by passing `-` in their place, which is
+what makes this worth scripting:
+
+  findopera search recording tosca --tabs | cut -f1 | findopera collection add - --to 3
+
+None of this is versioned. The catalog keeps every version of a record, and
+that is what `undelete` puts back; a list is a row changed in place, so taking
+a recording out, renaming a list, replacing what it holds and purging it are
+all final in the same way. There is nothing to undo any of them with.
+
+`set` and `purge` are the two that can lose a great deal in one go, so both
+say what they are about to do and ask for --yes: `set` whenever it would leave
+a list holding less than it found, `purge` always. Purging never touches the
+recordings themselves — they were never owned by the list.
+
+Adding and removing are both idempotent, by the server's own account: adding
+what is already there is one save, and removing what was never there is not an
+error. So a run that died halfway through can simply be run again.
+
+`collection set` replaces a list's contents outright, in one request rather
+than one per difference — which is what something that has walked a whole
+library and knows the answer wants. It is also the only one here that
+destroys: what it does not name stops being in the list. Emptying a list that
+way needs --yes.
+
+All of these need a token, because a list belongs to an account.")]
+    Collection(CollectionArgs),
+
     /// List the types, or say what one holds.
     #[command(long_about = "\
 With no argument, list every type these commands work on.
@@ -834,6 +876,128 @@ struct LinkArgs {
     what: Joining,
 }
 
+/// What every collection command needs in order to reach the API.
+///
+/// Flattened rather than repeated, as `Looking` is for the search commands.
+#[derive(Args)]
+struct Reaching {
+    /// Print the result as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+/// What to do with one of your lists.
+#[derive(Subcommand)]
+enum Collecting {
+    /// The lists this account keeps.
+    List(CollectionListArgs),
+    /// Start a list.
+    Create(CollectionCreateArgs),
+    /// Put recordings in a list.
+    Add(CollectionAddArgs),
+    /// Take recordings out of a list.
+    Remove(CollectionRemoveArgs),
+    /// Make a list hold exactly these recordings, and nothing else.
+    Set(CollectionSetArgs),
+    /// Give a list a different name.
+    Rename(CollectionRenameArgs),
+    /// Delete a list for good. The recordings in it are untouched.
+    Purge(CollectionPurgeArgs),
+}
+
+#[derive(Args)]
+struct CollectionListArgs {
+    /// Separate the columns with a tab instead of padding, for piping.
+    #[arg(long)]
+    tabs: bool,
+    #[command(flatten)]
+    reaching: Reaching,
+}
+
+#[derive(Args)]
+struct CollectionCreateArgs {
+    /// What to call it.
+    #[arg(value_name = "NAME")]
+    name: String,
+    #[command(flatten)]
+    reaching: Reaching,
+}
+
+#[derive(Args)]
+struct CollectionAddArgs {
+    /// The recordings' ids, or `-` to read them from standard input.
+    #[arg(value_name = "ID", required = true)]
+    ids: Vec<String>,
+    /// The list to put them in.
+    #[arg(long, value_name = "ID")]
+    to: i64,
+    #[command(flatten)]
+    reaching: Reaching,
+}
+
+#[derive(Args)]
+struct CollectionRemoveArgs {
+    /// The recordings' ids, or `-` to read them from standard input.
+    #[arg(value_name = "ID", required = true)]
+    ids: Vec<String>,
+    /// The list to take them out of.
+    #[arg(long, value_name = "ID")]
+    from: i64,
+    #[command(flatten)]
+    reaching: Reaching,
+}
+
+#[derive(Args)]
+struct CollectionSetArgs {
+    /// The recordings' ids, or `-` to read them from standard input.
+    ///
+    /// Whatever is not named here stops being in the list.
+    #[arg(value_name = "ID")]
+    ids: Vec<String>,
+    /// The list to make match.
+    #[arg(long, value_name = "ID")]
+    to: i64,
+    /// Say so out loud. Needed only to empty a list.
+    #[arg(long)]
+    yes: bool,
+    #[command(flatten)]
+    reaching: Reaching,
+}
+
+#[derive(Args)]
+struct CollectionRenameArgs {
+    /// The list's id.
+    #[arg(value_name = "ID")]
+    id: i64,
+    /// What to call it instead.
+    #[arg(value_name = "NAME")]
+    name: String,
+    #[command(flatten)]
+    reaching: Reaching,
+}
+
+#[derive(Args)]
+struct CollectionPurgeArgs {
+    /// The list's id.
+    #[arg(value_name = "ID")]
+    id: i64,
+    /// Say so out loud. Nothing is purged without it.
+    #[arg(long)]
+    yes: bool,
+    #[command(flatten)]
+    reaching: Reaching,
+}
+
+#[derive(Args)]
+struct CollectionArgs {
+    #[command(subcommand)]
+    what: Collecting,
+}
+
 #[derive(Subcommand)]
 enum Selfing {
     /// Say whether a newer version has been released.
@@ -928,6 +1092,12 @@ struct SearchRecordingArgs {
     /// whoever sang him.
     #[arg(long, value_name = "NAME")]
     character: Option<String>,
+    /// Only what is in this list of yours.
+    ///
+    /// By the list's id, which `findopera collection list` gives. Needs a
+    /// token, since a list belongs to an account.
+    #[arg(long, value_name = "ID")]
+    in_collection: Option<i64>,
     /// Recorded within two years of this.
     #[arg(long, value_name = "YEAR")]
     year: Option<i64>,
@@ -1138,6 +1308,7 @@ pub fn dispatch(ui: &mut Session, cli: Cli) -> i32 {
         Command::Delete(args) => cmd_delete(ui, args),
         Command::Undelete(args) => cmd_undelete(ui, args),
         Command::Merge(args) => cmd_merge(ui, args),
+        Command::Collection(args) => cmd_collection(ui, args),
         Command::Describe(args) => cmd_describe(ui, args),
         Command::Search(args) => cmd_search(ui, args),
         Command::Annotate(args) => cmd_annotate(ui, args),
@@ -1498,6 +1669,410 @@ fn cmd_merge(ui: &mut Session, args: MergeArgs) -> i32 {
             0
         }
         Err(e) => failed(ui, &e, args.json),
+    }
+}
+
+// ---- the collection commands ----------------------------------------------
+//
+// A list belongs to one account rather than to the catalog, which is why none
+// of these carries the `-m` every editing command here does: there is no
+// shared record to justify a change to. It is also why they all insist on a
+// token, rather than falling back to an anonymous request the way a search
+// does.
+
+/// A client that is certainly signed in.
+///
+/// `viewer` is null rather than an error when nobody is signed in — the schema
+/// is explicit that this is an answer — so a signed-out request does not fail.
+/// It succeeds, and reports an account with no lists to somebody who has
+/// several. Checking here means the refusal names the real problem.
+fn client_signed_in(ui: &mut Session, r: &Reaching) -> Result<api::Client, i32> {
+    match credentials::resolve(r.token.as_deref()) {
+        Ok(Some(token)) => Ok(ui.api(&r.endpoint, Some(token))),
+        Ok(None) => Err(refused(
+            ui,
+            "a list belongs to an account, and this request would be anonymous. \
+             `findopera login` stores a token.",
+            "NOT_SIGNED_IN",
+            r.json,
+            2,
+        )),
+        Err(why) => {
+            note!(ui, "findopera: {why}");
+            Err(2)
+        }
+    }
+}
+
+/// Recording ids, from the command line or from standard input.
+///
+/// `-` rather than an implicit read, because the one command that takes no ids
+/// at all empties a list: a pipe that happened to be empty should not be the
+/// same gesture as asking for that.
+fn recording_ids(given: &[String]) -> Result<Vec<i64>, String> {
+    let words: Vec<String> = if given.iter().any(|g| g == "-") {
+        if given.len() > 1 {
+            return Err(
+                "`-` reads every id from standard input, so it cannot be given beside others"
+                    .to_string(),
+            );
+        }
+        std::io::read_to_string(std::io::stdin())
+            .map_err(|e| format!("cannot read the ids from standard input: {e}"))?
+            .split_whitespace()
+            .map(str::to_string)
+            .collect()
+    } else {
+        given.to_vec()
+    };
+
+    let mut ids = Vec::with_capacity(words.len());
+    for word in &words {
+        match word.parse::<i64>() {
+            Ok(n) => ids.push(n),
+            // Named rather than counted, because the usual cause is a stray
+            // column in whatever was piped in, and which one it was is the
+            // whole of the fix.
+            Err(_) => return Err(format!("`{word}` is not a recording id; ids are numbers")),
+        }
+    }
+    Ok(ids)
+}
+
+/// What to say after a list has changed.
+fn changed(ui: &mut Session, c: &api::Collection, json: bool) -> i32 {
+    if json {
+        let body = serde_json::json!({
+            "collection": { "id": c.id, "name": c.name, "entries": c.entries },
+        });
+        emit(
+            ui,
+            format_args!(
+                "{}",
+                serde_json::to_string_pretty(&body).unwrap_or_default()
+            ),
+        );
+    } else {
+        let s = if c.entries == 1 { "" } else { "s" };
+        note!(
+            ui,
+            "findopera: \"{}\" ({}) now holds {} recording{s}",
+            c.name,
+            c.id,
+            c.entries
+        );
+    }
+    0
+}
+
+fn cmd_collection(ui: &mut Session, args: CollectionArgs) -> i32 {
+    match args.what {
+        Collecting::List(a) => cmd_collection_list(ui, a),
+        Collecting::Create(a) => cmd_collection_create(ui, a),
+        Collecting::Add(a) => cmd_collection_hold(ui, a.ids, a.to, true, a.reaching),
+        Collecting::Remove(a) => cmd_collection_hold(ui, a.ids, a.from, false, a.reaching),
+        Collecting::Set(a) => cmd_collection_set(ui, a),
+        Collecting::Rename(a) => cmd_collection_rename(ui, a),
+        Collecting::Purge(a) => cmd_collection_purge(ui, a),
+    }
+}
+
+fn cmd_collection_list(ui: &mut Session, a: CollectionListArgs) -> i32 {
+    let api = match client_signed_in(ui, &a.reaching) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let lists = match api.collections() {
+        Ok(l) => l,
+        Err(e) => return failed(ui, &e, a.reaching.json),
+    };
+
+    if a.reaching.json {
+        let rows: Vec<serde_json::Value> = lists
+            .iter()
+            .map(|c| serde_json::json!({ "id": c.id, "name": c.name, "entries": c.entries }))
+            .collect();
+        let body = serde_json::json!({ "collections": rows });
+        emit(
+            ui,
+            format_args!(
+                "{}",
+                serde_json::to_string_pretty(&body).unwrap_or_default()
+            ),
+        );
+        // An empty list of lists is a good answer, and a caller can see it is
+        // empty — the same reasoning `search --json` uses.
+        return 0;
+    }
+
+    if lists.is_empty() {
+        note!(ui, "findopera: this account keeps no lists");
+        note!(ui, "  help: `findopera collection new <name>` starts one");
+        return 1;
+    }
+
+    let id_width = lists
+        .iter()
+        .map(|c| c.id.to_string().len())
+        .max()
+        .unwrap_or(0);
+    let name_width = lists
+        .iter()
+        .map(|c| c.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    // Measured like the other two rather than fixed, or a list of four
+    // thousand beside a list of one leaves the smaller count stranded in the
+    // middle of a column sized for neither.
+    let count_width = lists
+        .iter()
+        .map(|c| c.entries.to_string().len())
+        .max()
+        .unwrap_or(0);
+    for c in &lists {
+        let line = if a.tabs {
+            format!("{}\t{}\t{}", c.id, c.name, c.entries)
+        } else {
+            let pad = name_width.saturating_sub(c.name.chars().count());
+            format!(
+                "{:>id_width$}  {}{:pad$}  {:>count_width$}",
+                c.id, c.name, "", c.entries
+            )
+        };
+        if !emit(ui, format_args!("{}", line.trim_end())) {
+            return 0;
+        }
+    }
+    0
+}
+
+fn cmd_collection_create(ui: &mut Session, a: CollectionCreateArgs) -> i32 {
+    if a.name.trim().is_empty() {
+        return refused(ui, "a list needs a name", "BAD_INPUT", a.reaching.json, 2);
+    }
+    let api = match client_signed_in(ui, &a.reaching) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match api.collection_create(a.name.trim()) {
+        Ok(c) => {
+            if a.reaching.json {
+                let body = serde_json::json!({
+                    "collection": { "id": c.id, "name": c.name, "entries": c.entries },
+                });
+                emit(
+                    ui,
+                    format_args!(
+                        "{}",
+                        serde_json::to_string_pretty(&body).unwrap_or_default()
+                    ),
+                );
+            } else {
+                // The id, because it is what every other command here takes.
+                note!(
+                    ui,
+                    "findopera: started \"{}\", which is list {}",
+                    c.name,
+                    c.id
+                );
+            }
+            0
+        }
+        Err(e) => failed(ui, &e, a.reaching.json),
+    }
+}
+
+/// One of the viewer's lists, by id.
+///
+/// So that the two destructive commands can say what they are about to do in
+/// terms of the list somebody recognises — its name, and how much is in it —
+/// rather than the number they typed. Worth a request of its own before
+/// something that cannot be undone.
+fn one_collection(api: &api::Client, id: i64) -> Result<api::Collection, api::ApiError> {
+    let all = api.collections()?;
+    all.into_iter()
+        .find(|c| c.id == id)
+        .ok_or_else(|| api::ApiError::not_found(format!("there is no list {id}")))
+}
+
+fn cmd_collection_rename(ui: &mut Session, a: CollectionRenameArgs) -> i32 {
+    if a.name.trim().is_empty() {
+        return refused(ui, "a list needs a name", "BAD_INPUT", a.reaching.json, 2);
+    }
+    let api = match client_signed_in(ui, &a.reaching) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match api.collection_rename(a.id, a.name.trim()) {
+        Ok(c) => {
+            if a.reaching.json {
+                let body = serde_json::json!({
+                    "collection": { "id": c.id, "name": c.name, "entries": c.entries },
+                });
+                emit(
+                    ui,
+                    format_args!(
+                        "{}",
+                        serde_json::to_string_pretty(&body).unwrap_or_default()
+                    ),
+                );
+            } else {
+                note!(ui, "findopera: list {} is now \"{}\"", c.id, c.name);
+            }
+            0
+        }
+        Err(e) => failed(ui, &e, a.reaching.json),
+    }
+}
+
+fn cmd_collection_purge(ui: &mut Session, a: CollectionPurgeArgs) -> i32 {
+    // Asked for the same way `delete` and `merge` ask, and for a stronger
+    // reason: those write a new version of a record and `undelete` puts it
+    // back, whereas nothing here can. It is the one thing this program does
+    // that cannot be undone.
+    let api = match client_signed_in(ui, &a.reaching) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    // Looked up before the question is asked, so that the question is about
+    // "Local Library, 4793 recordings" rather than about the number 1.
+    let list = match one_collection(&api, a.id) {
+        Ok(c) => c,
+        Err(e) => return failed(ui, &e, a.reaching.json),
+    };
+    if !a.yes {
+        let s = if list.entries == 1 { "" } else { "s" };
+        return refused(
+            ui,
+            &format!(
+                "this would purge \"{}\" ({}), which holds {} recording{s}, and nothing \
+                 can put the list back. The recordings themselves are not touched. \
+                 Pass --yes to do it.",
+                list.name, list.id, list.entries
+            ),
+            "NEEDS_CONFIRMATION",
+            a.reaching.json,
+            2,
+        );
+    }
+    match api.collection_purge(a.id) {
+        Ok(()) => {
+            if a.reaching.json {
+                emit(
+                    ui,
+                    format_args!("{}", serde_json::json!({ "purged": a.id })),
+                );
+            } else {
+                note!(ui, "findopera: list {} is gone", a.id);
+            }
+            0
+        }
+        Err(e) => failed(ui, &e, a.reaching.json),
+    }
+}
+
+fn cmd_collection_hold(
+    ui: &mut Session,
+    given: Vec<String>,
+    list: i64,
+    hold: bool,
+    r: Reaching,
+) -> i32 {
+    let ids = match recording_ids(&given) {
+        Ok(v) => v,
+        Err(why) => return refused(ui, &why, "BAD_INPUT", r.json, 2),
+    };
+    if ids.is_empty() {
+        // Reachable through `-` with nothing on the other end of the pipe.
+        return refused(ui, "no ids were given", "BAD_INPUT", r.json, 2);
+    }
+
+    let api = match client_signed_in(ui, &r) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+
+    // One request each: the server offers no batched form of either, and both
+    // are idempotent, so stopping at the first failure costs nothing — what
+    // succeeded stays done and the same command can be run again.
+    let mut last = None;
+    let mut done = 0usize;
+    for id in &ids {
+        match api.collection_hold(list, *id, hold) {
+            Ok(c) => {
+                done += 1;
+                last = Some(c);
+            }
+            Err(e) => {
+                if done > 0 {
+                    note!(
+                        ui,
+                        "findopera: {done} of {} had already been {}; running this again is safe",
+                        ids.len(),
+                        if hold { "added" } else { "removed" }
+                    );
+                }
+                return failed(ui, &e, r.json);
+            }
+        }
+    }
+
+    match last {
+        Some(c) => changed(ui, &c, r.json),
+        None => 0,
+    }
+}
+
+fn cmd_collection_set(ui: &mut Session, a: CollectionSetArgs) -> i32 {
+    let ids = match recording_ids(&a.ids) {
+        Ok(v) => v,
+        Err(why) => return refused(ui, &why, "BAD_INPUT", a.reaching.json, 2),
+    };
+    let api = match client_signed_in(ui, &a.reaching) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+
+    // `set` replaces, so anything it is not given, it takes away. Emptying is
+    // the obvious accident -- a pipe that produced nothing looks exactly like
+    // asking for it -- but it is not the only one: a wrong filter upstream
+    // sends three ids to a list of four thousand and the other 3,997 are
+    // simply gone, with nothing to put them back.
+    //
+    // Counts are what this compares, because they cost one request while the
+    // contents cost one per two hundred. It is a coarse test: swapping three
+    // ids for three others leaves the count alone and still takes three away.
+    // It catches losing most of a library, which is the failure worth a
+    // question.
+    let list = match one_collection(&api, a.to) {
+        Ok(c) => c,
+        Err(e) => return failed(ui, &e, a.reaching.json),
+    };
+    if !a.yes && (ids.len() as i64) < list.entries {
+        let holds = if list.entries == 1 { "" } else { "s" };
+        let message = if ids.is_empty() {
+            format!(
+                "this would empty \"{}\" ({}), which holds {} recording{holds}. \
+                 Pass --yes to mean it.",
+                list.name, list.id, list.entries
+            )
+        } else {
+            format!(
+                "this would take \"{}\" ({}) from {} recording{holds} to {}, since `set` \
+                 replaces what is there rather than adding to it. Pass --yes to mean it, \
+                 or use `collection add` to add without removing.",
+                list.name,
+                list.id,
+                list.entries,
+                ids.len()
+            )
+        };
+        return refused(ui, &message, "WOULD_SHRINK", a.reaching.json, 2);
+    }
+
+    match api.collection_set(a.to, &ids) {
+        Ok(c) => changed(ui, &c, a.reaching.json),
+        Err(e) => failed(ui, &e, a.reaching.json),
     }
 }
 
@@ -1903,6 +2478,7 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
                     conductor: a.conductor,
                     composer: a.composer,
                     character: a.character,
+                    in_collection: a.in_collection,
                     year: a.year,
                     upc: a.upc,
                     first,
@@ -1935,6 +2511,7 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
         || criteria.conductor.is_some()
         || criteria.composer.is_some()
         || criteria.character.is_some()
+        || criteria.in_collection.is_some()
         || criteria.year.is_some()
         || criteria.upc.is_some();
     if criteria.text.trim().is_empty() && !narrowed {

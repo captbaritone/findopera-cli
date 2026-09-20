@@ -914,8 +914,18 @@ mod tests {
                 );
             }
         }
-        // The pair that joins two records, which no type owns.
-        for operation in ["LinkRecordingUpc", "UnlinkRecordingUpc"] {
+        // The ones no type owns: the pair that joins two records, and the
+        // four that act on a list rather than on the catalog. api.rs names
+        // each of these with a string literal, so a rename in codegen would
+        // otherwise surface as an unknown-operation refusal at runtime.
+        for operation in [
+            "LinkRecordingUpc",
+            "UnlinkRecordingUpc",
+            "AddRecordingToCollection",
+            "RemoveRecordingFromCollection",
+            "CreateCollection",
+            "SetCollectionRecordings",
+        ] {
             assert!(
                 MUTATIONS.contains(&format!("mutation {operation}(")),
                 "mutations.graphql has no `{operation}`"
@@ -1072,6 +1082,8 @@ pub struct Criteria {
     /// Puccini `La Boheme` and a Leoncavallo one -- so a title alone does not
     /// always say which is meant.
     pub composer: Option<String>,
+    /// Only what is in this list of the viewer's, by its id.
+    pub in_collection: Option<i64>,
     /// A role somebody sings on it. A question about the work rather than
     /// about any particular singer: which recordings have a Scarpia.
     pub character: Option<String>,
@@ -1171,6 +1183,9 @@ impl Client {
             }
             if let Some(composer) = &criteria.composer {
                 filter.insert("composerNameSearch".into(), composer.clone().into());
+            }
+            if let Some(collection) = criteria.in_collection {
+                filter.insert("inCollection".into(), collection.into());
             }
             if let Some(character) = &criteria.character {
                 filter.insert("characterNameSearch".into(), character.clone().into());
@@ -1485,5 +1500,165 @@ impl Client {
         };
         self.query_named(MUTATIONS, operation, variables)?;
         Ok(())
+    }
+}
+
+/// One of the viewer's lists.
+///
+/// A name and a count rather than the recordings themselves: every command
+/// that prints a collection is either naming which one it just changed or
+/// helping somebody pick one, and neither wants the contents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Collection {
+    pub id: i64,
+    pub name: String,
+    pub entries: i64,
+}
+
+fn collection(value: &serde_json::Value) -> Collection {
+    Collection {
+        id: value["id"].as_i64().unwrap_or_default(),
+        name: text(&value["name"]),
+        entries: value["entryCount"].as_i64().unwrap_or_default(),
+    }
+}
+
+impl ApiError {
+    /// A refusal this client made on the server's behalf.
+    ///
+    /// For the cases it can answer without asking — an id the viewer does not
+    /// keep — so that they arrive in the same shape, and print through the
+    /// same path, as the ones the server refuses itself.
+    pub fn not_found(message: String) -> ApiError {
+        ApiError::Refused(Refusal(vec![Complaint {
+            message,
+            code: Some("NOT_FOUND".to_string()),
+            path: Vec::new(),
+        }]))
+    }
+}
+
+/// Nobody is signed in, said the same way every time.
+///
+/// `viewer` being null is an answer rather than an error -- the schema is
+/// explicit about it -- so nothing in the response says this went wrong, and
+/// every one of these commands would otherwise report an account with no
+/// lists to somebody who has several.
+fn signed_out() -> ApiError {
+    ApiError::Refused(Refusal(vec![Complaint {
+        message: "you are not signed in, so there are no lists to read".to_string(),
+        code: Some("NOT_SIGNED_IN".to_string()),
+        path: Vec::new(),
+    }]))
+}
+
+impl Client {
+    /// The viewer's own lists.
+    ///
+    /// Hand-written rather than generated, with the rest of this family: a
+    /// list belongs to one person, so none of these mutations takes the
+    /// `justification` the table of types is built around.
+    pub fn collections(&self) -> Result<Vec<Collection>, ApiError> {
+        let payload = self.query_named(LOOKUPS, "Collections", serde_json::json!({}))?;
+        let viewer = &payload["data"]["viewer"];
+        if viewer.is_null() {
+            return Err(signed_out());
+        }
+        Ok(viewer["collections"]
+            .as_array()
+            .map(|all| all.iter().map(collection).collect())
+            .unwrap_or_default())
+    }
+
+    /// Start a list.
+    pub fn collection_create(&self, name: &str) -> Result<Collection, ApiError> {
+        let payload = self.query_named(
+            MUTATIONS,
+            "CreateCollection",
+            serde_json::json!({ "name": name }),
+        )?;
+        Ok(collection(&payload["data"]["createCollection"]))
+    }
+
+    /// Put one recording in a list, or take it out.
+    ///
+    /// Both halves are idempotent by the server's own account -- adding twice
+    /// is one save, and removing what was never there is not an error -- so a
+    /// caller that died halfway through can simply run again.
+    pub fn collection_hold(
+        &self,
+        id: i64,
+        recording: i64,
+        hold: bool,
+    ) -> Result<Collection, ApiError> {
+        let (operation, field) = if hold {
+            ("AddRecordingToCollection", "addRecordingToCollection")
+        } else {
+            (
+                "RemoveRecordingFromCollection",
+                "removeRecordingFromCollection",
+            )
+        };
+        let payload = self.query_named(
+            MUTATIONS,
+            operation,
+            serde_json::json!({ "collectionId": id, "recordingId": recording }),
+        )?;
+        Ok(collection(&payload["data"][field]))
+    }
+
+    /// Give a list a different name.
+    ///
+    /// Its id and its contents are unchanged, which is the reason anything
+    /// pointing at a list should point at the id: a name is a label the owner
+    /// may change, and the schema says so in as many words.
+    pub fn collection_rename(&self, id: i64, name: &str) -> Result<Collection, ApiError> {
+        let payload = self.query_named(
+            MUTATIONS,
+            "RenameCollection",
+            serde_json::json!({ "id": id, "name": name }),
+        )?;
+        Ok(collection(&payload["data"]["renameCollection"]))
+    }
+
+    /// Put a list away for good.
+    ///
+    /// Nothing can reach it afterwards, and there is no `undelete` beside this
+    /// the way there is for a record. The recordings are untouched: they were
+    /// never owned by the list.
+    ///
+    /// A false answer means there was no such list. Reported rather than
+    /// shrugged off -- unlike `delete`, which ignores the same flag -- because
+    /// this cannot be undone and so is the one place somebody will want to
+    /// know that nothing happened.
+    pub fn collection_purge(&self, id: i64) -> Result<(), ApiError> {
+        let payload = self.query_named(
+            MUTATIONS,
+            "DeleteCollection",
+            serde_json::json!({ "id": id }),
+        )?;
+        if payload["data"]["deleteCollection"].as_bool() == Some(false) {
+            return Err(ApiError::not_found(format!(
+                "there is no list {id} to purge"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Make a list hold exactly these recordings.
+    ///
+    /// One request for a whole list, rather than one per difference, which is
+    /// what anything that has walked a library and knows the answer wants.
+    /// Recordings merged since the list was built are understood by the
+    /// server, so ids read months ago can be sent back unexamined.
+    ///
+    /// This replaces: what is not named here stops being in the list.
+    pub fn collection_set(&self, id: i64, recordings: &[i64]) -> Result<Collection, ApiError> {
+        let payload = self.query_named(
+            MUTATIONS,
+            "SetCollectionRecordings",
+            serde_json::json!({ "collectionId": id, "recordingIds": recordings }),
+        )?;
+        Ok(collection(&payload["data"]["setCollectionRecordings"]))
     }
 }
