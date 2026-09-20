@@ -250,9 +250,27 @@ The kinds are `recording`, `opera`, `singer`, `conductor`, `composer` and
 --help` offers only what applies to a singer. Matching is partial and ignores
 case and accents, so `boheme` finds `La Bohème`.
 
-A recording can be narrowed by more than its title — `--singer` may be
-repeated, `--year` matches within two years either side, and `--upc` takes the
-barcode off the box:
+A recording can be narrowed by more than its title: `--singer` may be
+repeated, and `--year` matches within two years either side.
+
+`--composer` is what tells two works with one title apart, since the catalog
+holds a Puccini `La Bohème` and a Leoncavallo one:
+
+```bash
+$ findopera search recording boheme --composer leoncavallo --first 2
+6847  La Boheme  1990  Latham-König  Summers, Praticò, Spagnoli
+ 233  La Boheme  1981  Wallberg  Popp, Weikl, Lenz
+```
+
+`--character` asks about the work rather than the cast — which recordings have
+a Scarpia, whoever sang him — and combines with the rest:
+
+```bash
+$ findopera search recording --character scarpia --conductor 'de sabata'
+264  Tosca  1953  Sabata  Callas, di Stefano, Gobbi
+```
+
+And `--upc` takes the barcode:
 
 ```bash
 $ findopera search recording --upc 028941742827

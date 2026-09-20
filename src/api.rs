@@ -1068,6 +1068,13 @@ pub struct Criteria {
     pub text: String,
     pub singers: Vec<String>,
     pub conductor: Option<String>,
+    /// The composer of the opera. Two works can share a title -- there is a
+    /// Puccini `La Boheme` and a Leoncavallo one -- so a title alone does not
+    /// always say which is meant.
+    pub composer: Option<String>,
+    /// A role somebody sings on it. A question about the work rather than
+    /// about any particular singer: which recordings have a Scarpia.
+    pub character: Option<String>,
     pub year: Option<i64>,
     /// A barcode off the box, however it is written.
     pub upc: Option<String>,
@@ -1161,6 +1168,12 @@ impl Client {
             }
             if let Some(conductor) = &criteria.conductor {
                 filter.insert("conductorNameSearch".into(), conductor.clone().into());
+            }
+            if let Some(composer) = &criteria.composer {
+                filter.insert("composerNameSearch".into(), composer.clone().into());
+            }
+            if let Some(character) = &criteria.character {
+                filter.insert("characterNameSearch".into(), character.clone().into());
             }
             if let Some(year) = criteria.year {
                 filter.insert("approximateYear".into(), year.into());

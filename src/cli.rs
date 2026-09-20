@@ -367,8 +367,9 @@ command:
 Each kind takes what applies to it. A recording can be narrowed by more than
 its title — --singer may be repeated, --year matches within two years either
 side, and --upc takes the barcode off the box in whatever form it is printed.
-The rest take a name and nothing else, so `findopera search singer --help` is
-short.
+--composer tells apart two works with one title, and --character asks which
+recordings have a Scarpia rather than who sang him. The rest take a name and
+nothing else, so `findopera search singer --help` is short.
 
 Searching is case and accent insensitive and matches part of a name, so
 `boheme` finds `La Bohème`.
@@ -382,6 +383,7 @@ and their ids are what it takes to describe a new one.",
         after_help = "\
 Examples:
   findopera search recording boheme --singer pavarotti --singer freni
+  findopera search recording boheme --composer leoncavallo
   findopera search recording tosca --conductor 'de sabata' --year 1953
   findopera search conductor karajan --first 10"
     )]
@@ -914,6 +916,18 @@ struct SearchRecordingArgs {
     /// The conductor of the recording.
     #[arg(long, value_name = "NAME")]
     conductor: Option<String>,
+    /// The composer of the opera.
+    ///
+    /// Two works can share a title -- `La Boheme` is Puccini's and
+    /// Leoncavallo's -- so this is what tells them apart.
+    #[arg(long, value_name = "NAME")]
+    composer: Option<String>,
+    /// A role somebody sings on it.
+    ///
+    /// About the work rather than the cast: which recordings have a Scarpia,
+    /// whoever sang him.
+    #[arg(long, value_name = "NAME")]
+    character: Option<String>,
     /// Recorded within two years of this.
     #[arg(long, value_name = "YEAR")]
     year: Option<i64>,
@@ -933,7 +947,7 @@ struct SearchRecordingArgs {
 /// wrong flag stops being a mistake this has to catch and explain.
 #[derive(Subcommand)]
 enum Searching {
-    /// A recording, by its opera, cast, conductor, year or barcode.
+    /// A recording, by its opera, composer, cast, conductor, year or barcode.
     Recording(SearchRecordingArgs),
     /// An opera, by title.
     Opera(Looking),
@@ -1887,6 +1901,8 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
                     text,
                     singers: a.singer,
                     conductor: a.conductor,
+                    composer: a.composer,
+                    character: a.character,
                     year: a.year,
                     upc: a.upc,
                     first,
@@ -1917,6 +1933,8 @@ fn cmd_search(ui: &mut Session, args: SearchArgs) -> i32 {
 
     let narrowed = !criteria.singers.is_empty()
         || criteria.conductor.is_some()
+        || criteria.composer.is_some()
+        || criteria.character.is_some()
         || criteria.year.is_some()
         || criteria.upc.is_some();
     if criteria.text.trim().is_empty() && !narrowed {

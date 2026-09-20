@@ -6,7 +6,7 @@
 ## stdout
 
 ```
-A recording, by its opera, cast, conductor, year or barcode
+A recording, by its opera, composer, cast, conductor, year or barcode
 
 Usage: findopera search recording [OPTIONS] [QUERY]...
 
@@ -41,6 +41,17 @@ Options:
 
       --conductor <NAME>
           The conductor of the recording
+
+      --composer <NAME>
+          The composer of the opera.
+          
+          Two works can share a title -- `La Boheme` is Puccini's and Leoncavallo's -- so this is
+          what tells them apart.
+
+      --character <NAME>
+          A role somebody sings on it.
+          
+          About the work rather than the cast: which recordings have a Scarpia, whoever sang him.
 
       --year <YEAR>
           Recorded within two years of this
