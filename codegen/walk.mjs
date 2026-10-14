@@ -55,13 +55,18 @@ export function walk(schema, rootType, selectionSet) {
       const known = struct.fields.some((f) => f.rust_name === rustName);
 
       if (kind === "leaf") {
-        const leaf = rustLeaf(named.name);
+        // A record's id is a name, not a quantity, and the API is moving it
+        // from `Int` to `String`, so that every type's id is the same type.
+        // Read as text either way, so this build works on both sides of that
+        // change and regenerating after it changes nothing.
+        const isId = def.name === "id";
+        const leaf = isId ? { rust: "String", kind: "text" } : rustLeaf(named.name);
         if (!known) {
           struct.fields.push({
             rust_name: rustName,
             wire_name: out,
             rust_type: local ? leaf.rust : `Option<${leaf.rust}>`,
-            collapse: local ? null : leaf.kind, // sentinel handling
+            collapse: isId ? (local ? "id" : "id_opt") : local ? null : leaf.kind, // sentinel handling
             present: local,
           });
         }

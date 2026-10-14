@@ -68,4 +68,58 @@ pub(crate) mod de {
     {
         Ok(Option::<i64>::deserialize(d)?.filter(|n| *n != 0))
     }
+
+    /// A record id, as a JSON number or a string.
+    ///
+    /// The API has sent most ids as numbers and is moving them all to
+    /// strings. Taking both means neither side of that change breaks this
+    /// build.
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Id {
+        Num(i64),
+        Str(String),
+    }
+
+    impl From<Id> for String {
+        fn from(id: Id) -> String {
+            match id {
+                Id::Num(n) => n.to_string(),
+                Id::Str(s) => s,
+            }
+        }
+    }
+
+    pub fn id<'de, D>(d: D) -> Result<String, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Id::deserialize(d)?.into())
+    }
+
+    pub fn id_opt<'de, D>(d: D) -> Result<Option<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Option::<Id>::deserialize(d)?.map(String::from))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct Row {
+            #[serde(deserialize_with = "super::id")]
+            id: String,
+        }
+
+        #[test]
+        fn an_id_is_read_as_a_number_or_a_string() {
+            let n: Row = serde_json::from_str(r#"{"id": 42}"#).unwrap();
+            let s: Row = serde_json::from_str(r#"{"id": "42"}"#).unwrap();
+            assert_eq!(n.id, "42");
+            assert_eq!(s.id, "42");
+        }
+    }
 }

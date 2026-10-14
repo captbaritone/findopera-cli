@@ -76,7 +76,8 @@ pub static FIELDS: &[FieldDoc] = &[
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Recording {
-    pub id: i64,
+    #[serde(deserialize_with = "crate::model::de::id")]
+    pub id: String,
     pub url: String,
     #[serde(default, deserialize_with = "crate::model::de::num")]
     pub year: Option<i64>,
@@ -155,7 +156,7 @@ pub struct Upc {
 impl Fields for Recording {
     fn required(&self, path: &str) -> String {
         match path {
-            "id" => self.id.to_string(),
+            "id" => self.id.clone(),
             "url" => self.url.clone(),
             "conductor.fullName" => self.conductor.full_name.clone(),
             "conductor.firstName" => self.conductor.first_name.clone(),

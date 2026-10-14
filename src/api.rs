@@ -798,9 +798,15 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::{
-        disposition_filename, found, lifespan, notes_url, percent_decode, schema_url, Kind, GETS,
-        LOOKUPS, MUTATIONS,
+        collection_id, disposition_filename, found, lifespan, notes_url, percent_decode,
+        schema_url, Kind, GETS, LOOKUPS, MUTATIONS,
     };
+
+    #[test]
+    fn a_collection_id_is_read_as_a_number_or_a_string() {
+        assert_eq!(collection_id(&serde_json::json!(7)), 7);
+        assert_eq!(collection_id(&serde_json::json!("7")), 7);
+    }
 
     const KINDS: [Kind; 6] = [
         Kind::Recording,
@@ -1526,11 +1532,22 @@ pub struct Collection {
 
 fn collection(value: &serde_json::Value) -> Collection {
     Collection {
-        id: value["id"].as_i64().unwrap_or_default(),
+        id: collection_id(&value["id"]),
         name: text(&value["name"]),
         entries: value["entryCount"].as_i64().unwrap_or_default(),
         url: text(&value["url"]),
     }
+}
+
+/// A collection's id, as a JSON number or a string.
+///
+/// The API is moving ids from numbers to strings. Reading only a number
+/// would turn that into 0, and then no list could be found by its own id.
+fn collection_id(value: &serde_json::Value) -> i64 {
+    value
+        .as_i64()
+        .or_else(|| value.as_str().and_then(|s| s.parse().ok()))
+        .unwrap_or_default()
 }
 
 impl ApiError {

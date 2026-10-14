@@ -114,7 +114,8 @@ export function emit({ fields, structs, computed, derived, lists, query }) {
         // The API spells "unknown" as null, as 0, and as "" — sometimes for
         // the same field on different records. Collapsing here means the Rust
         // type says what is true, and nothing downstream has to know.
-        L.push(`    #[serde(default, deserialize_with = "crate::model::de::${f.collapse}")]`);
+        const dflt = f.present ? "" : "default, ";
+        L.push(`    #[serde(${dflt}deserialize_with = "crate::model::de::${f.collapse}")]`);
       }
       L.push(`    pub ${f.rust_name}: ${f.rust_type},`);
     }
