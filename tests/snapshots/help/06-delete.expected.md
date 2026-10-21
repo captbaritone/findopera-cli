@@ -27,12 +27,7 @@ Arguments:
 
 Options:
   -m, --message <TEXT>
-          Where this came from, as a URL, for the record's history.
-          
-          A reviewer sees this and nothing else, so it has to carry a link they can open:
-          "corroborated by the release credits" names a source nobody else can reach, and leaves a
-          correct edit unverifiable. Paste the page you read — a Wikipedia article, a label's
-          listing, a scan of the booklet — and say what it settles if that is not obvious.
+          Your source and the rule applied, for the record's history. See `create --help`
 
       --yes
           Say so out loud. Nothing is removed without it

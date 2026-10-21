@@ -56,6 +56,20 @@ fn the_schema_lives_beside_the_api_on_the_same_server() {
     );
 }
 
+#[test]
+fn the_policy_lives_beside_the_api_on_the_same_server() {
+    // Derived as the schema's address is, so that a development server
+    // serves its own copy of the rules rather than production's.
+    assert_eq!(
+        findopera::api::policy_url("https://findopera.com/api/graphql"),
+        "https://findopera.com/policy"
+    );
+    assert_eq!(
+        findopera::api::policy_url("http://localhost:3333/api/graphql"),
+        "http://localhost:3333/policy"
+    );
+}
+
 /// What the server says about versions, and what this program does with it.
 ///
 /// The split is deliberate: this program knows which queries are its own,

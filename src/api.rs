@@ -219,12 +219,23 @@ impl Newer {
 /// pointing this program at a development server moves both together and
 /// there is no second setting to leave behind.
 pub fn schema_url(endpoint: &str) -> String {
+    format!("{}/schema.graphql", site(endpoint))
+}
+
+/// Where the editorial policy lives, for a given API endpoint.
+///
+/// Derived the way the schema's address is, and for the same reason.
+pub fn policy_url(endpoint: &str) -> String {
+    format!("{}/policy", site(endpoint))
+}
+
+/// The scheme and host of an endpoint, without its path.
+fn site(endpoint: &str) -> &str {
     let scheme = endpoint.find("://").map_or(0, |i| i + 3);
-    let host = match endpoint[scheme..].find('/') {
+    match endpoint[scheme..].find('/') {
         Some(i) => &endpoint[..scheme + i],
         None => endpoint.trim_end_matches('/'),
-    };
-    format!("{host}/schema.graphql")
+    }
 }
 
 /// Which verb a request uses. The two this program needs, and no more.
@@ -705,6 +716,24 @@ impl Client {
     /// than one that takes a moment to arrive.
     pub fn schema(&self) -> Result<String, ApiError> {
         let url = schema_url(&self.endpoint);
+        let reply = self.with_retries(&url, self.document(&url))?;
+
+        if !reply.is_success() {
+            return Err(ApiError::Unreachable(format!(
+                "{url} answered {}",
+                reply.status
+            )));
+        }
+        Ok(reply.body)
+    }
+
+    /// Fetch the editorial policy, as the markdown the server publishes.
+    ///
+    /// Fetched rather than built in, as the schema is. An edit is judged
+    /// against the policy as it stands on the server, and a rule clarified
+    /// since this binary was built is the version that counts.
+    pub fn policy(&self) -> Result<String, ApiError> {
+        let url = policy_url(&self.endpoint);
         let reply = self.with_retries(&url, self.document(&url))?;
 
         if !reply.is_success() {

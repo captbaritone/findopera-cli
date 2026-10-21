@@ -27,6 +27,7 @@ Commands:
   template    The template language: its syntax, and every field
   graphql     Send a GraphQL query to findopera.com and print the response
   schema      Print the GraphQL schema, or one type from it
+  policy      Print the editorial policy, or one rule from it
   feedback    Send a note to whoever maintains findopera.com
   login       Store a token, so that requests say who is making them
   logout      Forget the stored token
@@ -51,6 +52,8 @@ is what everything else here is built on.
 Start with `findopera init`, then `findopera organize --help`.
 
 `findopera self update` says whether a newer one has been released.
+
+Read `findopera policy` before changing the catalog.
 
 Exit codes:
   0  nothing to report

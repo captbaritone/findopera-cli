@@ -126,6 +126,8 @@ Start with `findopera init`, then `findopera organize --help`.
 
 `findopera self update` says whether a newer one has been released.
 
+Read `findopera policy` before changing the catalog.
+
 Exit codes:
   0  nothing to report
   1  a recording is missing, a name is not a usable path, two folders want
@@ -235,22 +237,15 @@ Add a record from a JSON object on standard input, or from a file.
 before anything is sent, so a misspelling is answered in the terms you used
 rather than as a GraphQL error about a type you never mentioned.
 
-Every change needs -m, and what goes in it is a URL:
+Every change needs -m: the source you read, specific enough that a reviewer
+knows which object you mean, what it settles, and the rule applied, as
+\"applied R10\" (P3 of `findopera policy`):
 
   -m 'https://en.wikipedia.org/wiki/Maria_Callas — born 1923, died 1977'
+  -m 'Back cover, Cantus Classics CACD 5.00586 F: \"Aufführungsmitschnitt vom 19.12.1947\"'
 
-That is the whole of what a reviewer gets. They were not there when you made
-the change and cannot ask, so a message naming a source they cannot reach —
-
-  -m 'cast corroborated by the work discography and release credits'
-
-— leaves an edit that may be perfectly correct with no way to tell. Both of
-those describe real sources. Only one of them can be checked.
-
-Say what the page settles, too, where it is not obvious: a link to a long
-article is better than nothing and worse than a link with the sentence that
-matters beside it. The server requires a message and will refuse without one;
-nothing checks that it holds a URL, which is why it is worth saying here.")]
+A release in hand counts, cited by what is printed on it. A gesture at
+sources (\"corroborated by the release credits\") or memory does not.")]
     Create(CreateArgs),
 
     /// Change a record.
@@ -260,8 +255,7 @@ file. Only the fields present are touched.
 
   echo '{\"died\":1977}' | findopera edit singer 133 -m 'https://en.wikipedia.org/wiki/Maria_Callas — died 1977'
 
-Every change needs -m, as `create` does: the URL you read it from, and what
-that page settles.")]
+Every change needs -m, as `create --help` describes.")]
     Edit(EditArgs),
 
     /// Attach a UPC to a recording.
@@ -560,6 +554,17 @@ Examples:
     )]
     Schema(SchemaArgs),
 
+    /// Print the editorial policy, or one rule from it.
+    #[command(long_about = "\
+Print the editorial policy the catalog is edited under, fetched from
+findopera.com. Read it before a first edit.
+
+  findopera policy             the whole of it
+  findopera policy R12         one rule
+  findopera policy P1          one procedure
+  findopera policy identity    every rule in one stage")]
+    Policy(PolicyArgs),
+
     /// Send a note to whoever maintains findopera.com.
     #[command(long_about = "\
 Say something to whoever maintains findopera.com — a recording that is wrong,
@@ -762,13 +767,7 @@ struct CreateArgs {
     /// A JSON object. Omit to read it from standard input.
     #[arg(long, short = 'i', value_name = "FILE")]
     input: Option<PathBuf>,
-    /// Where this came from, as a URL, for the record's history.
-    ///
-    /// A reviewer sees this and nothing else, so it has to carry a link they
-    /// can open: "corroborated by the release credits" names a source nobody
-    /// else can reach, and leaves a correct edit unverifiable. Paste the page
-    /// you read — a Wikipedia article, a label's listing, a scan of the
-    /// booklet — and say what it settles if that is not obvious.
+    /// Your source and the rule applied, for the record's history.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Print the result as JSON.
@@ -791,13 +790,8 @@ struct EditArgs {
     /// A JSON object of the fields to change. Omit to read from standard input.
     #[arg(long, short = 'i', value_name = "FILE")]
     input: Option<PathBuf>,
-    /// Where this came from, as a URL, for the record's history.
-    ///
-    /// A reviewer sees this and nothing else, so it has to carry a link they
-    /// can open: "corroborated by the release credits" names a source nobody
-    /// else can reach, and leaves a correct edit unverifiable. Paste the page
-    /// you read — a Wikipedia article, a label's listing, a scan of the
-    /// booklet — and say what it settles if that is not obvious.
+    /// Your source and the rule applied, for the record's history. See
+    /// `create --help`.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Print the result as JSON.
@@ -817,13 +811,8 @@ struct UndeleteArgs {
     /// Its id.
     #[arg(value_name = "ID")]
     id: String,
-    /// Where this came from, as a URL, for the record's history.
-    ///
-    /// A reviewer sees this and nothing else, so it has to carry a link they
-    /// can open: "corroborated by the release credits" names a source nobody
-    /// else can reach, and leaves a correct edit unverifiable. Paste the page
-    /// you read — a Wikipedia article, a label's listing, a scan of the
-    /// booklet — and say what it settles if that is not obvious.
+    /// Your source and the rule applied, for the record's history. See
+    /// `create --help`.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Print the result as JSON.
@@ -843,13 +832,8 @@ struct DeleteArgs {
     /// Its id.
     #[arg(value_name = "ID")]
     id: String,
-    /// Where this came from, as a URL, for the record's history.
-    ///
-    /// A reviewer sees this and nothing else, so it has to carry a link they
-    /// can open: "corroborated by the release credits" names a source nobody
-    /// else can reach, and leaves a correct edit unverifiable. Paste the page
-    /// you read — a Wikipedia article, a label's listing, a scan of the
-    /// booklet — and say what it settles if that is not obvious.
+    /// Your source and the rule applied, for the record's history. See
+    /// `create --help`.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Say so out loud. Nothing is removed without it.
@@ -875,13 +859,8 @@ struct MergeArgs {
     /// The id that survives, and keeps its own fields.
     #[arg(long, value_name = "ID")]
     into: String,
-    /// Where this came from, as a URL, for the record's history.
-    ///
-    /// A reviewer sees this and nothing else, so it has to carry a link they
-    /// can open: "corroborated by the release credits" names a source nobody
-    /// else can reach, and leaves a correct edit unverifiable. Paste the page
-    /// you read — a Wikipedia article, a label's listing, a scan of the
-    /// booklet — and say what it settles if that is not obvious.
+    /// Your source and the rule applied, for the record's history. See
+    /// `create --help`.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Say so out loud. Nothing is merged without it.
@@ -915,13 +894,8 @@ struct LinkRecordingArgs {
     /// The barcode, which must already be a UPC record.
     #[arg(long, value_name = "CODE")]
     upc: String,
-    /// Where this came from, as a URL, for the record's history.
-    ///
-    /// A reviewer sees this and nothing else, so it has to carry a link they
-    /// can open: "corroborated by the release credits" names a source nobody
-    /// else can reach, and leaves a correct edit unverifiable. Paste the page
-    /// you read — a Wikipedia article, a label's listing, a scan of the
-    /// booklet — and say what it settles if that is not obvious.
+    /// Your source and the rule applied, for the record's history. See
+    /// `create --help`.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Print the result as JSON.
@@ -1344,6 +1318,20 @@ struct SchemaArgs {
 }
 
 #[derive(Args)]
+struct PolicyArgs {
+    /// A rule (R12, or 12), a procedure (P1) or a stage (identity). Omit for
+    /// the whole policy.
+    #[arg(value_name = "RULE")]
+    name: Option<String>,
+    /// Token to identify as. Overrides the environment and the stored one.
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+    /// GraphQL endpoint. The policy is fetched from the same server.
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+}
+
+#[derive(Args)]
 struct InitArgs {
     /// Directory to write findopera.toml into.
     #[arg(value_name = "DIR", default_value = ".")]
@@ -1428,6 +1416,7 @@ pub fn dispatch(ui: &mut Session, cli: Cli) -> i32 {
         Command::Template => cmd_template(ui),
         Command::Graphql(args) => cmd_graphql(ui, args),
         Command::Schema(args) => cmd_schema(ui, args),
+        Command::Policy(args) => cmd_policy(ui, args),
         Command::Feedback(args) => cmd_feedback(ui, args),
         Command::Login(args) => cmd_login(ui, args),
         Command::Logout => cmd_logout(ui),
@@ -3721,6 +3710,89 @@ fn cmd_schema(ui: &mut Session, args: SchemaArgs) -> i32 {
             2
         }
     }
+}
+
+fn cmd_policy(ui: &mut Session, args: PolicyArgs) -> i32 {
+    let api = match client(ui, &args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    let policy = match api.policy() {
+        Ok(s) => s,
+        Err(e) => {
+            note!(ui, "findopera: {e}");
+            return 3;
+        }
+    };
+    let Some(name) = args.name else {
+        emit(ui, format_args!("{}", policy.trim_end()));
+        return 0;
+    };
+    match policy_section(&policy, &name) {
+        Some(section) => {
+            emit(ui, format_args!("{section}"));
+            0
+        }
+        None => {
+            note!(ui, "findopera: the policy has no `{name}`");
+            note!(
+                ui,
+                "  help: try R12, P1 or a stage name; `findopera policy` lists them"
+            );
+            2
+        }
+    }
+}
+
+/// One rule, procedure or stage out of the policy, by the name it is cited by.
+///
+/// Read from headings, as the server's own parser reads them: `### R12.` opens
+/// a rule, `## Stage 2: Identity` a stage, and a paragraph opening `**P1.` a
+/// procedure. A rule runs to the next heading; the `---` that closes a stage
+/// is layout, and is left behind.
+fn policy_section(policy: &str, name: &str) -> Option<String> {
+    let name = name.trim();
+    let lines: Vec<&str> = policy.lines().collect();
+    let tidy = |block: &[&str]| {
+        let text = block.join("\n");
+        let text = text.trim();
+        text.strip_suffix("---")
+            .unwrap_or(text)
+            .trim_end()
+            .to_string()
+    };
+
+    let upper = name.to_ascii_uppercase();
+    if let Some(n) = upper.strip_prefix('P').filter(|n| n.parse::<u32>().is_ok()) {
+        let lead = format!("**P{n}.");
+        let start = lines.iter().position(|l| l.starts_with(&lead))?;
+        let end = lines[start..]
+            .iter()
+            .position(|l| l.trim().is_empty())
+            .map_or(lines.len(), |i| start + i);
+        return Some(tidy(&lines[start..end]));
+    }
+
+    if let Ok(n) = upper.strip_prefix('R').unwrap_or(&upper).parse::<u32>() {
+        let heading = format!("### R{n}.");
+        let start = lines.iter().position(|l| l.starts_with(&heading))?;
+        let end = lines[start + 1..]
+            .iter()
+            .position(|l| l.starts_with("## ") || l.starts_with("### "))
+            .map_or(lines.len(), |i| start + 1 + i);
+        return Some(tidy(&lines[start..end]));
+    }
+
+    let start = lines.iter().position(|l| {
+        l.strip_prefix("## Stage ")
+            .and_then(|rest| rest.split_once(": "))
+            .is_some_and(|(_, stage)| stage.trim().eq_ignore_ascii_case(name))
+    })?;
+    let end = lines[start + 1..]
+        .iter()
+        .position(|l| l.starts_with("## "))
+        .map_or(lines.len(), |i| start + 1 + i);
+    Some(tidy(&lines[start..end]))
 }
 
 /// One named definition out of an SDL document, with its leading doc comment.

@@ -134,25 +134,42 @@ file, and the fields are checked here before anything is sent — a misspelling
 is answered in the terms you used rather than as a GraphQL error about an input
 type you never mentioned.
 
-Every change needs `-m`, and what belongs in it is a URL:
+Every change needs `-m`, and it is the whole of what a reviewer gets. They
+were not there and cannot ask, so it names the source you read, specifically
+enough that they know which object you mean, and says what it settles:
 
 ```bash
 -m 'https://en.wikipedia.org/wiki/Maria_Callas — born 1923, died 1977'
+-m 'Back cover, Cantus Classics CACD 5.00586 F: "Aufführungsmitschnitt vom 19.12.1947"'
 ```
 
-That message is the whole of what a reviewer gets. They were not there and
-cannot ask, so `-m 'cast corroborated by the work discography and release
-credits'` leaves an edit that may be perfectly correct with no way to tell.
-Both describe a real source; only one can be opened. Say what the page settles
-as well, where a link alone would not make it obvious.
+A release in your hands is a source even where nobody else can reach it, so
+cite it by what is printed on it. What is not a source is `-m 'cast
+corroborated by the work discography and release credits'`, which leaves an
+edit that may be perfectly correct with no way to tell what it rests on.
 
-The server requires a message and refuses without one. Nothing checks that it
-holds a URL — which is why it is worth saying.
+The server requires a message and refuses without one. Nothing checks what it
+says, which is why it is worth saying here.
 
 The queries live in [`schema/get.graphql`](schema/get.graphql), curated per
 type and validated against the schema by codegen. The table of types and their
 input fields is generated from the schema, so twenty types cost the same to
 keep current as one.
+
+### The editorial policy
+
+```bash
+$ findopera policy            # the whole of it
+$ findopera policy R12        # one rule
+$ findopera policy identity   # every rule in one stage
+```
+
+The catalog is edited under a [written policy](https://findopera.com/policy):
+what to check before a change (read a record's history before merging it,
+search before creating), and how the judgment calls are settled. Its rules
+are numbered, the numbers never change, and `-m` cites the one applied, as
+`applied R4`. It is fetched rather than built in, as the schema is, so a rule
+clarified since this release is the version you read.
 
 ### Creating a recording whole
 
