@@ -436,7 +436,7 @@ fn command_outputs(path: &Path, case: &markdown::Case) -> Vec<Section> {
     };
     let config = case
         .body("Toml")
-        .map(&fill)
+        .map(fill)
         .or_else(|| {
             case.body("Config").map(|c| {
                 let mut config = c.trim().to_string();
