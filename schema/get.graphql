@@ -43,6 +43,7 @@ query GetOpera($id: String!) {
     librettist
     operaclassId
     wikipediaUrl
+    imslpUrl
     url
     historyUrl
     composer { id fullName born died }
@@ -96,6 +97,7 @@ query GetComposer($id: String!) {
     operaclassId
     spotifyArtistId
     wikipediaUrl
+    imslpUrl
     url
     historyUrl
     wikipediaImage { imageUrl }

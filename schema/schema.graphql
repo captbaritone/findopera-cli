@@ -61,7 +61,21 @@ enum ConductorSortBy {
   LAST_EDITED
 }
 
-"""What a piece of feedback is about."""
+"""
+What a piece of feedback is about.
+
+Nothing sends this any more. It is still accepted, because it is published
+and dropping it would break a caller working from the old documentation,
+and these are the values already in the `feedback` table.
+
+API and connector callers stopped being asked for it first. They had only
+the message to go on, so they were guessing, and a guessed category is
+worse than none: `general` and `bug` absorbed everything, so the field
+sorted nothing while looking as though it did. Then the website stopped
+sending one, because its form has no picker either: the value came from
+whichever button opened the box. The message and the url are what the
+report gets sorted on now.
+"""
 enum FeedbackKind {
   album
   bug
@@ -179,8 +193,8 @@ Anything an edit can have touched.
 
 Records here are immutable and append-only, so a record reached this way is
 the record as it stands *now*, not as that edit left it. Following an edit
-to a singer tells you which singer was changed, not what the change said —
-for that, read the versions.
+to a singer tells you which singer was changed, not what the change said.
+For that, read the versions.
 """
 union EditableRecord = AlbumCoverArt | AppleMusicAlbum | Character | Composer | Conductor | Language | MusicBrainzRelease | MusicBrainzReleaseGroup | NaxosAlbum | Opera | Portrayal | PrestoMusicAlbum | Recording | RecordingURL | Singer | SpotifyAlbum | TidalAlbum | Upc | WikipediaImage
 
@@ -188,16 +202,15 @@ input CreateAlbumCoverArtInput {
   imageUrl: String
   source: String
   """
-  The barcode, always at its full fourteen digits.
+  A barcode: UPC-A, EAN-13 or GTIN-14.
   
-  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
-  different barcodes, and the check digit is the same at every length. This
-  returns the longest, zero-padded, because it is the one form that can hold
-  any of them.
+  These are three lengths of one number rather than three different barcodes,
+  and the check digit is the same at every length. Any of them is accepted.
+  It is stored and returned at the longest, zero-padded to fourteen digits,
+  because that is the one form that can hold any of them.
   
-  Any of the three is accepted wherever a barcode is taken, and answered for
-  with this one. Somewhere less formal than an API -- a page, a link, anything
-  a person reads -- is welcome to drop the leading zeros again.
+  Somewhere less formal than an API (a page, a link, anything a person reads)
+  is welcome to drop the leading zeros again.
   """
   upc: String!
 }
@@ -217,10 +230,21 @@ input CreateComposerInput {
   born: Int
   died: Int
   firstName: String!
+  """
+  This record's page on IMSLP, the Petrucci Music Library: the composer's category page, which lists their works.
+  
+  Any address of the page on imslp.org is accepted, and it is stored and
+  returned in one form, for example https://imslp.org/wiki/Category:Verdi,_Giuseppe.
+  Send null or an empty string to remove it.
+  """
+  imslpUrl: String
   lastName: String!
   operaclassId: Int
   spotifyArtistId: String
-  wikipediaImageId: String
+  """
+  Another name for `wikipediaUrl`, which it sets. Giving both with different values is refused.
+  """
+  wikipediaImageId: String @deprecated(reason: "Set `wikipediaUrl` instead.")
   wikipediaUrl: String
 }
 
@@ -231,7 +255,10 @@ input CreateConductorInput {
   lastName: String!
   operaclassId: Int
   spotifyArtistId: String
-  wikipediaImageId: String
+  """
+  Another name for `wikipediaUrl`, which it sets. Giving both with different values is refused.
+  """
+  wikipediaImageId: String @deprecated(reason: "Set `wikipediaUrl` instead.")
   wikipediaUrl: String
 }
 
@@ -259,11 +286,22 @@ input CreateNaxosAlbumInput {
 input CreateOperaInput {
   composerId: String!
   englishTitle: String
+  """
+  This record's page on IMSLP, the Petrucci Music Library: the work's own page, where its scores are.
+  
+  Any address of the page on imslp.org is accepted, and it is stored and
+  returned in one form, for example https://imslp.org/wiki/La_traviata_(Verdi,_Giuseppe).
+  Send null or an empty string to remove it.
+  """
+  imslpUrl: String
   languageId: String
   librettist: String
   operaclassId: Int
   title: String!
-  wikipediaImageId: String
+  """
+  Another name for `wikipediaUrl`, which it sets. Giving both with different values is refused.
+  """
+  wikipediaImageId: String @deprecated(reason: "Set `wikipediaUrl` instead.")
   wikipediaUrl: String
 }
 
@@ -272,24 +310,18 @@ input CreatePortrayalInput {
   """
   Whether this portrayal is part of the recording's top billing.
   
-  Three singers per recording, and the convention is worth stating because
-  nothing enforces it and it cannot be worked out from the data. The three
-  are the first three in the billing order the release itself prints --
-  the sleeve, the booklet, the label's own listing -- and not a judgement
-  about which roles matter. Recording 88 notes Carreras, van Dam and
-  Zednik and leaves the title role unflagged, so reading the principals
-  off the cast and inferring the answer gives the wrong three.
+  Three distinct singers per recording, or all of them where a recording
+  has fewer than three. The flag sits on portrayals but is read as a set
+  of singers, so a singer who doubles roles may be flagged on one of
+  those roles or on all of them; both say the same thing, and
+  addRecordingWithPortrayals counts distinct singers and accepts either.
+  Recording 77 carries six flagged portrayals for three singers, and
+  recording 6417 flags Deborah Polaski for both Cassandre and Didon.
   
-  A singer who doubles a role is flagged on every portrayal they have
-  here. So the count of flagged portrayals can exceed three while the
-  count of flagged singers stays at three: recording 77 has six flagged
-  portrayals for three singers, and recording 6417 flags Deborah Polaski
-  for both Cassandre and Didon.
-  
-  A release that bills more than three gets the first three anyway. If
-  the billing order is genuinely unclear, leaving this alone is better
-  than guessing, because a fourth flag reads as a fact rather than as an
-  attempt.
+  Which three is an editorial judgment. It cannot be worked out from the
+  cast: recording 88 notes Carreras, van Dam and Zednik and leaves the
+  title role unflagged, so reading the principals off the roles and
+  inferring the answer gives the wrong three.
   """
   noted: Boolean
   recordingId: String!
@@ -325,7 +357,10 @@ input CreateSingerInput {
   lastName: String!
   operaclassId: Int
   spotifyArtistId: String
-  wikipediaImageId: String
+  """
+  Another name for `wikipediaUrl`, which it sets. Giving both with different values is refused.
+  """
+  wikipediaImageId: String @deprecated(reason: "Set `wikipediaUrl` instead.")
   wikipediaUrl: String
 }
 
@@ -342,16 +377,15 @@ input CreateTidalAlbumInput {
 
 input CreateUpcInput {
   """
-  The barcode, always at its full fourteen digits.
+  A barcode: UPC-A, EAN-13 or GTIN-14.
   
-  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
-  different barcodes, and the check digit is the same at every length. This
-  returns the longest, zero-padded, because it is the one form that can hold
-  any of them.
+  These are three lengths of one number rather than three different barcodes,
+  and the check digit is the same at every length. Any of them is accepted.
+  It is stored and returned at the longest, zero-padded to fourteen digits,
+  because that is the one form that can hold any of them.
   
-  Any of the three is accepted wherever a barcode is taken, and answered for
-  with this one. Somewhere less formal than an API -- a page, a link, anything
-  a person reads -- is welcome to drop the leading zeros again.
+  Somewhere less formal than an API (a page, a link, anything a person reads)
+  is welcome to drop the leading zeros again.
   """
   upc: String!
 }
@@ -371,6 +405,8 @@ Filter criteria for searching recordings.
 All fields are optional - only provided fields will be used for filtering.
 """
 input RecordingFilterInput {
+  """A Spotify, Apple Music or Tidal album link: the recordings on it."""
+  albumUrl: String
   """Filter by approximate year (within 2 years of the given year)"""
   approximateYear: Int
   """
@@ -437,16 +473,15 @@ input UpdateAlbumCoverArtInput {
   imageUrl: String
   source: String
   """
-  The barcode, always at its full fourteen digits.
+  A barcode: UPC-A, EAN-13 or GTIN-14.
   
-  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
-  different barcodes, and the check digit is the same at every length. This
-  returns the longest, zero-padded, because it is the one form that can hold
-  any of them.
+  These are three lengths of one number rather than three different barcodes,
+  and the check digit is the same at every length. Any of them is accepted.
+  It is stored and returned at the longest, zero-padded to fourteen digits,
+  because that is the one form that can hold any of them.
   
-  Any of the three is accepted wherever a barcode is taken, and answered for
-  with this one. Somewhere less formal than an API -- a page, a link, anything
-  a person reads -- is welcome to drop the leading zeros again.
+  Somewhere less formal than an API (a page, a link, anything a person reads)
+  is welcome to drop the leading zeros again.
   """
   upc: String
 }
@@ -466,10 +501,21 @@ input UpdateComposerInput {
   born: Int
   died: Int
   firstName: String
+  """
+  This record's page on IMSLP, the Petrucci Music Library: the composer's category page, which lists their works.
+  
+  Any address of the page on imslp.org is accepted, and it is stored and
+  returned in one form, for example https://imslp.org/wiki/Category:Verdi,_Giuseppe.
+  Send null or an empty string to remove it.
+  """
+  imslpUrl: String
   lastName: String
   operaclassId: Int
   spotifyArtistId: String
-  wikipediaImageId: String
+  """
+  Another name for `wikipediaUrl`, which it sets. Giving both with different values is refused.
+  """
+  wikipediaImageId: String @deprecated(reason: "Set `wikipediaUrl` instead.")
   wikipediaUrl: String
 }
 
@@ -480,7 +526,10 @@ input UpdateConductorInput {
   lastName: String
   operaclassId: Int
   spotifyArtistId: String
-  wikipediaImageId: String
+  """
+  Another name for `wikipediaUrl`, which it sets. Giving both with different values is refused.
+  """
+  wikipediaImageId: String @deprecated(reason: "Set `wikipediaUrl` instead.")
   wikipediaUrl: String
 }
 
@@ -508,11 +557,22 @@ input UpdateNaxosAlbumInput {
 input UpdateOperaInput {
   composerId: String
   englishTitle: String
+  """
+  This record's page on IMSLP, the Petrucci Music Library: the work's own page, where its scores are.
+  
+  Any address of the page on imslp.org is accepted, and it is stored and
+  returned in one form, for example https://imslp.org/wiki/La_traviata_(Verdi,_Giuseppe).
+  Send null or an empty string to remove it.
+  """
+  imslpUrl: String
   languageId: String
   librettist: String
   operaclassId: Int
   title: String
-  wikipediaImageId: String
+  """
+  Another name for `wikipediaUrl`, which it sets. Giving both with different values is refused.
+  """
+  wikipediaImageId: String @deprecated(reason: "Set `wikipediaUrl` instead.")
   wikipediaUrl: String
 }
 
@@ -521,24 +581,18 @@ input UpdatePortrayalInput {
   """
   Whether this portrayal is part of the recording's top billing.
   
-  Three singers per recording, and the convention is worth stating because
-  nothing enforces it and it cannot be worked out from the data. The three
-  are the first three in the billing order the release itself prints --
-  the sleeve, the booklet, the label's own listing -- and not a judgement
-  about which roles matter. Recording 88 notes Carreras, van Dam and
-  Zednik and leaves the title role unflagged, so reading the principals
-  off the cast and inferring the answer gives the wrong three.
+  Three distinct singers per recording, or all of them where a recording
+  has fewer than three. The flag sits on portrayals but is read as a set
+  of singers, so a singer who doubles roles may be flagged on one of
+  those roles or on all of them; both say the same thing, and
+  addRecordingWithPortrayals counts distinct singers and accepts either.
+  Recording 77 carries six flagged portrayals for three singers, and
+  recording 6417 flags Deborah Polaski for both Cassandre and Didon.
   
-  A singer who doubles a role is flagged on every portrayal they have
-  here. So the count of flagged portrayals can exceed three while the
-  count of flagged singers stays at three: recording 77 has six flagged
-  portrayals for three singers, and recording 6417 flags Deborah Polaski
-  for both Cassandre and Didon.
-  
-  A release that bills more than three gets the first three anyway. If
-  the billing order is genuinely unclear, leaving this alone is better
-  than guessing, because a fourth flag reads as a fact rather than as an
-  attempt.
+  Which three is an editorial judgment. It cannot be worked out from the
+  cast: recording 88 notes Carreras, van Dam and Zednik and leaves the
+  title role unflagged, so reading the principals off the roles and
+  inferring the answer gives the wrong three.
   """
   noted: Boolean
   recordingId: String
@@ -574,7 +628,10 @@ input UpdateSingerInput {
   lastName: String
   operaclassId: Int
   spotifyArtistId: String
-  wikipediaImageId: String
+  """
+  Another name for `wikipediaUrl`, which it sets. Giving both with different values is refused.
+  """
+  wikipediaImageId: String @deprecated(reason: "Set `wikipediaUrl` instead.")
   wikipediaUrl: String
 }
 
@@ -591,16 +648,15 @@ input UpdateTidalAlbumInput {
 
 input UpdateUpcInput {
   """
-  The barcode, always at its full fourteen digits.
+  A barcode: UPC-A, EAN-13 or GTIN-14.
   
-  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
-  different barcodes, and the check digit is the same at every length. This
-  returns the longest, zero-padded, because it is the one form that can hold
-  any of them.
+  These are three lengths of one number rather than three different barcodes,
+  and the check digit is the same at every length. Any of them is accepted.
+  It is stored and returned at the longest, zero-padded to fourteen digits,
+  because that is the one form that can hold any of them.
   
-  Any of the three is accepted wherever a barcode is taken, and answered for
-  with this one. Somewhere less formal than an API -- a page, a link, anything
-  a person reads -- is welcome to drop the leading zeros again.
+  Somewhere less formal than an API (a page, a link, anything a person reads)
+  is welcome to drop the leading zeros again.
   """
   upc: String
 }
@@ -642,25 +698,23 @@ type AlbumCoverArt {
   A cover image is stored against the release it belongs to, so the UPC is
   both its key and its identity.
   
-  Every other type here answers to `id`, and code that walks all of them —
-  the CLI's get/create/edit/delete commands, for one — should not have to
-  carry a table of which five are spelled differently. The underlying column
-  is unchanged; this is another name for it.
+  Every type answers to `id`, so that code walking all of them, such as a
+  generic get or edit command, needs no table of exceptions. This is another
+  name for the same value.
   """
   id: String @semanticNonNull
   imageUrl: String
   source: String
   """
-  The barcode, always at its full fourteen digits.
+  A barcode: UPC-A, EAN-13 or GTIN-14.
   
-  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
-  different barcodes, and the check digit is the same at every length. This
-  returns the longest, zero-padded, because it is the one form that can hold
-  any of them.
+  These are three lengths of one number rather than three different barcodes,
+  and the check digit is the same at every length. Any of them is accepted.
+  It is stored and returned at the longest, zero-padded to fourteen digits,
+  because that is the one form that can hold any of them.
   
-  Any of the three is accepted wherever a barcode is taken, and answered for
-  with this one. Somewhere less formal than an API -- a page, a link, anything
-  a person reads -- is welcome to drop the leading zeros again.
+  Somewhere less formal than an API (a page, a link, anything a person reads)
+  is welcome to drop the leading zeros again.
   """
   upc: String @semanticNonNull
 }
@@ -761,6 +815,14 @@ type Composer {
   history: [Edit!] @semanticNonNull
   historyUrl: String @semanticNonNull
   id: Int @semanticNonNull
+  """
+  This record's page on IMSLP, the Petrucci Music Library: the composer's category page, which lists their works.
+  
+  Any address of the page on imslp.org is accepted, and it is stored and
+  returned in one form, for example https://imslp.org/wiki/Category:Verdi,_Giuseppe.
+  Send null or an empty string to remove it.
+  """
+  imslpUrl: String
   lastName: String @semanticNonNull
   operaclassId: Int
   operas: [Opera!] @semanticNonNull
@@ -811,8 +873,7 @@ type Edit {
   editor: User
   id: Int @semanticNonNull
   """
-  The rational for the edit which was provided by the editor at the time of
-  the edit.
+  The reason for the edit, given by the editor at the time of the edit.
   
   Generally this should include a link to the source of the information that
   was added/changed, or an explanation of why information was removed.
@@ -823,27 +884,15 @@ type Edit {
   return.
   
   Most edits touch one. The imports that seeded this database are edits too,
-  and the largest wrote over sixty thousand rows — so this is what tells a
+  and the largest wrote over sixty thousand rows, so this is what tells a
   caller that an edit is a bulk import rather than a change to be read.
   """
   recordCount: Int @semanticNonNull
   """
   What this edit touched: every record it wrote a new version of.
   
-  Read from `edit_records`, which the versioned tables fill in by trigger.
-  Before that table this meant asking all twenty-one versioned tables in
-  turn, because a versioned row names its edit but nothing named the
-  reverse.
-  
   Ordered so that an edit reads the way it happened: by table, then by
-  record.
-  
-  Bounded, and worth bounding even though the reads are cheap — five hundred
-  of these resolve in two queries and four milliseconds, because `getById`
-  batches through the request's dataloaders. What costs is what happens
-  afterwards: five hundred rendered rows is half a megabyte of HTML, and
-  that is the difference between a page that answers in a tenth of a second
-  and one that takes three. `recordCount` is how a caller knows there is
+  record. Bounded by `first`; `recordCount` is how a caller knows there is
   more.
   """
   records(
@@ -872,18 +921,18 @@ type EditedRecord {
   the record as it stands today, which says which opera was changed but not
   what the change said, and the old values live only in the versioned
   tables. So this reads the version this edit wrote and the version before
-  it, and returns the fields that differ — nothing about the fields the edit
-  left alone.
+  it, and returns the fields that differ, and nothing about the fields the
+  edit left alone.
   
   On a record this edit created, every field it set, with `before` null.
   
   A deletion writes a new version with the columns unchanged and a flag set,
-  so it is reported as a change to `isDeleted` — otherwise removing a record
+  so it is reported as a change to `isDeleted`. Otherwise removing a record
   would read as having changed nothing. `isDeleted` is not a field anything
   can write; deleting is its own mutation, and there is no undoing one.
   
   Empty for a table added since this was generated, and for the odd row
-  whose previous version is missing — the historical imports wrote versioned
+  whose previous version is missing: the historical imports wrote versioned
   rows directly, and a few did not start at 1.
   """
   changes: [FieldChange!] @semanticNonNull
@@ -903,13 +952,13 @@ type EditedRecord {
   """
   The model this record belongs to, e.g. `Recording`.
   
-  Null for a raw join table, which has no model of its own — linking a
+  Null for a raw join table, which has no model of its own: linking a
   recording to a barcode is an edit like any other, but there is no type to
   name.
   """
   modelName: String
   """
-  The record itself, **as it stands now** — not as this edit left it.
+  The record itself, **as it stands now**, not as this edit left it.
   
   Following an edit here tells you which singer was changed, not what the
   change said. The models read the latest version of a row, and their
@@ -923,7 +972,7 @@ type EditedRecord {
   to look at; returning null there left the one case that most needed an
   answer without one.
   
-  Null when the record has no model of its own — a join table.
+  Null when the record has no model of its own, as with a join table.
   """
   record: EditableRecord
   """
@@ -964,7 +1013,7 @@ One field an edit changed, and what it changed it from.
 
 Values are rendered as text. The columns behind them are a mix of numbers,
 strings and flags, and a reviewer is reading them rather than computing with
-them — so `year` arrives as `"1953"` and `noted` as `"true"`, which is what
+them. So `year` arrives as `"1953"` and `noted` as `"true"`, which is what
 they would have to type to write the value back. Null is kept as null, so
 that a column that held nothing is distinguishable from one that held the
 word "null" or an empty string.
@@ -972,12 +1021,6 @@ word "null" or an empty string.
 A foreign key is the exception that needs more than rendering: `"13282"` is
 true and useless. `beforeRecord` and `afterRecord` hand back the record it
 points at, for the caller to name however it names things.
-
-Those two replaced `beforeLabel` and `afterLabel`, which named it here.
-Naming is a presentation choice, and making it once on the server meant
-making it twice in fact: there was a copy for this and a copy for the
-change log, they knew different numbers of types, and a recording answered
-to two different names depending which you reached it through.
 """
 type FieldChange {
   """What this edit made it. Null means the edit cleared the field."""
@@ -990,25 +1033,15 @@ type FieldChange {
   """
   before: String
   """
-  The record `before` points at, when this field is a foreign key.
+  The record `before` points at, when this field is a foreign key, for the
+  caller to name the way the rest of its page names things.
   
-  What `beforeLabel` above is, before somebody decided what to call it. A
-  name is a presentation choice, and the two places this codebase made that
-  choice had drifted into disagreeing: handing back the record instead lets
-  whoever is drawing it name it the way the rest of their page names things,
-  once.
-  
-  `beforeLabel` stays because it is the right answer for a caller that is
-  not drawing a page. An agent reading the edit queue wants
-  `"Elena Suliotis"` in the JSON it already has, not a second query and a
-  switch on `__typename`.
-  
-  Null on the same terms as `beforeLabel`: not a foreign key, a null value,
-  or a record that no longer exists.
+  Null when the field is not a foreign key, when `before` is null, or when
+  the record no longer exists.
   """
   beforeRecord: EditableRecord
   """
-  The field's name in the API — `languageId`, not `language_id` — because
+  The field's name in the API (`languageId`, not `language_id`), because
   somebody reading a diff is usually on their way to writing the correction.
   
   A join table has no model and so no public names; its columns are named as
@@ -1141,10 +1174,9 @@ type Mutation {
   """
   Put a recording in a list.
   
-  Saving the same recording twice is the same save: the primary key says so
-  and `ON CONFLICT DO NOTHING` makes a repeat succeed quietly rather than
-  fail. A caller retrying after a dropped connection wanted the recording in
-  the list, and it is.
+  Saving the same recording twice is the same save: a repeat succeeds
+  quietly rather than failing. A caller retrying after a dropped connection
+  wanted the recording in the list, and it is.
   """
   addRecordingToCollection(collectionId: Int!, recordingId: Int!): Collection @semanticNonNull
   """Create a new RecordingURL record."""
@@ -1211,7 +1243,7 @@ type Mutation {
   
   Nobody is asked to prove who they are: this hands out a fresh account to
   whoever asks. The point is not to know which person is editing, it is that a
-  given editor is the same editor from one request to the next — which is what
+  given editor is the same editor from one request to the next, which is what
   lets an edit be attributed, traffic be shaped per caller, and a run of bad
   changes be found together and undone.
   
@@ -1220,7 +1252,7 @@ type Mutation {
   createAccessToken(
     """
     Optional, and never verified. Somewhere to reach you if something you are
-    doing is being blocked — a limit, or a bug at this end. It is not a login,
+    doing is being blocked by a limit, or by a bug at this end. It is not a login,
     and it is never published. Leave it out and everything still works.
     """
     email: String
@@ -1247,7 +1279,7 @@ type Mutation {
   """Start a list. The first one an account has becomes its default."""
   createCollection(name: String!): Collection @semanticNonNull
   """
-  Delete a AlbumCoverArt record by ID.
+  Delete an AlbumCoverArt record by ID.
   Returns true if the record was deleted, false if it didn't exist.
   """
   deleteAlbumCoverArt(
@@ -1256,7 +1288,7 @@ type Mutation {
     justification: String!
   ): Boolean @semanticNonNull
   """
-  Delete a AppleMusicAlbum record by ID.
+  Delete an AppleMusicAlbum record by ID.
   Returns true if the record was deleted, false if it didn't exist.
   """
   deleteAppleMusicAlbum(
@@ -1333,7 +1365,7 @@ type Mutation {
     justification: String!
   ): Boolean @semanticNonNull
   """
-  Delete a Opera record by ID.
+  Delete an Opera record by ID.
   Returns true if the record was deleted, false if it didn't exist.
   """
   deleteOpera(
@@ -1428,13 +1460,17 @@ type Mutation {
     justification: String!
   ): Boolean @semanticNonNull
   """
-  Merge one Character into another, in favour of the second.
+  Merge one Character into another, in favor of the second.
   
   Use when two records turn out to describe the same thing. The losing record
   is deleted and keeps its history; anyone arriving with its id is sent to
   the surviving record instead.
   
-  Refused while anything still references the losing record — move or remove
+  No fields are copied across. Anything only the losing record holds, such
+  as an external id, is gone from the live catalog unless it is set on the
+  survivor first.
+  
+  Refused while anything still references the losing record. Move or remove
   those first, so that what happens to them is a decision somebody made.
   """
   mergeCharacter(
@@ -1444,13 +1480,17 @@ type Mutation {
     justification: String!
   ): Character @semanticNonNull
   """
-  Merge one Composer into another, in favour of the second.
+  Merge one Composer into another, in favor of the second.
   
   Use when two records turn out to describe the same thing. The losing record
   is deleted and keeps its history; anyone arriving with its id is sent to
   the surviving record instead.
   
-  Refused while anything still references the losing record — move or remove
+  No fields are copied across. Anything only the losing record holds, such
+  as an external id, is gone from the live catalog unless it is set on the
+  survivor first.
+  
+  Refused while anything still references the losing record. Move or remove
   those first, so that what happens to them is a decision somebody made.
   """
   mergeComposer(
@@ -1460,13 +1500,17 @@ type Mutation {
     justification: String!
   ): Composer @semanticNonNull
   """
-  Merge one Conductor into another, in favour of the second.
+  Merge one Conductor into another, in favor of the second.
   
   Use when two records turn out to describe the same thing. The losing record
   is deleted and keeps its history; anyone arriving with its id is sent to
   the surviving record instead.
   
-  Refused while anything still references the losing record — move or remove
+  No fields are copied across. Anything only the losing record holds, such
+  as an external id, is gone from the live catalog unless it is set on the
+  survivor first.
+  
+  Refused while anything still references the losing record. Move or remove
   those first, so that what happens to them is a decision somebody made.
   """
   mergeConductor(
@@ -1476,13 +1520,17 @@ type Mutation {
     justification: String!
   ): Conductor @semanticNonNull
   """
-  Merge one Language into another, in favour of the second.
+  Merge one Language into another, in favor of the second.
   
   Use when two records turn out to describe the same thing. The losing record
   is deleted and keeps its history; anyone arriving with its id is sent to
   the surviving record instead.
   
-  Refused while anything still references the losing record — move or remove
+  No fields are copied across. Anything only the losing record holds, such
+  as an external id, is gone from the live catalog unless it is set on the
+  survivor first.
+  
+  Refused while anything still references the losing record. Move or remove
   those first, so that what happens to them is a decision somebody made.
   """
   mergeLanguage(
@@ -1492,13 +1540,17 @@ type Mutation {
     justification: String!
   ): Language @semanticNonNull
   """
-  Merge one Opera into another, in favour of the second.
+  Merge one Opera into another, in favor of the second.
   
   Use when two records turn out to describe the same thing. The losing record
   is deleted and keeps its history; anyone arriving with its id is sent to
   the surviving record instead.
   
-  Refused while anything still references the losing record — move or remove
+  No fields are copied across. Anything only the losing record holds, such
+  as an external id, is gone from the live catalog unless it is set on the
+  survivor first.
+  
+  Refused while anything still references the losing record. Move or remove
   those first, so that what happens to them is a decision somebody made.
   """
   mergeOpera(
@@ -1508,13 +1560,17 @@ type Mutation {
     justification: String!
   ): Opera @semanticNonNull
   """
-  Merge one Recording into another, in favour of the second.
+  Merge one Recording into another, in favor of the second.
   
   Use when two records turn out to describe the same thing. The losing record
   is deleted and keeps its history; anyone arriving with its id is sent to
   the surviving record instead.
   
-  Refused while anything still references the losing record — move or remove
+  No fields are copied across. Anything only the losing record holds, such
+  as an external id, is gone from the live catalog unless it is set on the
+  survivor first.
+  
+  Refused while anything still references the losing record. Move or remove
   those first, so that what happens to them is a decision somebody made.
   """
   mergeRecording(
@@ -1524,13 +1580,17 @@ type Mutation {
     justification: String!
   ): Recording @semanticNonNull
   """
-  Merge one Singer into another, in favour of the second.
+  Merge one Singer into another, in favor of the second.
   
   Use when two records turn out to describe the same thing. The losing record
   is deleted and keeps its history; anyone arriving with its id is sent to
   the surviving record instead.
   
-  Refused while anything still references the losing record — move or remove
+  No fields are copied across. Anything only the losing record holds, such
+  as an external id, is gone from the live catalog unless it is set on the
+  survivor first.
+  
+  Refused while anything still references the losing record. Move or remove
   those first, so that what happens to them is a decision somebody made.
   """
   mergeSinger(
@@ -1551,8 +1611,8 @@ type Mutation {
   """
   Make the list hold exactly these recordings.
   
-  For a caller that has a whole list in hand and wants it to match --
-  reconciling against something else, or applying a batch of edits at once --
+  For a caller that has a whole list in hand and wants it to match, when
+  reconciling against something else or applying a batch of edits at once,
   rather than one `add` and one `remove` per difference.
   
   Recordings that have been merged are accepted and understood, so the list
@@ -1583,20 +1643,20 @@ type Mutation {
   submitFeedback(
     """Optional, and only used to reply to you"""
     email: String
-    """What this is about"""
-    kind: FeedbackKind!
+    """
+    Optional. Nothing sends this any more, and it sorted nothing when they did
+    """
+    kind: FeedbackKind @deprecated(reason: "Say what the report is about on the first line of `message`")
     """What you want to say"""
     message: String!
     """Optional. What you were looking at, or the command you ran"""
     url: String
   ): Boolean @semanticNonNull
   """
-  Put a deleted or merged AlbumCoverArt back, by id.
+  Put a deleted AlbumCoverArt back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1609,12 +1669,10 @@ type Mutation {
     justification: String!
   ): AlbumCoverArt
   """
-  Put a deleted or merged AppleMusicAlbum back, by id.
+  Put a deleted AppleMusicAlbum back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1699,12 +1757,10 @@ type Mutation {
     justification: String!
   ): Language
   """
-  Put a deleted or merged MusicBrainzRelease back, by id.
+  Put a deleted MusicBrainzRelease back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1717,12 +1773,10 @@ type Mutation {
     justification: String!
   ): MusicBrainzRelease
   """
-  Put a deleted or merged MusicBrainzReleaseGroup back, by id.
+  Put a deleted MusicBrainzReleaseGroup back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1735,12 +1789,10 @@ type Mutation {
     justification: String!
   ): MusicBrainzReleaseGroup
   """
-  Put a deleted or merged NaxosAlbum back, by id.
+  Put a deleted NaxosAlbum back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1771,12 +1823,10 @@ type Mutation {
     justification: String!
   ): Opera
   """
-  Put a deleted or merged Portrayal back, by id.
+  Put a deleted Portrayal back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1789,12 +1839,10 @@ type Mutation {
     justification: String!
   ): Portrayal
   """
-  Put a deleted or merged PrestoMusicAlbum back, by id.
+  Put a deleted PrestoMusicAlbum back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1825,12 +1873,10 @@ type Mutation {
     justification: String!
   ): Recording
   """
-  Put a deleted or merged RecordingURL back, by id.
+  Put a deleted RecordingURL back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1861,12 +1907,10 @@ type Mutation {
     justification: String!
   ): Singer
   """
-  Put a deleted or merged SpotifyAlbum back, by id.
+  Put a deleted SpotifyAlbum back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1879,12 +1923,10 @@ type Mutation {
     justification: String!
   ): SpotifyAlbum
   """
-  Put a deleted or merged TidalAlbum back, by id.
+  Put a deleted TidalAlbum back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1897,12 +1939,10 @@ type Mutation {
     justification: String!
   ): TidalAlbum
   """
-  Put a deleted or merged Upc back, by id.
+  Put a deleted Upc back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1915,12 +1955,10 @@ type Mutation {
     justification: String!
   ): Upc
   """
-  Put a deleted or merged WikipediaImage back, by id.
+  Put a deleted WikipediaImage back, by id.
   
   Returns the restored record, so a caller can see what came back rather
-  than only that something did. That matters most for a merged record:
-  restoring one stops it redirecting, and whether the thing now answering
-  to this id is what the caller expected is the question they asked.
+  than only that something did.
   
   Null when there is no such record at all. A record that is already live
   is an error rather than a null, because asking to restore something that
@@ -1942,14 +1980,14 @@ type Mutation {
     recordingId: String!
     upc: String!
   ): Boolean @semanticNonNull
-  """Update a AlbumCoverArt record by ID."""
+  """Update an AlbumCoverArt record by ID."""
   updateAlbumCoverArt(
     id: String!
     input: UpdateAlbumCoverArtInput!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
   ): AlbumCoverArt @semanticNonNull
-  """Update a AppleMusicAlbum record by ID."""
+  """Update an AppleMusicAlbum record by ID."""
   updateAppleMusicAlbum(
     id: String!
     input: UpdateAppleMusicAlbumInput!
@@ -2005,7 +2043,7 @@ type Mutation {
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
   ): NaxosAlbum @semanticNonNull
-  """Update a Opera record by ID."""
+  """Update an Opera record by ID."""
   updateOpera(
     id: String!
     input: UpdateOperaInput!
@@ -2092,10 +2130,9 @@ type NaxosAlbum {
   
   Naxos catalog numbers are unique, and are what their own site keys on.
   
-  Every other type here answers to `id`, and code that walks all of them —
-  the CLI's get/create/edit/delete commands, for one — should not have to
-  carry a table of which five are spelled differently. The underlying column
-  is unchanged; this is another name for it.
+  Every type answers to `id`, so that code walking all of them, such as a
+  generic get or edit command, needs no table of exceptions. This is another
+  name for the same value.
   """
   id: String @semanticNonNull
   upc: Upc
@@ -2117,6 +2154,14 @@ type Opera {
   history: [Edit!] @semanticNonNull
   historyUrl: String @semanticNonNull
   id: Int @semanticNonNull
+  """
+  This record's page on IMSLP, the Petrucci Music Library: the work's own page, where its scores are.
+  
+  Any address of the page on imslp.org is accepted, and it is stored and
+  returned in one form, for example https://imslp.org/wiki/La_traviata_(Verdi,_Giuseppe).
+  Send null or an empty string to remove it.
+  """
+  imslpUrl: String
   language: Language
   librettist: String
   operaclassId: Int
@@ -2152,26 +2197,20 @@ type Portrayal {
   """
   Whether this portrayal is part of the recording's top billing.
   
-  Three singers per recording, and the convention is worth stating because
-  nothing enforces it and it cannot be worked out from the data. The three
-  are the first three in the billing order the release itself prints --
-  the sleeve, the booklet, the label's own listing -- and not a judgement
-  about which roles matter. Recording 88 notes Carreras, van Dam and
-  Zednik and leaves the title role unflagged, so reading the principals
-  off the cast and inferring the answer gives the wrong three.
+  Three distinct singers per recording, or all of them where a recording
+  has fewer than three. The flag sits on portrayals but is read as a set
+  of singers, so a singer who doubles roles may be flagged on one of
+  those roles or on all of them; both say the same thing, and
+  addRecordingWithPortrayals counts distinct singers and accepts either.
+  Recording 77 carries six flagged portrayals for three singers, and
+  recording 6417 flags Deborah Polaski for both Cassandre and Didon.
   
-  A singer who doubles a role is flagged on every portrayal they have
-  here. So the count of flagged portrayals can exceed three while the
-  count of flagged singers stays at three: recording 77 has six flagged
-  portrayals for three singers, and recording 6417 flags Deborah Polaski
-  for both Cassandre and Didon.
-  
-  A release that bills more than three gets the first three anyway. If
-  the billing order is genuinely unclear, leaving this alone is better
-  than guessing, because a fourth flag reads as a fact rather than as an
-  attempt.
+  Which three is an editorial judgment. It cannot be worked out from the
+  cast: recording 88 notes Carreras, van Dam and Zednik and leaves the
+  title role unflagged, so reading the principals off the roles and
+  inferring the answer gives the wrong three.
   """
-  noted: Boolean
+  noted: Boolean @semanticNonNull
   recording: Recording @semanticNonNull
   singer: Singer @semanticNonNull
 }
@@ -2192,10 +2231,9 @@ type PrestoMusicAlbum {
   looks up. Not `prestoCode`, which is derived from it by taking the part
   before the dashes and cannot be looked up with.
   
-  Every other type here answers to `id`, and code that walks all of them —
-  the CLI's get/create/edit/delete commands, for one — should not have to
-  carry a table of which five are spelled differently. The underlying column
-  is unchanged; this is another name for it.
+  Every type answers to `id`, so that code walking all of them, such as a
+  generic get or edit command, needs no table of exceptions. This is another
+  name for the same value.
   """
   id: String @semanticNonNull
   isStreaming: Boolean
@@ -2225,8 +2263,8 @@ type Query {
   
   If this id belongs to a record that has since been merged into another,
   the surviving record is returned, so that a link made before the merge
-  keeps working. Reading a merged-away record itself — its `history`, most
-  of all — is done by asking for its history, which never redirects.
+  keeps working. To read the merged-away record itself, and above all its
+  `history`, ask for its history, which never redirects.
   """
   getCharacterById(id: String!): Character
   """
@@ -2244,8 +2282,8 @@ type Query {
   
   If this id belongs to a record that has since been merged into another,
   the surviving record is returned, so that a link made before the merge
-  keeps working. Reading a merged-away record itself — its `history`, most
-  of all — is done by asking for its history, which never redirects.
+  keeps working. To read the merged-away record itself, and above all its
+  `history`, ask for its history, which never redirects.
   """
   getComposerById(id: String!): Composer
   """
@@ -2269,8 +2307,8 @@ type Query {
   
   If this id belongs to a record that has since been merged into another,
   the surviving record is returned, so that a link made before the merge
-  keeps working. Reading a merged-away record itself — its `history`, most
-  of all — is done by asking for its history, which never redirects.
+  keeps working. To read the merged-away record itself, and above all its
+  `history`, ask for its history, which never redirects.
   """
   getConductorById(id: String!): Conductor
   """
@@ -2296,8 +2334,8 @@ type Query {
   
   If this id belongs to a record that has since been merged into another,
   the surviving record is returned, so that a link made before the merge
-  keeps working. Reading a merged-away record itself — its `history`, most
-  of all — is done by asking for its history, which never redirects.
+  keeps working. To read the merged-away record itself, and above all its
+  `history`, ask for its history, which never redirects.
   """
   getLanguageById(id: String!): Language
   """
@@ -2315,12 +2353,12 @@ type Query {
   getNaxosAlbumById(id: String!): NaxosAlbum
   getNaxosAlbumByIds(ids: [String!]!): [NaxosAlbum] @semanticNonNull
   """
-  Look up a Opera by id, following any merge.
+  Look up an Opera by id, following any merge.
   
   If this id belongs to a record that has since been merged into another,
   the surviving record is returned, so that a link made before the merge
-  keeps working. Reading a merged-away record itself — its `history`, most
-  of all — is done by asking for its history, which never redirects.
+  keeps working. To read the merged-away record itself, and above all its
+  `history`, ask for its history, which never redirects.
   """
   getOperaById(id: String!): Opera
   """
@@ -2332,7 +2370,7 @@ type Query {
   """
   getOperaByIds(ids: [String!]!): [Opera] @semanticNonNull
   """
-  Look up a Opera by its operaclassId.
+  Look up an Opera by its operaclassId.
   
   At most one live Opera holds any given operaclassId;
   where a record predating that rule still shares one, the lowest id wins,
@@ -2348,8 +2386,8 @@ type Query {
   
   If this id belongs to a record that has since been merged into another,
   the surviving record is returned, so that a link made before the merge
-  keeps working. Reading a merged-away record itself — its `history`, most
-  of all — is done by asking for its history, which never redirects.
+  keeps working. To read the merged-away record itself, and above all its
+  `history`, ask for its history, which never redirects.
   """
   getRecordingById(id: String!): Recording
   """
@@ -2375,8 +2413,8 @@ type Query {
   
   If this id belongs to a record that has since been merged into another,
   the surviving record is returned, so that a link made before the merge
-  keeps working. Reading a merged-away record itself — its `history`, most
-  of all — is done by asking for its history, which never redirects.
+  keeps working. To read the merged-away record itself, and above all its
+  `history`, ask for its history, which never redirects.
   """
   getSingerById(id: String!): Singer
   """
@@ -2471,12 +2509,7 @@ type Query {
   viewer: User
 }
 
-"""
-A record that is no longer live, and where it went.
-
-A class rather than the plain object this was, so that naming the survivor
-has a `vc` to look it up with. The shape a caller sees is unchanged.
-"""
+"""A record that is no longer live, and where it went."""
 type RecordDeletion {
   """
   The surviving record, by name and address.
@@ -2532,14 +2565,13 @@ type Recording {
   month: Int
   musicBrainzReleaseGroups: [MusicBrainzReleaseGroup!] @semanticNonNull
   """
-  The singers on this recording who received top billing.
+  The singers on this recording who received top billing, each once.
   
-  Three of them, taken in the order the release itself bills them. A singer
-  who doubles a role is flagged on each of their portrayals, so the count of
-  flagged portrayals can exceed three while this list stays at three: it is
-  singers, deduplicated, not portrayals.
+  Usually three, or every singer where a recording has fewer. A singer who
+  doubles roles may be flagged on one of their portrayals or on all of them,
+  so this counts singers rather than flagged portrayals.
   
-  Nothing enforces the three, and it cannot be recovered from the cast --
+  Nothing enforces the three, and it cannot be recovered from the cast:
   recording 88 bills Carreras, van Dam and Zednik and leaves the title role
   unflagged. See `Portrayal.noted`.
   """
@@ -2643,10 +2675,9 @@ type Upc {
   
   A UPC is its own identity.
   
-  Every other type here answers to `id`, and code that walks all of them —
-  the CLI's get/create/edit/delete commands, for one — should not have to
-  carry a table of which five are spelled differently. The underlying column
-  is unchanged; this is another name for it.
+  Every type answers to `id`, so that code walking all of them, such as a
+  generic get or edit command, needs no table of exceptions. This is another
+  name for the same value.
   """
   id: String @semanticNonNull
   musicBrainzReleases: [MusicBrainzRelease!] @semanticNonNull
@@ -2656,16 +2687,15 @@ type Upc {
   spotifyAlbums: [SpotifyAlbum!] @semanticNonNull
   tidalAlbums: [TidalAlbum!] @semanticNonNull
   """
-  The barcode, always at its full fourteen digits.
+  A barcode: UPC-A, EAN-13 or GTIN-14.
   
-  UPC-A, EAN-13 and GTIN-14 are three lengths of one number rather than three
-  different barcodes, and the check digit is the same at every length. This
-  returns the longest, zero-padded, because it is the one form that can hold
-  any of them.
+  These are three lengths of one number rather than three different barcodes,
+  and the check digit is the same at every length. Any of them is accepted.
+  It is stored and returned at the longest, zero-padded to fourteen digits,
+  because that is the one form that can hold any of them.
   
-  Any of the three is accepted wherever a barcode is taken, and answered for
-  with this one. Somewhere less formal than an API -- a page, a link, anything
-  a person reads -- is welcome to drop the leading zeros again.
+  Somewhere less formal than an API (a page, a link, anything a person reads)
+  is welcome to drop the leading zeros again.
   """
   upc: String @semanticNonNull
 }
@@ -2673,9 +2703,9 @@ type Upc {
 """
 An account: a name, and nothing else.
 
-Not a person, and not verified -- anyone can have one, and nobody is asked to
+Not a person, and not verified: anyone can have one, and nobody is asked to
 prove anything to get it. What an account is for is narrower than it looks:
-it makes the edits of one caller recognisable as one caller's work, so that a
+it makes the edits of one caller recognizable as one caller's work, so that a
 run of changes can be read, trusted or doubted together.
 
 Usually somebody else's. This is what an edit hands back when asked who made
@@ -2687,7 +2717,7 @@ type User {
   The lists this account keeps, oldest first.
   
   Empty unless the account asking is the account asked about, which today is
-  the only way to get here at all -- `viewer` is the sole route to a `User`
+  the only way to get here at all, since `viewer` is the sole route to a `User`
   whose collections anybody can see. The check is written anyway, because the
   day a second route appears is not the day anybody will remember this.
   """
@@ -2736,10 +2766,9 @@ type WikipediaImage {
   
   Keyed by the Wikipedia page it came from.
   
-  Every other type here answers to `id`, and code that walks all of them —
-  the CLI's get/create/edit/delete commands, for one — should not have to
-  carry a table of which five are spelled differently. The underlying column
-  is unchanged; this is another name for it.
+  Every type answers to `id`, so that code walking all of them, such as a
+  generic get or edit command, needs no table of exceptions. This is another
+  name for the same value.
   """
   id: String @semanticNonNull
   imageUrl: String
