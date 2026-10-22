@@ -97,6 +97,13 @@ pub(crate) mod de {
         Ok(Id::deserialize(d)?.into())
     }
 
+    /// The same, where the id may be absent.
+    ///
+    /// Codegen reaches for this when the recording query selects an id under
+    /// a nullable parent (`walk.mjs`). The query has none at the moment, so
+    /// nothing calls it, but deleting it would break the build the day one is
+    /// added.
+    #[allow(dead_code)]
     pub fn id_opt<'de, D>(d: D) -> Result<Option<String>, D::Error>
     where
         D: Deserializer<'de>,
