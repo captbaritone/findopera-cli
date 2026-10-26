@@ -18,6 +18,9 @@ mutation EditAlbumCoverArt($id: String!, $input: UpdateAlbumCoverArtInput!, $jus
 mutation RestoreAlbumCoverArt($id: String!, $justification: String!) {
   undeleteAlbumCoverArt(id: $id, justification: $justification) { id }
 }
+mutation CommentAlbumCoverArt($id: String!, $justification: String!) {
+  commentAlbumCoverArt(id: $id, justification: $justification) { id }
+}
 mutation RemoveAlbumCoverArt($id: String!, $justification: String!) {
   deleteAlbumCoverArt(id: $id, justification: $justification)
 }
@@ -29,6 +32,9 @@ mutation EditAppleMusicAlbum($id: String!, $input: UpdateAppleMusicAlbumInput!, 
 }
 mutation RestoreAppleMusicAlbum($id: String!, $justification: String!) {
   undeleteAppleMusicAlbum(id: $id, justification: $justification) { id }
+}
+mutation CommentAppleMusicAlbum($id: String!, $justification: String!) {
+  commentAppleMusicAlbum(id: $id, justification: $justification) { id }
 }
 mutation RemoveAppleMusicAlbum($id: String!, $justification: String!) {
   deleteAppleMusicAlbum(id: $id, justification: $justification)
@@ -45,6 +51,9 @@ mutation MergeCharacter($id: String!, $intoId: String!, $justification: String!)
 mutation RestoreCharacter($id: String!, $justification: String!) {
   undeleteCharacter(id: $id, justification: $justification) { id }
 }
+mutation CommentCharacter($id: String!, $justification: String!) {
+  commentCharacter(id: $id, justification: $justification) { id }
+}
 mutation RemoveCharacter($id: String!, $justification: String!) {
   deleteCharacter(id: $id, justification: $justification)
 }
@@ -59,6 +68,9 @@ mutation MergeComposer($id: String!, $intoId: String!, $justification: String!) 
 }
 mutation RestoreComposer($id: String!, $justification: String!) {
   undeleteComposer(id: $id, justification: $justification) { id }
+}
+mutation CommentComposer($id: String!, $justification: String!) {
+  commentComposer(id: $id, justification: $justification) { id }
 }
 mutation RemoveComposer($id: String!, $justification: String!) {
   deleteComposer(id: $id, justification: $justification)
@@ -75,6 +87,9 @@ mutation MergeConductor($id: String!, $intoId: String!, $justification: String!)
 mutation RestoreConductor($id: String!, $justification: String!) {
   undeleteConductor(id: $id, justification: $justification) { id }
 }
+mutation CommentConductor($id: String!, $justification: String!) {
+  commentConductor(id: $id, justification: $justification) { id }
+}
 mutation RemoveConductor($id: String!, $justification: String!) {
   deleteConductor(id: $id, justification: $justification)
 }
@@ -90,6 +105,9 @@ mutation MergeLanguage($id: String!, $intoId: String!, $justification: String!) 
 mutation RestoreLanguage($id: String!, $justification: String!) {
   undeleteLanguage(id: $id, justification: $justification) { id }
 }
+mutation CommentLanguage($id: String!, $justification: String!) {
+  commentLanguage(id: $id, justification: $justification) { id }
+}
 mutation RemoveLanguage($id: String!, $justification: String!) {
   deleteLanguage(id: $id, justification: $justification)
 }
@@ -101,6 +119,9 @@ mutation EditMusicBrainzRelease($id: String!, $input: UpdateMusicBrainzReleaseIn
 }
 mutation RestoreMusicBrainzRelease($id: String!, $justification: String!) {
   undeleteMusicBrainzRelease(id: $id, justification: $justification) { id }
+}
+mutation CommentMusicBrainzRelease($id: String!, $justification: String!) {
+  commentMusicBrainzRelease(id: $id, justification: $justification) { id }
 }
 mutation RemoveMusicBrainzRelease($id: String!, $justification: String!) {
   deleteMusicBrainzRelease(id: $id, justification: $justification)
@@ -114,6 +135,9 @@ mutation EditMusicBrainzReleaseGroup($id: String!, $input: UpdateMusicBrainzRele
 mutation RestoreMusicBrainzReleaseGroup($id: String!, $justification: String!) {
   undeleteMusicBrainzReleaseGroup(id: $id, justification: $justification) { id }
 }
+mutation CommentMusicBrainzReleaseGroup($id: String!, $justification: String!) {
+  commentMusicBrainzReleaseGroup(id: $id, justification: $justification) { id }
+}
 mutation RemoveMusicBrainzReleaseGroup($id: String!, $justification: String!) {
   deleteMusicBrainzReleaseGroup(id: $id, justification: $justification)
 }
@@ -125,6 +149,9 @@ mutation EditNaxosAlbum($id: String!, $input: UpdateNaxosAlbumInput!, $justifica
 }
 mutation RestoreNaxosAlbum($id: String!, $justification: String!) {
   undeleteNaxosAlbum(id: $id, justification: $justification) { id }
+}
+mutation CommentNaxosAlbum($id: String!, $justification: String!) {
+  commentNaxosAlbum(id: $id, justification: $justification) { id }
 }
 mutation RemoveNaxosAlbum($id: String!, $justification: String!) {
   deleteNaxosAlbum(id: $id, justification: $justification)
@@ -141,6 +168,9 @@ mutation MergeOpera($id: String!, $intoId: String!, $justification: String!) {
 mutation RestoreOpera($id: String!, $justification: String!) {
   undeleteOpera(id: $id, justification: $justification) { id }
 }
+mutation CommentOpera($id: String!, $justification: String!) {
+  commentOpera(id: $id, justification: $justification) { id }
+}
 mutation RemoveOpera($id: String!, $justification: String!) {
   deleteOpera(id: $id, justification: $justification)
 }
@@ -153,6 +183,9 @@ mutation EditPortrayal($id: String!, $input: UpdatePortrayalInput!, $justificati
 mutation RestorePortrayal($id: String!, $justification: String!) {
   undeletePortrayal(id: $id, justification: $justification) { id }
 }
+mutation CommentPortrayal($id: String!, $justification: String!) {
+  commentPortrayal(id: $id, justification: $justification) { id }
+}
 mutation RemovePortrayal($id: String!, $justification: String!) {
   deletePortrayal(id: $id, justification: $justification)
 }
@@ -164,6 +197,9 @@ mutation EditPrestoMusicAlbum($id: String!, $input: UpdatePrestoMusicAlbumInput!
 }
 mutation RestorePrestoMusicAlbum($id: String!, $justification: String!) {
   undeletePrestoMusicAlbum(id: $id, justification: $justification) { id }
+}
+mutation CommentPrestoMusicAlbum($id: String!, $justification: String!) {
+  commentPrestoMusicAlbum(id: $id, justification: $justification) { id }
 }
 mutation RemovePrestoMusicAlbum($id: String!, $justification: String!) {
   deletePrestoMusicAlbum(id: $id, justification: $justification)
@@ -180,6 +216,9 @@ mutation MergeRecording($id: String!, $intoId: String!, $justification: String!)
 mutation RestoreRecording($id: String!, $justification: String!) {
   undeleteRecording(id: $id, justification: $justification) { id }
 }
+mutation CommentRecording($id: String!, $justification: String!) {
+  commentRecording(id: $id, justification: $justification) { id }
+}
 mutation RemoveRecording($id: String!, $justification: String!) {
   deleteRecording(id: $id, justification: $justification)
 }
@@ -191,6 +230,9 @@ mutation EditRecordingURL($id: String!, $input: UpdateRecordingURLInput!, $justi
 }
 mutation RestoreRecordingURL($id: String!, $justification: String!) {
   undeleteRecordingURL(id: $id, justification: $justification) { id }
+}
+mutation CommentRecordingURL($id: String!, $justification: String!) {
+  commentRecordingURL(id: $id, justification: $justification) { id }
 }
 mutation RemoveRecordingURL($id: String!, $justification: String!) {
   deleteRecordingURL(id: $id, justification: $justification)
@@ -207,6 +249,9 @@ mutation MergeSinger($id: String!, $intoId: String!, $justification: String!) {
 mutation RestoreSinger($id: String!, $justification: String!) {
   undeleteSinger(id: $id, justification: $justification) { id }
 }
+mutation CommentSinger($id: String!, $justification: String!) {
+  commentSinger(id: $id, justification: $justification) { id }
+}
 mutation RemoveSinger($id: String!, $justification: String!) {
   deleteSinger(id: $id, justification: $justification)
 }
@@ -218,6 +263,9 @@ mutation EditSpotifyAlbum($id: String!, $input: UpdateSpotifyAlbumInput!, $justi
 }
 mutation RestoreSpotifyAlbum($id: String!, $justification: String!) {
   undeleteSpotifyAlbum(id: $id, justification: $justification) { id }
+}
+mutation CommentSpotifyAlbum($id: String!, $justification: String!) {
+  commentSpotifyAlbum(id: $id, justification: $justification) { id }
 }
 mutation RemoveSpotifyAlbum($id: String!, $justification: String!) {
   deleteSpotifyAlbum(id: $id, justification: $justification)
@@ -231,6 +279,9 @@ mutation EditTidalAlbum($id: String!, $input: UpdateTidalAlbumInput!, $justifica
 mutation RestoreTidalAlbum($id: String!, $justification: String!) {
   undeleteTidalAlbum(id: $id, justification: $justification) { id }
 }
+mutation CommentTidalAlbum($id: String!, $justification: String!) {
+  commentTidalAlbum(id: $id, justification: $justification) { id }
+}
 mutation RemoveTidalAlbum($id: String!, $justification: String!) {
   deleteTidalAlbum(id: $id, justification: $justification)
 }
@@ -243,6 +294,9 @@ mutation EditUpc($id: String!, $input: UpdateUpcInput!, $justification: String!)
 mutation RestoreUpc($id: String!, $justification: String!) {
   undeleteUpc(id: $id, justification: $justification) { id }
 }
+mutation CommentUpc($id: String!, $justification: String!) {
+  commentUpc(id: $id, justification: $justification) { id }
+}
 mutation RemoveUpc($id: String!, $justification: String!) {
   deleteUpc(id: $id, justification: $justification)
 }
@@ -254,6 +308,9 @@ mutation EditWikipediaImage($id: String!, $input: UpdateWikipediaImageInput!, $j
 }
 mutation RestoreWikipediaImage($id: String!, $justification: String!) {
   undeleteWikipediaImage(id: $id, justification: $justification) { id }
+}
+mutation CommentWikipediaImage($id: String!, $justification: String!) {
+  commentWikipediaImage(id: $id, justification: $justification) { id }
 }
 mutation RemoveWikipediaImage($id: String!, $justification: String!) {
   deleteWikipediaImage(id: $id, justification: $justification)

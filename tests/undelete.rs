@@ -40,3 +40,17 @@ fn restoring_is_offered_more_widely_than_merging() {
     assert!(restorable > mergeable);
     assert_eq!(mergeable, 7);
 }
+
+#[test]
+fn comment_is_offered_for_every_type() {
+    // Generated beside undelete for every type, and codegen throws on a type
+    // that has one without the other.
+    for t in crud::TYPES {
+        assert_eq!(
+            t.comment,
+            format!("comment{}", t.graphql),
+            "{} comments through the wrong mutation",
+            t.name
+        );
+    }
+}

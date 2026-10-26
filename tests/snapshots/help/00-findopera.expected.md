@@ -19,6 +19,7 @@ Commands:
   unlink      Take a UPC off a recording
   delete      Remove a record
   undelete    Put a deleted or merged record back
+  comment     Add researched context to a record, changing nothing
   merge       Fold one record into another describing the same performance
   collection  Lists of recordings you keep on findopera.com
   describe    List the types, or say what one holds

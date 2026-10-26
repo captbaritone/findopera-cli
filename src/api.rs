@@ -1480,6 +1480,20 @@ impl Client {
         Ok(())
     }
 
+    /// Comment on a record, changing none of it.
+    ///
+    /// For research that found nothing to edit. The server writes a version
+    /// identical to the last one under a new edit, so the justification lands
+    /// in the record's history where the next editor reads before changing it.
+    pub fn comment(&self, kind: &Type, id: &str, justification: &str) -> Result<(), ApiError> {
+        self.query_named(
+            MUTATIONS,
+            &format!("Comment{}", kind.graphql),
+            serde_json::json!({ "id": id, "justification": justification }),
+        )?;
+        Ok(())
+    }
+
     /// Remove a record.
     pub fn delete(&self, kind: &Type, id: &str, justification: &str) -> Result<(), ApiError> {
         self.query_named(

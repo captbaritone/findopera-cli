@@ -198,6 +198,17 @@ For that, read the versions.
 """
 union EditableRecord = AlbumCoverArt | AppleMusicAlbum | Character | Composer | Conductor | Language | MusicBrainzRelease | MusicBrainzReleaseGroup | NaxosAlbum | Opera | Portrayal | PrestoMusicAlbum | Recording | RecordingURL | Singer | SpotifyAlbum | TidalAlbum | Upc | WikipediaImage
 
+"""
+One row of any versioned table, as one version of it was written.
+
+The columns of its table and nothing else. A reference is the id the column
+holds, not the record it names, so a row reads the same whether or not that
+record is still live, and an old version reads as it was written even where
+it breaks a rule the catalog enforces today. A value that is not of its
+column's kind, as a few early imports wrote, reads as null.
+"""
+union RecordRow = AlbumCoverArtRow | AppleMusicAlbumRow | CharacterRow | ComposerRow | ConductorRow | LanguageRow | MusicBrainzReleaseGroupRow | MusicBrainzReleaseRow | NaxosAlbumRow | OperaRow | PortrayalRow | PrestoMusicAlbumRow | RecordingRow | RecordingURLRow | RecordingUpcRow | SingerRow | SpotifyAlbumRow | TidalAlbumRow | UpcRow | WikipediaImageRow
+
 input CreateAlbumCoverArtInput {
   imageUrl: String
   source: String
@@ -719,6 +730,15 @@ type AlbumCoverArt {
   upc: String @semanticNonNull
 }
 
+"""
+A row of `album_cover_art`, the table behind `AlbumCoverArt`, as one version of it was written.
+"""
+type AlbumCoverArtRow {
+  imageUrl: String
+  source: String
+  upc: String @semanticNonNull
+}
+
 type AppleMusicAlbum {
   """
   This Apple Music album written out.
@@ -732,6 +752,14 @@ type AppleMusicAlbum {
   upc: Upc
   """URL to the album on Apple Music."""
   url: String @semanticNonNull
+}
+
+"""
+A row of `apple_music_albums`, the table behind `AppleMusicAlbum`, as one version of it was written.
+"""
+type AppleMusicAlbumRow {
+  id: String @semanticNonNull
+  upcId: String
 }
 
 type Character {
@@ -750,6 +778,17 @@ type Character {
   opera: Opera @semanticNonNull
   portrayals: [Portrayal!] @semanticNonNull
   url: String @semanticNonNull
+}
+
+"""
+A row of `characters`, the table behind `Character`, as one version of it was written.
+"""
+type CharacterRow {
+  englishName: String
+  id: Int @semanticNonNull
+  mergedIntoId: Int
+  name: String
+  operaId: Int
 }
 
 """
@@ -832,6 +871,22 @@ type Composer {
   wikipediaUrl: String
 }
 
+"""
+A row of `composers`, the table behind `Composer`, as one version of it was written.
+"""
+type ComposerRow {
+  born: Int
+  died: Int
+  firstName: String
+  id: Int @semanticNonNull
+  imslpUrl: String
+  lastName: String
+  mergedIntoId: Int
+  operaclassId: Int
+  spotifyArtistId: String
+  wikipediaUrl: String
+}
+
 type Conductor {
   """
   This conductor written out: recordings.
@@ -854,6 +909,21 @@ type Conductor {
   spotifyArtistId: String
   url: String @semanticNonNull
   wikipediaImage: WikipediaImage
+  wikipediaUrl: String
+}
+
+"""
+A row of `conductors`, the table behind `Conductor`, as one version of it was written.
+"""
+type ConductorRow {
+  born: Int
+  died: Int
+  firstName: String
+  id: Int @semanticNonNull
+  lastName: String
+  mergedIntoId: Int
+  operaclassId: Int
+  spotifyArtistId: String
   wikipediaUrl: String
 }
 
@@ -947,6 +1017,11 @@ type EditedRecord {
   deletion: RecordDeletion
   """The edit that wrote this version: who made it, when, and why."""
   edit: Edit @semanticNonNull
+  """
+  True if this version is a comment: it changed no field, and its
+  justification is the content.
+  """
+  isComment: Boolean @semanticNonNull
   """True if this edit created the record rather than changing one."""
   isNew: Boolean @semanticNonNull
   """
@@ -974,12 +1049,25 @@ type EditedRecord {
   
   Null when the record has no model of its own, as with a join table.
   """
-  record: EditableRecord
+  record: EditableRecord @deprecated(reason: "Read `row`, which is this version as it was written. This is the record as it is now, so it disagrees with the rest of the entry, and its relationships fail for a removed record that points at another.")
   """
   Identifies the record within its table. A join table has no single key, so
   its parts are joined with a colon.
   """
   recordId: String @semanticNonNull
+  """
+  This record as this version wrote it: the columns of its table, with each
+  reference as the id it holds.
+  
+  Describes the same moment as `deletion`, so an entry says one thing.
+  Applying entries in order therefore ends at the catalog as it stands: the
+  last version of each record is the one that wins. A deletion's row still
+  holds every column, as the delete left them.
+  
+  Present for the join tables too, which have no other type. Null only for
+  a table added since codegen last ran.
+  """
+  row: RecordRow
   """
   The table the record lives in, e.g. `recordings`. Always present, even
   when there is no model.
@@ -1066,6 +1154,17 @@ type Language {
   wikipediaCategory: String @semanticNonNull
 }
 
+"""
+A row of `languages`, the table behind `Language`, as one version of it was written.
+"""
+type LanguageRow {
+  abbreviation: String
+  id: Int @semanticNonNull
+  mergedIntoId: Int
+  name: String
+  wikipediaCategory: String
+}
+
 type MusicBrainzRelease {
   """
   This MusicBrainz release written out.
@@ -1090,6 +1189,22 @@ type MusicBrainzReleaseGroup {
   history: [Edit!] @semanticNonNull
   id: String @semanticNonNull
   recording: Recording
+}
+
+"""
+A row of `music_brainz_release_groups`, the table behind `MusicBrainzReleaseGroup`, as one version of it was written.
+"""
+type MusicBrainzReleaseGroupRow {
+  id: String @semanticNonNull
+  recordingId: Int
+}
+
+"""
+A row of `music_brainz_releases`, the table behind `MusicBrainzRelease`, as one version of it was written.
+"""
+type MusicBrainzReleaseRow {
+  id: String @semanticNonNull
+  upcId: String
 }
 
 type Mutation {
@@ -1236,6 +1351,253 @@ type Mutation {
   addWikipediaImage(
     input: CreateWikipediaImageInput!
     """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): WikipediaImage @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentAlbumCoverArt(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): AlbumCoverArt @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentAppleMusicAlbum(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): AppleMusicAlbum @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentCharacter(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): Character @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentComposer(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): Composer @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentConductor(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): Conductor @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentLanguage(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): Language @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentMusicBrainzRelease(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): MusicBrainzRelease @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentMusicBrainzReleaseGroup(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): MusicBrainzReleaseGroup @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentNaxosAlbum(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): NaxosAlbum @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentOpera(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): Opera @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentPortrayal(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): Portrayal @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentPrestoMusicAlbum(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): PrestoMusicAlbum @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentRecording(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): Recording @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentRecordingURL(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): RecordingURL @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentSinger(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): Singer @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentSpotifyAlbum(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): SpotifyAlbum @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentTidalAlbum(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): TidalAlbum @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentUpc(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): Upc @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentWikipediaImage(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
     justification: String!
   ): WikipediaImage @semanticNonNull
   """
@@ -2140,6 +2502,14 @@ type NaxosAlbum {
   url: String @semanticNonNull
 }
 
+"""
+A row of `naxos_albums`, the table behind `NaxosAlbum`, as one version of it was written.
+"""
+type NaxosAlbumRow {
+  catalogueId: String @semanticNonNull
+  upcId: String
+}
+
 type Opera {
   """
   This opera written out: composer, roles, recordings.
@@ -2169,6 +2539,22 @@ type Opera {
   title: String @semanticNonNull
   url: String @semanticNonNull
   wikipediaImage: WikipediaImage
+  wikipediaUrl: String
+}
+
+"""
+A row of `operas`, the table behind `Opera`, as one version of it was written.
+"""
+type OperaRow {
+  composerId: Int
+  englishTitle: String
+  id: Int @semanticNonNull
+  imslpUrl: String
+  languageId: Int
+  librettist: String
+  mergedIntoId: Int
+  operaclassId: Int
+  title: String
   wikipediaUrl: String
 }
 
@@ -2215,6 +2601,17 @@ type Portrayal {
   singer: Singer @semanticNonNull
 }
 
+"""
+A row of `portrayals`, the table behind `Portrayal`, as one version of it was written.
+"""
+type PortrayalRow {
+  characterId: Int
+  id: Int @semanticNonNull
+  noted: Boolean
+  recordingId: Int
+  singerId: Int
+}
+
 type PrestoMusicAlbum {
   """
   This Presto Music album written out.
@@ -2246,6 +2643,15 @@ type PrestoMusicAlbum {
   upc: Upc
   """URL to the product page on prestomusic.com."""
   url: String @semanticNonNull
+}
+
+"""
+A row of `presto_music_albums`, the table behind `PrestoMusicAlbum`, as one version of it was written.
+"""
+type PrestoMusicAlbumRow {
+  isStreaming: Boolean
+  slug: String @semanticNonNull
+  upcId: String
 }
 
 type Query {
@@ -2586,6 +2992,22 @@ type Recording {
   year: Int
 }
 
+"""
+A row of `recordings`, the table behind `Recording`, as one version of it was written.
+"""
+type RecordingRow {
+  chorus: String
+  conductorId: Int
+  day: Int
+  id: Int @semanticNonNull
+  mergedIntoId: Int
+  month: Int
+  operaId: Int
+  operaclassId: Int
+  orchestra: String
+  year: Int
+}
+
 type RecordingURL {
   """
   This Recording URL written out.
@@ -2598,6 +3020,23 @@ type RecordingURL {
   id: Int @semanticNonNull
   recording: Recording @semanticNonNull
   url: String @semanticNonNull
+}
+
+"""
+A row of `recording_urls`, the table behind `RecordingURL`, as one version of it was written.
+"""
+type RecordingURLRow {
+  id: Int @semanticNonNull
+  recordingId: Int
+  url: String
+}
+
+"""
+A row of `recording_upcs`, which has no type of its own, as one version of it was written.
+"""
+type RecordingUpcRow {
+  recordingId: Int @semanticNonNull
+  upcId: String @semanticNonNull
 }
 
 type Singer {
@@ -2625,6 +3064,21 @@ type Singer {
   wikipediaUrl: String
 }
 
+"""
+A row of `singers`, the table behind `Singer`, as one version of it was written.
+"""
+type SingerRow {
+  born: Int
+  died: Int
+  firstName: String
+  id: Int @semanticNonNull
+  lastName: String
+  mergedIntoId: Int
+  operaclassId: Int
+  spotifyArtistId: String
+  wikipediaUrl: String
+}
+
 type SpotifyAlbum {
   albumName: String
   """
@@ -2641,6 +3095,15 @@ type SpotifyAlbum {
   url: String @semanticNonNull
 }
 
+"""
+A row of `spotify_albums`, the table behind `SpotifyAlbum`, as one version of it was written.
+"""
+type SpotifyAlbumRow {
+  albumName: String
+  id: String @semanticNonNull
+  upcId: String
+}
+
 type TidalAlbum {
   """
   This Tidal album written out.
@@ -2654,6 +3117,14 @@ type TidalAlbum {
   upc: Upc
   """URL to the album on Tidal."""
   url: String @semanticNonNull
+}
+
+"""
+A row of `tidal_albums`, the table behind `TidalAlbum`, as one version of it was written.
+"""
+type TidalAlbumRow {
+  id: String @semanticNonNull
+  upcId: String
 }
 
 type Upc {
@@ -2697,6 +3168,13 @@ type Upc {
   Somewhere less formal than an API (a page, a link, anything a person reads)
   is welcome to drop the leading zeros again.
   """
+  upc: String @semanticNonNull
+}
+
+"""
+A row of `upcs`, the table behind `Upc`, as one version of it was written.
+"""
+type UpcRow {
   upc: String @semanticNonNull
 }
 
@@ -2771,6 +3249,14 @@ type WikipediaImage {
   name for the same value.
   """
   id: String @semanticNonNull
+  imageUrl: String
+  wikipediaUrl: String @semanticNonNull
+}
+
+"""
+A row of `wikipedia_images`, the table behind `WikipediaImage`, as one version of it was written.
+"""
+type WikipediaImageRow {
   imageUrl: String
   wikipediaUrl: String @semanticNonNull
 }

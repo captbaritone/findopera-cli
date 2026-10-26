@@ -141,6 +141,13 @@ export function table(schema, getOperations) {
           `than a type that is meant to be one-way.`,
       );
     }
+    if (!mutations[`comment${graphql}`]) {
+      throw new Error(
+        `${graphql} can be edited and not commented on. The server generates ` +
+          `a comment beside every undelete, so this is a schema that is ` +
+          `half-updated rather than a type that is meant to go without.`,
+      );
+    }
     const root = `get${graphql}ById`;
     if (!queries[root]) continue;
 
@@ -183,6 +190,9 @@ export function table(schema, getOperations) {
       // the pair together, so looking for one and assuming the other would
       // only hide a mismatch.
       restore: `undelete${graphql}`,
+      // A finding written against the record, changing nothing. Generated
+      // beside undelete for every type, and required for the same reason.
+      comment: `comment${graphql}`,
       // Only some types can be merged, so this is looked for rather than
       // assumed. A type without one is not a gap to be filled in later: the
       // server merges the things two records can turn out to be the same of,
@@ -233,6 +243,8 @@ export function crud(schema, getOperations) {
   L.push("    pub remove: &'static str,");
   L.push("    /// The mutation that puts one back, deleted or merged away.");
   L.push("    pub restore: &'static str,");
+  L.push("    /// The mutation that comments on one, changing nothing.");
+  L.push("    pub comment: &'static str,");
   L.push("    /// The mutation that merges one of these away, where there is one.");
   L.push("    pub merge: Option<&'static str>,");
   L.push("    /// The GraphQL input object a create takes.");
@@ -277,6 +289,7 @@ export function crud(schema, getOperations) {
     L.push(`        update: ${rustStr(t.update)},`);
     L.push(`        remove: ${rustStr(t.remove)},`);
     L.push(`        restore: ${rustStr(t.restore)},`);
+    L.push(`        comment: ${rustStr(t.comment)},`);
     L.push(
       `        merge: ${t.merge ? `Some(${rustStr(t.merge)})` : "None"},`,
     );

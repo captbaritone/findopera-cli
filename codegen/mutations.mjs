@@ -147,6 +147,7 @@ export function mutations(schema, getOperations) {
 
     for (const [verb, mutation] of [
       ["Restore", t.restore],
+      ["Comment", t.comment],
       ["Remove", t.remove],
     ]) {
       out.push(

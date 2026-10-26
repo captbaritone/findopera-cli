@@ -316,6 +316,23 @@ It refuses a record that is not deleted, and one whose unique value another
 live record has taken since — clear it from that record first.")]
     Undelete(UndeleteArgs),
 
+    /// Add researched context to a record, changing nothing
+    #[command(long_about = "\
+Add researched context to a record, without changing any of it.
+
+  findopera comment singer 133 -m 'https://en.wikipedia.org/wiki/Maria_Callas gives born 1923, as stored.'
+  findopera comment recording 264 -m 'Searched OperaDis, MusicBrainz and the booklet for a recording date; none gives one.'
+
+For research that ended with nothing to edit: a value checked against a
+source and found right, or a question searched and not settled. Either is
+worth keeping. The comment goes into the record's history like any edit,
+where the next editor reads it before changing the record, and saves them
+repeating your search.
+
+The -m is the comment: where you looked, and what you found there or that you
+found nothing. It records a finding; it is not a question for anyone.")]
+    Comment(CommentArgs),
+
     /// Fold one record into another describing the same performance.
     #[command(
         long_about = "\
@@ -813,6 +830,27 @@ struct UndeleteArgs {
     id: String,
     /// Your source and the rule applied, for the record's history. See
     /// `create --help`.
+    #[arg(long, short = 'm', value_name = "TEXT")]
+    message: String,
+    /// Print the result as JSON.
+    #[arg(long)]
+    json: bool,
+    #[arg(long, default_value = api::DEFAULT_ENDPOINT, value_name = "URL")]
+    endpoint: String,
+    #[arg(long, value_name = "TOKEN")]
+    token: Option<String>,
+}
+
+#[derive(Args)]
+struct CommentArgs {
+    /// What kind of record.
+    #[arg(value_name = "TYPE")]
+    kind: String,
+    /// Its id.
+    #[arg(value_name = "ID")]
+    id: String,
+    /// Where you looked, and what you found there or that you found nothing.
+    /// It is published in the record's history.
     #[arg(long, short = 'm', value_name = "TEXT")]
     message: String,
     /// Print the result as JSON.
@@ -1408,6 +1446,7 @@ pub fn dispatch(ui: &mut Session, cli: Cli) -> i32 {
         Command::Unlink(args) => cmd_link(ui, args, false),
         Command::Delete(args) => cmd_delete(ui, args),
         Command::Undelete(args) => cmd_undelete(ui, args),
+        Command::Comment(args) => cmd_comment(ui, args),
         Command::Merge(args) => cmd_merge(ui, args),
         Command::Collection(args) => cmd_collection(ui, args),
         Command::Describe(args) => cmd_describe(ui, args),
@@ -1685,6 +1724,43 @@ fn cmd_undelete(ui: &mut Session, args: UndeleteArgs) -> i32 {
                 );
             } else {
                 note!(ui, "findopera: restored {} {}", kind.name, args.id);
+            }
+            0
+        }
+        Err(e) => failed(ui, &e, args.json),
+    }
+}
+
+fn cmd_comment(ui: &mut Session, args: CommentArgs) -> i32 {
+    let kind = match kind_named(ui, &args.kind) {
+        Ok(k) => k,
+        Err(code) => return code,
+    };
+    if args.message.trim().is_empty() {
+        return refused(
+            ui,
+            "-m is the comment, so it cannot be empty. Say where you looked and what you \
+             found, or that you found nothing: `-m 'Searched OperaDis and MusicBrainz for a \
+             recording date; neither gives one.'`",
+            "NO_JUSTIFICATION",
+            args.json,
+            2,
+        );
+    }
+    // No --yes. Nothing is taken away; nothing is even changed.
+    let api = match client(ui, &args.endpoint, args.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match api.comment(kind, &args.id, &args.message) {
+        Ok(()) => {
+            if args.json {
+                emit(
+                    ui,
+                    format_args!("{}", serde_json::json!({ "commented": args.id })),
+                );
+            } else {
+                note!(ui, "findopera: commented on {} {}", kind.name, args.id);
             }
             0
         }

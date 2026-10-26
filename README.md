@@ -122,12 +122,18 @@ $ echo '{"died":1977}' | findopera edit singer 133 -m 'https://en.wikipedia.org/
 $ findopera delete singer 133 -m 'https://findopera.com/singer/456 — same person, already here' --yes
 $ findopera undelete singer 133 -m 'https://en.wikipedia.org/wiki/Maria_Callas — not a duplicate after all'
 $ findopera merge singer 133 --into 456 -m 'https://en.wikipedia.org/wiki/Maria_Callas — one person, two spellings' --yes
+$ findopera comment singer 133 -m 'https://en.wikipedia.org/wiki/Maria_Callas gives born 1923, as stored.'
 ```
 
 Nothing here is one-way. `undelete` puts a record back under the same id, and
 it takes merged records too, so the ids you have written down keep meaning
 what they meant. It asks for no `--yes`: the two verbs that do are the two
 that take something away.
+
+`comment` is for research that ended with nothing to change: a value checked
+and found right, or a question searched and not settled. It writes the `-m`
+into the record's history and changes no field, so the next editor sees what
+you checked before checking it again.
 
 `findopera describe` lists the twenty types. Input is JSON on stdin or from a
 file, and the fields are checked here before anything is sent — a misspelling
