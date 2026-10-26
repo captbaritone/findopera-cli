@@ -582,10 +582,14 @@ findopera.com. Read it before a first edit.
   findopera policy identity    every rule in one stage")]
     Policy(PolicyArgs),
 
-    /// Send a note to whoever maintains findopera.com.
+    /// Report a bug to whoever maintains findopera.com.
     #[command(long_about = "\
-Say something to whoever maintains findopera.com — a recording that is wrong,
-a field this cannot express, something that went badly.
+Report a bug to whoever maintains findopera.com: something this program or the
+site does wrong, a field the catalog cannot express, or a case the editorial
+policy cannot settle (begin the message \"no rule covered this\").
+
+A question about the facts is not a bug, and is not for here (P4). Research
+it, then edit the record, or `findopera comment` on it with where you looked.
 
 The message may be an argument or standard input, so a session that just went
 wrong can be sent as it stands:

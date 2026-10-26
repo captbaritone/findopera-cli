@@ -29,7 +29,7 @@ Commands:
   graphql     Send a GraphQL query to findopera.com and print the response
   schema      Print the GraphQL schema, or one type from it
   policy      Print the editorial policy, or one rule from it
-  feedback    Send a note to whoever maintains findopera.com
+  feedback    Report a bug to whoever maintains findopera.com
   login       Store a token, so that requests say who is making them
   logout      Forget the stored token
   self        This program itself: whether it is the current version
