@@ -61,6 +61,11 @@ enum ConductorSortBy {
   LAST_EDITED
 }
 
+enum DiscogsReleaseSortBy {
+  DATE_CREATED
+  LAST_EDITED
+}
+
 """
 What a piece of feedback is about.
 
@@ -131,6 +136,7 @@ enum RecordTable {
   CHARACTERS
   COMPOSERS
   CONDUCTORS
+  DISCOGS_RELEASES
   LANGUAGES
   MUSIC_BRAINZ_RELEASES
   MUSIC_BRAINZ_RELEASE_GROUPS
@@ -139,6 +145,7 @@ enum RecordTable {
   PORTRAYALS
   PRESTO_MUSIC_ALBUMS
   RECORDINGS
+  RECORDING_DISCOGS_RELEASES
   RECORDING_UPCS
   RECORDING_URLS
   SINGERS
@@ -196,7 +203,7 @@ the record as it stands *now*, not as that edit left it. Following an edit
 to a singer tells you which singer was changed, not what the change said.
 For that, read the versions.
 """
-union EditableRecord = AlbumCoverArt | AppleMusicAlbum | Character | Composer | Conductor | Language | MusicBrainzRelease | MusicBrainzReleaseGroup | NaxosAlbum | Opera | Portrayal | PrestoMusicAlbum | Recording | RecordingURL | Singer | SpotifyAlbum | TidalAlbum | Upc | WikipediaImage
+union EditableRecord = AlbumCoverArt | AppleMusicAlbum | Character | Composer | Conductor | DiscogsRelease | Language | MusicBrainzRelease | MusicBrainzReleaseGroup | NaxosAlbum | Opera | Portrayal | PrestoMusicAlbum | Recording | RecordingURL | Singer | SpotifyAlbum | TidalAlbum | Upc | WikipediaImage
 
 """
 One row of any versioned table, as one version of it was written.
@@ -207,7 +214,7 @@ record is still live, and an old version reads as it was written even where
 it breaks a rule the catalog enforces today. A value that is not of its
 column's kind, as a few early imports wrote, reads as null.
 """
-union RecordRow = AlbumCoverArtRow | AppleMusicAlbumRow | CharacterRow | ComposerRow | ConductorRow | LanguageRow | MusicBrainzReleaseGroupRow | MusicBrainzReleaseRow | NaxosAlbumRow | OperaRow | PortrayalRow | PrestoMusicAlbumRow | RecordingRow | RecordingURLRow | RecordingUpcRow | SingerRow | SpotifyAlbumRow | TidalAlbumRow | UpcRow | WikipediaImageRow
+union RecordRow = AlbumCoverArtRow | AppleMusicAlbumRow | CharacterRow | ComposerRow | ConductorRow | DiscogsReleaseRow | LanguageRow | MusicBrainzReleaseGroupRow | MusicBrainzReleaseRow | NaxosAlbumRow | OperaRow | PortrayalRow | PrestoMusicAlbumRow | RecordingDiscogsReleaseRow | RecordingRow | RecordingURLRow | RecordingUpcRow | SingerRow | SpotifyAlbumRow | TidalAlbumRow | UpcRow | WikipediaImageRow
 
 input CreateAlbumCoverArtInput {
   imageUrl: String
@@ -271,6 +278,26 @@ input CreateConductorInput {
   """
   wikipediaImageId: String @deprecated(reason: "Set `wikipediaUrl` instead.")
   wikipediaUrl: String
+}
+
+input CreateDiscogsReleaseInput {
+  """
+  The release's id on Discogs: one specific pressing or edition.
+  
+  Discogs ids are integers, and this one is held as a string of digits, the
+  way the catalog holds every other outside id. A release's address on
+  discogs.com, or the id written as r123456, is accepted as well and stored
+  as the bare number.
+  """
+  id: String!
+  """
+  The Discogs master this release belongs to, if it has one.
+  
+  A master gathers every pressing of one album; a release is one of them.
+  Many releases have no master, which is spelled null.
+  """
+  masterId: Int
+  upcId: String
 }
 
 input CreateLanguageInput {
@@ -406,9 +433,28 @@ input CreateWikipediaImageInput {
   wikipediaUrl: String!
 }
 
+input LinkRecordingDiscogsReleaseInput {
+  """The release's id, or its address on discogs.com."""
+  discogsReleaseId: String!
+  """
+  The release as Discogs describes it, for one the catalog does not hold
+  yet: it is created in the same edit as the link. Ignored when the release
+  already exists.
+  """
+  newRelease: NewDiscogsReleaseInput
+  recordingId: String!
+}
+
 input LinkRecordingUpcInput {
   recordingId: String!
   upc: String!
+}
+
+input NewDiscogsReleaseInput {
+  """Its master on Discogs, or null where Discogs shows none."""
+  masterId: Int
+  """The barcode printed on the release, if it carries one."""
+  upc: String
 }
 
 """
@@ -416,7 +462,7 @@ Filter criteria for searching recordings.
 All fields are optional - only provided fields will be used for filtering.
 """
 input RecordingFilterInput {
-  """A Spotify, Apple Music or Tidal album link: the recordings on it."""
+  """A Spotify, Apple Music, Tidal or Discogs album link: its recordings."""
   albumUrl: String
   """Filter by approximate year (within 2 years of the given year)"""
   approximateYear: Int
@@ -542,6 +588,26 @@ input UpdateConductorInput {
   """
   wikipediaImageId: String @deprecated(reason: "Set `wikipediaUrl` instead.")
   wikipediaUrl: String
+}
+
+input UpdateDiscogsReleaseInput {
+  """
+  The release's id on Discogs: one specific pressing or edition.
+  
+  Discogs ids are integers, and this one is held as a string of digits, the
+  way the catalog holds every other outside id. A release's address on
+  discogs.com, or the id written as r123456, is accepted as well and stored
+  as the bare number.
+  """
+  id: String
+  """
+  The Discogs master this release belongs to, if it has one.
+  
+  A master gathers every pressing of one album; a release is one of them.
+  Many releases have no master, which is spelled null.
+  """
+  masterId: Int
+  upcId: String
 }
 
 input UpdateLanguageInput {
@@ -927,6 +993,51 @@ type ConductorRow {
   wikipediaUrl: String
 }
 
+type DiscogsRelease {
+  """
+  This Discogs release written out.
+  
+  For reading, not parsing: one field instead of a query, and the layout may
+  change without notice.
+  """
+  asPlainText: String @semanticNonNull
+  history: [Edit!] @semanticNonNull
+  """
+  The release's id on Discogs: one specific pressing or edition.
+  
+  Discogs ids are integers, and this one is held as a string of digits, the
+  way the catalog holds every other outside id. A release's address on
+  discogs.com, or the id written as r123456, is accepted as well and stored
+  as the bare number.
+  """
+  id: String @semanticNonNull
+  """
+  The Discogs master this release belongs to, if it has one.
+  
+  A master gathers every pressing of one album; a release is one of them.
+  Many releases have no master, which is spelled null.
+  """
+  masterId: Int
+  """
+  URL to the master this release belongs to on Discogs, or null where it has
+  none.
+  """
+  masterUrl: String
+  recordings: [Recording!] @semanticNonNull
+  upc: Upc
+  """URL to the release on Discogs."""
+  url: String @semanticNonNull
+}
+
+"""
+A row of `discogs_releases`, the table behind `DiscogsRelease`, as one version of it was written.
+"""
+type DiscogsReleaseRow {
+  id: String @semanticNonNull
+  masterId: Int
+  upcId: String
+}
+
 """
 Represents an edit made to a record. In FindOpera, records are immutable, so
 an edit corresponds to the creation of a new record with updated data. The
@@ -1238,6 +1349,12 @@ type Mutation {
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
   ): Conductor @semanticNonNull
+  """Create a new DiscogsRelease record."""
+  addDiscogsRelease(
+    input: CreateDiscogsReleaseInput!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): DiscogsRelease @semanticNonNull
   """Create a new Language record."""
   addLanguage(
     input: CreateLanguageInput!
@@ -1418,6 +1535,19 @@ type Mutation {
     """
     justification: String!
   ): Conductor @semanticNonNull
+  """
+  Add researched context to a record's history, changing no field.
+  
+  For research that found nothing to edit: a value confirmed, or a question
+  that could not be settled. A finding, not a question for anyone.
+  """
+  commentDiscogsRelease(
+    id: String!
+    """
+    The comment: where you looked, and what you found there or that you found nothing
+    """
+    justification: String!
+  ): DiscogsRelease @semanticNonNull
   """
   Add researched context to a record's history, changing no field.
   
@@ -1691,6 +1821,15 @@ type Mutation {
     justification: String!
   ): Boolean @semanticNonNull
   """
+  Delete a DiscogsRelease record by ID.
+  Returns true if the record was deleted, false if it didn't exist.
+  """
+  deleteDiscogsRelease(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
   Delete a Language record by ID.
   Returns true if the record was deleted, false if it didn't exist.
   """
@@ -1813,6 +1952,16 @@ type Mutation {
   """
   deleteWikipediaImage(
     id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): Boolean @semanticNonNull
+  """
+  Link a recording to a Discogs release it appears on. The recording must
+  exist. The release must too, unless `newRelease` describes it, in which
+  case it is created alongside the link, in one edit.
+  """
+  linkRecordingToDiscogsRelease(
+    input: LinkRecordingDiscogsReleaseInput!
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
   ): Boolean @semanticNonNull
@@ -2101,6 +2250,22 @@ type Mutation {
     justification: String!
   ): Conductor
   """
+  Put a deleted DiscogsRelease back, by id.
+  
+  Returns the restored record, so a caller can see what came back rather
+  than only that something did.
+  
+  Null when there is no such record at all. A record that is already live
+  is an error rather than a null, because asking to restore something that
+  was never gone means the caller is working from a wrong idea of what
+  happened.
+  """
+  undeleteDiscogsRelease(
+    id: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): DiscogsRelease
+  """
   Put a deleted or merged Language back, by id.
   
   Returns the restored record, so a caller can see what came back rather
@@ -2333,6 +2498,17 @@ type Mutation {
     justification: String!
   ): WikipediaImage
   """
+  Unlink a recording from a Discogs release. Returns true if a link was
+  deleted, false if no link existed.
+  """
+  unlinkRecordingDiscogsRelease(
+    """The release's id, or its address on discogs.com."""
+    discogsReleaseId: String!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+    recordingId: String!
+  ): Boolean @semanticNonNull
+  """
   Assuming a UPC and Recording exist, unlink them. Returns true if a link was
   deleted, false if no link existed.
   """
@@ -2377,6 +2553,13 @@ type Mutation {
     """Verifiable source (ideally URL) and context for this change"""
     justification: String!
   ): Conductor @semanticNonNull
+  """Update a DiscogsRelease record by ID."""
+  updateDiscogsRelease(
+    id: String!
+    input: UpdateDiscogsReleaseInput!
+    """Verifiable source (ideally URL) and context for this change"""
+    justification: String!
+  ): DiscogsRelease @semanticNonNull
   """Update a Language record by ID."""
   updateLanguage(
     id: String!
@@ -2733,6 +2916,8 @@ type Query {
   so the answer is at least stable.
   """
   getConductorByOperaclassId(operaclassId: Int!): Conductor
+  getDiscogsReleaseById(id: String!): DiscogsRelease
+  getDiscogsReleaseByIds(ids: [String!]!): [DiscogsRelease] @semanticNonNull
   """A single edit, by id."""
   getEditById(id: Int!): Edit
   """
@@ -2852,6 +3037,7 @@ type Query {
   listCharacters(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: CharacterSortBy): [Character!] @semanticNonNull
   listComposers(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: ComposerSortBy): [Composer!] @semanticNonNull
   listConductors(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: ConductorSortBy): [Conductor!] @semanticNonNull
+  listDiscogsReleases(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: DiscogsReleaseSortBy): [DiscogsRelease!] @semanticNonNull
   listLanguages(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: LanguageSortBy): [Language!] @semanticNonNull
   listMusicBrainzReleaseGroups(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: MusicBrainzReleaseGroupSortBy): [MusicBrainzReleaseGroup!] @semanticNonNull
   listMusicBrainzReleases(first: Int! = 100, offset: Int! = 0, order: SortOrder, sortBy: MusicBrainzReleaseSortBy): [MusicBrainzRelease!] @semanticNonNull
@@ -2954,6 +3140,7 @@ type Recording {
   """
   coverArt: AlbumCoverArt
   day: Int
+  discogsReleases: [DiscogsRelease!] @semanticNonNull
   """
   Get all Apple Music albums associated with a recording through UPC relationships.
   Traverses: Recording -> RecordingUpc -> Upc -> AppleMusicAlbum
@@ -2990,6 +3177,14 @@ type Recording {
   upcs: [Upc!] @semanticNonNull
   url: String @semanticNonNull
   year: Int
+}
+
+"""
+A row of `recording_discogs_releases`, which has no type of its own, as one version of it was written.
+"""
+type RecordingDiscogsReleaseRow {
+  discogsReleaseId: String @semanticNonNull
+  recordingId: Int @semanticNonNull
 }
 
 """
@@ -3140,6 +3335,7 @@ type Upc {
   Indicates a UPC represent a release that includes multiple opera recordings.
   """
   collection: Boolean @semanticNonNull
+  discogsReleases: [DiscogsRelease!] @semanticNonNull
   history: [Edit!] @semanticNonNull
   """
   The value that identifies this record.

@@ -93,6 +93,21 @@ mutation CommentConductor($id: String!, $justification: String!) {
 mutation RemoveConductor($id: String!, $justification: String!) {
   deleteConductor(id: $id, justification: $justification)
 }
+mutation AddDiscogsRelease($input: CreateDiscogsReleaseInput!, $justification: String!) {
+  addDiscogsRelease(input: $input, justification: $justification) { id }
+}
+mutation EditDiscogsRelease($id: String!, $input: UpdateDiscogsReleaseInput!, $justification: String!) {
+  updateDiscogsRelease(id: $id, input: $input, justification: $justification) { id }
+}
+mutation RestoreDiscogsRelease($id: String!, $justification: String!) {
+  undeleteDiscogsRelease(id: $id, justification: $justification) { id }
+}
+mutation CommentDiscogsRelease($id: String!, $justification: String!) {
+  commentDiscogsRelease(id: $id, justification: $justification) { id }
+}
+mutation RemoveDiscogsRelease($id: String!, $justification: String!) {
+  deleteDiscogsRelease(id: $id, justification: $justification)
+}
 mutation AddLanguage($input: CreateLanguageInput!, $justification: String!) {
   addLanguage(input: $input, justification: $justification) { id }
 }
@@ -320,6 +335,12 @@ mutation LinkRecordingUpc($input: LinkRecordingUpcInput!, $justification: String
 }
 mutation UnlinkRecordingUpc($recordingId: String!, $upc: String!, $justification: String!) {
   unlinkRecordingUpc(recordingId: $recordingId, upc: $upc, justification: $justification)
+}
+mutation LinkRecordingDiscogsRelease($input: LinkRecordingDiscogsReleaseInput!, $justification: String!) {
+  linkRecordingToDiscogsRelease(input: $input, justification: $justification)
+}
+mutation UnlinkRecordingDiscogsRelease($recordingId: String!, $discogsReleaseId: String!, $justification: String!) {
+  unlinkRecordingDiscogsRelease(recordingId: $recordingId, discogsReleaseId: $discogsReleaseId, justification: $justification)
 }
 mutation AddRecordingToCollection($collectionId: Int!, $recordingId: Int!) {
   addRecordingToCollection(collectionId: $collectionId, recordingId: $recordingId) { id name entryCount url }

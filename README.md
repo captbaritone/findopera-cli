@@ -254,6 +254,21 @@ The UPC has to exist first — nothing conjures one from a typo. Punctuation in
 the code is dropped, but unlike `search --upc` the digits are not padded: this
 names a record to attach, and guessing at which is not the same as finding one.
 
+### Attaching a Discogs release
+
+The same verbs, with `--discogs` in place of `--upc`. The release is its id,
+`r123`, or its discogs.com address:
+
+```bash
+$ findopera link recording 1939 --discogs https://www.discogs.com/release/4561913 --master 295989 -m 'https://www.discogs.com/release/4561913 — tracklist and credits match'
+$ findopera unlink recording 1939 --discogs 4561913 -m 'https://www.discogs.com/release/4561913 — a different performance'
+```
+
+Unlike a UPC, a release does not have to exist first. A link that names one
+the catalog does not hold creates it, provided `--master` says what its master
+is: the id from the release's Discogs page, or `--master none` where the page
+shows no master. A release already in the catalog needs no `--master`.
+
 ### Errors
 
 One convention everywhere. A person gets the server's words on stderr:

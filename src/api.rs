@@ -956,6 +956,8 @@ mod tests {
         for operation in [
             "LinkRecordingUpc",
             "UnlinkRecordingUpc",
+            "LinkRecordingDiscogsRelease",
+            "UnlinkRecordingDiscogsRelease",
             "AddRecordingToCollection",
             "RemoveRecordingFromCollection",
             "CreateCollection",
@@ -1522,9 +1524,10 @@ impl Client {
     ///
     /// Hand-written rather than generated: these are the only mutations that
     /// join two records rather than acting on one, so the table of types has
-    /// nothing to hang them from. There is exactly one such relationship, and
-    /// a second would want its own verb here rather than a general mechanism
-    /// built for a population of one.
+    /// nothing to hang them from. There are two such relationships, this and
+    /// `link_discogs` below, and each has its own verb rather than a general
+    /// mechanism: their arguments differ, since a Discogs release can be
+    /// created by the link that names it and a barcode cannot.
     pub fn link_upc(
         &self,
         recording: &str,
@@ -1546,6 +1549,46 @@ impl Client {
                 serde_json::json!({
                     "recordingId": recording,
                     "upc": upc,
+                    "justification": justification,
+                }),
+            )
+        };
+        self.query_named(MUTATIONS, operation, variables)?;
+        Ok(())
+    }
+
+    /// A recording on a Discogs release, or off it.
+    ///
+    /// `master` is `Some` only for a release the catalog may not hold yet:
+    /// `Some(Some(id))` for its master, `Some(None)` where Discogs shows none.
+    /// The server creates the release from it if it is new, in the same edit
+    /// as the link, and ignores it otherwise.
+    pub fn link_discogs(
+        &self,
+        recording: &str,
+        release: &str,
+        master: Option<Option<u64>>,
+        justification: &str,
+        on: bool,
+    ) -> Result<(), ApiError> {
+        let (operation, variables) = if on {
+            let mut input = serde_json::json!({
+                "recordingId": recording,
+                "discogsReleaseId": release,
+            });
+            if let Some(master) = master {
+                input["newRelease"] = serde_json::json!({ "masterId": master });
+            }
+            (
+                "LinkRecordingDiscogsRelease",
+                serde_json::json!({ "input": input, "justification": justification }),
+            )
+        } else {
+            (
+                "UnlinkRecordingDiscogsRelease",
+                serde_json::json!({
+                    "recordingId": recording,
+                    "discogsReleaseId": release,
                     "justification": justification,
                 }),
             )

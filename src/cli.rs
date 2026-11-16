@@ -258,25 +258,32 @@ file. Only the fields present are touched.
 Every change needs -m, as `create --help` describes.")]
     Edit(EditArgs),
 
-    /// Attach a UPC to a recording.
+    /// Attach a UPC or a Discogs release to a recording.
     #[command(long_about = "\
-Attach a barcode to a recording, so that the release and the performance know
-about each other.
+Attach a barcode or a Discogs release to a recording, so that the release and
+the performance know about each other.
 
   findopera link recording 264 --upc 0013491103020 -m 'https://www.discogs.com/release/1234567 — barcode on the back of the box'
+  findopera link recording 264 --discogs https://www.discogs.com/release/1234567 --master 98765 -m 'https://www.discogs.com/release/1234567 — tracklist and credits match'
 
 The UPC has to exist already — `findopera create upc` makes one — because a
 barcode conjured out of a typo is worse than a missing link. Barcodes are
 matched exactly here, unlike `search --upc`: this says which record to attach,
-and guessing at that is not the same as finding it.")]
+and guessing at that is not the same as finding it.
+
+A Discogs release is created by the link that first names it, if you say what
+its master is: --master with the number from the release's Discogs page, or
+--master none where the page shows no master. A release already in the catalog
+needs no --master.")]
     Link(LinkArgs),
 
-    /// Take a UPC off a recording.
+    /// Take a UPC or a Discogs release off a recording.
     #[command(long_about = "\
-Detach a barcode from a recording. The UPC record itself stays; only the
-connection between the two goes.
+Detach a barcode or a Discogs release from a recording. The UPC or release
+record itself stays; only the connection between the two goes.
 
-  findopera unlink recording 264 --upc 0013491103020 -m 'https://www.discogs.com/release/7654321 — this barcode is the 2002 set'")]
+  findopera unlink recording 264 --upc 0013491103020 -m 'https://www.discogs.com/release/7654321 — this barcode is the 2002 set'
+  findopera unlink recording 264 --discogs 7654321 -m 'https://www.discogs.com/release/7654321 — a different performance'")]
     Unlink(LinkArgs),
 
     /// Remove a record.
@@ -920,22 +927,31 @@ struct MergeArgs {
 /// What a relationship command joins.
 ///
 /// A subcommand rather than a value, as `search` is, so that each side can
-/// document what it may be joined to. Recording and UPC is the only pair the
-/// database has; another would be another subcommand here.
+/// document what it may be joined to. A recording is joined to a UPC or to a
+/// Discogs release, both from the recording's side, so they are flags on one
+/// subcommand rather than two.
 #[derive(Subcommand)]
 enum Joining {
-    /// A recording, to a UPC.
+    /// A recording, to a UPC or a Discogs release.
     Recording(LinkRecordingArgs),
 }
 
 #[derive(Args)]
+#[command(group(clap::ArgGroup::new("other").required(true).args(["upc", "discogs"])))]
 struct LinkRecordingArgs {
     /// The recording's id.
     #[arg(value_name = "ID")]
     id: String,
     /// The barcode, which must already be a UPC record.
     #[arg(long, value_name = "CODE")]
-    upc: String,
+    upc: Option<String>,
+    /// A Discogs release: its id, r123, or its discogs.com address.
+    #[arg(long, value_name = "RELEASE")]
+    discogs: Option<String>,
+    /// For a Discogs release new to the catalog: its master's id, or `none`
+    /// where Discogs shows no master. Only with --discogs.
+    #[arg(long, value_name = "ID|none", requires = "discogs")]
+    master: Option<String>,
     /// Your source and the rule applied, for the record's history. See
     /// `create --help`.
     #[arg(long, short = 'm', value_name = "TEXT")]
@@ -2383,15 +2399,19 @@ fn cmd_link(ui: &mut Session, args: LinkArgs, on: bool) -> i32 {
             2,
         );
     }
+    if let Some(release) = &a.discogs {
+        return link_discogs(ui, &a, release, on);
+    }
+    let raw = a.upc.as_deref().unwrap_or_default();
     // Punctuation is dropped because a barcode copied off a box carries
     // whatever was printed with it. Nothing is padded, though: this names a
     // record to attach rather than searching for one, and 12 and 13 digit
     // forms are different ids even when they mean the same product.
-    let upc: String = a.upc.chars().filter(char::is_ascii_digit).collect();
+    let upc: String = raw.chars().filter(char::is_ascii_digit).collect();
     if upc.is_empty() {
         return refused(
             ui,
-            &format!("`{}` has no digits in it", a.upc),
+            &format!("`{raw}` has no digits in it"),
             "BAD_INPUT",
             a.json,
             2,
@@ -2420,6 +2440,86 @@ fn cmd_link(ui: &mut Session, args: LinkArgs, on: bool) -> i32 {
             0
         }
         Err(e) => failed(ui, &e, a.json),
+    }
+}
+
+/// The Discogs half of `link` and `unlink`.
+///
+/// The release is passed through as written: the server reads an id, `r123`
+/// or a discogs.com address, and refuses a master's address, so there is one
+/// parser and it is the one that decides what is stored.
+fn link_discogs(ui: &mut Session, a: &LinkRecordingArgs, release: &str, on: bool) -> i32 {
+    // `none` is a fact about the release, that Discogs shows no master, and
+    // it is spelled out so that leaving the flag off cannot assert it.
+    let master = match a.master.as_deref().map(str::trim) {
+        None => None,
+        Some(m) if m.eq_ignore_ascii_case("none") => Some(None),
+        Some(m) => match m.parse::<u64>() {
+            Ok(id) if id > 0 => Some(Some(id)),
+            _ => {
+                return refused(
+                    ui,
+                    &format!("--master takes a master's id or `none`, not `{m}`"),
+                    "BAD_INPUT",
+                    a.json,
+                    2,
+                );
+            }
+        },
+    };
+    if !on && master.is_some() {
+        return refused(
+            ui,
+            "--master describes a release being created, and unlink creates nothing",
+            "BAD_INPUT",
+            a.json,
+            2,
+        );
+    }
+
+    let api = match client(ui, &a.endpoint, a.token.as_ref()) {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
+    match api.link_discogs(&a.id, release, master, &a.message, on) {
+        Ok(()) => {
+            if a.json {
+                emit(
+                    ui,
+                    format_args!(
+                        "{}",
+                        serde_json::json!({ "recording": a.id, "discogs": release, "linked": on })
+                    ),
+                );
+            } else if on {
+                note!(
+                    ui,
+                    "findopera: recording {} is now on Discogs release {release}",
+                    a.id
+                );
+            } else {
+                note!(
+                    ui,
+                    "findopera: recording {} is no longer on Discogs release {release}",
+                    a.id
+                );
+            }
+            0
+        }
+        Err(e) => {
+            let code = failed(ui, &e, a.json);
+            // The server says this in the API's words, `newRelease`, which
+            // are not the ones on this command line.
+            if on && master.is_none() && !a.json && e.to_string().contains("is not in the catalog")
+            {
+                note!(
+                    ui,
+                    "findopera: add --master with the master's id from the release's Discogs \
+                     page, or --master none if it shows none, to create the release with the link"
+                );
+            }
+            code
+        }
     }
 }
 

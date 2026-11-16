@@ -226,6 +226,17 @@ query GetMusicBrainzRelease($id: String!) {
   }
 }
 
+query GetDiscogsRelease($id: String!) {
+  getDiscogsReleaseById(id: $id) {
+    id
+    masterId
+    url
+    masterUrl
+    upc { upc }
+    recordings { id year opera { id title } }
+  }
+}
+
 query GetMusicBrainzReleaseGroup($id: String!) {
   getMusicBrainzReleaseGroupById(id: $id) {
     id
@@ -296,6 +307,9 @@ query GetPrestoMusicAlbumText($id: String!) {
 }
 query GetMusicBrainzReleaseText($id: String!) {
   getMusicBrainzReleaseById(id: $id) { asPlainText }
+}
+query GetDiscogsReleaseText($id: String!) {
+  getDiscogsReleaseById(id: $id) { asPlainText }
 }
 query GetMusicBrainzReleaseGroupText($id: String!) {
   getMusicBrainzReleaseGroupById(id: $id) { asPlainText }

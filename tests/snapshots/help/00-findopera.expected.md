@@ -15,8 +15,8 @@ Commands:
   get         Show one record whole
   create      Add a record
   edit        Change a record
-  link        Attach a UPC to a recording
-  unlink      Take a UPC off a recording
+  link        Attach a UPC or a Discogs release to a recording
+  unlink      Take a UPC or a Discogs release off a recording
   delete      Remove a record
   undelete    Put a deleted or merged record back
   comment     Add researched context to a record, changing nothing

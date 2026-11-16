@@ -59,7 +59,7 @@ pub struct Extra {
     pub items: &'static [InputField],
 }
 
-/// Every type with a complete set of operations. 19 of them.
+/// Every type with a complete set of operations. 20 of them.
 pub const TYPES: &[Type] = &[
     Type {
         name: "album-cover-art",
@@ -203,6 +203,31 @@ pub const TYPES: &[Type] = &[
             InputField { name: "spotifyArtistId", json: "string", required: false, about: "" },
             InputField { name: "wikipediaImageId", json: "string", required: false, about: "Another name for `wikipediaUrl`, which it sets. Giving both with different values is refused." },
             InputField { name: "wikipediaUrl", json: "string", required: false, about: "" },
+        ],
+        composite: None,
+    },
+    Type {
+        name: "discogs-release",
+        graphql: "DiscogsRelease",
+        get: "GetDiscogsRelease",
+        root: "getDiscogsReleaseById",
+        add: "addDiscogsRelease",
+        update: "updateDiscogsRelease",
+        remove: "deleteDiscogsRelease",
+        restore: "undeleteDiscogsRelease",
+        comment: "commentDiscogsRelease",
+        merge: None,
+        create_input: "CreateDiscogsReleaseInput",
+        edit_input: "UpdateDiscogsReleaseInput",
+        create: &[
+            InputField { name: "id", json: "string", required: true, about: "The release's id on Discogs: one specific pressing or edition.\n\nDiscogs ids are integers, and this one is held as a string of digits, the\nway the catalog holds every other outside id. A release's address on\ndiscogs.com, or the id written as r123456, is accepted as well and stored\nas the bare number." },
+            InputField { name: "masterId", json: "integer", required: false, about: "The Discogs master this release belongs to, if it has one.\n\nA master gathers every pressing of one album; a release is one of them.\nMany releases have no master, which is spelled null." },
+            InputField { name: "upcId", json: "string", required: false, about: "" },
+        ],
+        edit: &[
+            InputField { name: "id", json: "string", required: false, about: "The release's id on Discogs: one specific pressing or edition.\n\nDiscogs ids are integers, and this one is held as a string of digits, the\nway the catalog holds every other outside id. A release's address on\ndiscogs.com, or the id written as r123456, is accepted as well and stored\nas the bare number." },
+            InputField { name: "masterId", json: "integer", required: false, about: "The Discogs master this release belongs to, if it has one.\n\nA master gathers every pressing of one album; a release is one of them.\nMany releases have no master, which is spelled null." },
+            InputField { name: "upcId", json: "string", required: false, about: "" },
         ],
         composite: None,
     },

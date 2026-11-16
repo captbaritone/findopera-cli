@@ -204,6 +204,42 @@ export function mutations(schema, getOperations) {
     ),
   );
 
+  // The same for a recording and a Discogs release. The link takes an
+  // optional `newRelease`, so a release the catalog does not hold yet is
+  // created by the link that first names it.
+  out.push(
+    operation(
+      schema,
+      "LinkRecordingDiscogsRelease",
+      [
+        ["input", "LinkRecordingDiscogsReleaseInput!"],
+        ["justification", "String!"],
+      ],
+      "linkRecordingToDiscogsRelease",
+      [
+        ["input", "input"],
+        ["justification", "justification"],
+      ],
+    ),
+  );
+  out.push(
+    operation(
+      schema,
+      "UnlinkRecordingDiscogsRelease",
+      [
+        ["recordingId", "String!"],
+        ["discogsReleaseId", "String!"],
+        ["justification", "String!"],
+      ],
+      "unlinkRecordingDiscogsRelease",
+      [
+        ["recordingId", "recordingId"],
+        ["discogsReleaseId", "discogsReleaseId"],
+        ["justification", "justification"],
+      ],
+    ),
+  );
+
   // Putting a recording in one of the viewer's own lists, and taking it out
   // again. Hand-named for the same reason the pair above is, and for a second
   // one: these take no `justification`. Every catalog mutation does, because
